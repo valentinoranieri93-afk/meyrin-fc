@@ -1,0 +1,9 @@
+﻿# Serveur
+.user.ini
+.infomaniak-maintenance.html
+
+# Base de données
+data/*.sqlite
+
+# Uploads (fichiers binaires)
+data/uploads/

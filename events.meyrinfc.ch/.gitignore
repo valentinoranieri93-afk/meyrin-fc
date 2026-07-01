@@ -1,0 +1,6 @@
+﻿# Serveur
+.user.ini
+.infomaniak-maintenance.html
+
+# Base de données
+data/*.sqlite

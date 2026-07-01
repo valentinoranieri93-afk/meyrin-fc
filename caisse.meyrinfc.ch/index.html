@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caisse — Meyrin FC</title>
+<style>
+:root{
+  --jaune:#FFCE00;--jaune-fonce:#E6B800;--noir:#0E0E0E;--noir-doux:#1C1C1A;
+  --gris:#6B6B66;--gris-clair:#EDEDE8;--bg:#F7F6F2;--blanc:#FFFFFF;
+  --vert:#1E8E4E;--rouge:#C8392B;
+  --ombre:0 1px 2px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.06);
+  --radius:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:var(--bg);color:var(--noir);-webkit-font-smoothing:antialiased;font-size:16px;line-height:1.45}
+button{font-family:inherit;cursor:pointer;border:none}
+input,select{font-family:inherit;font-size:16px}
+#appLoader{position:fixed;inset:0;background:var(--noir);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200}
+#appLoader .logo{width:72px;height:72px;border-radius:18px;background:var(--jaune);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;color:var(--noir);margin-bottom:20px}
+#appLoader p{color:#8f8f8a;font-size:14px}
+.spin{display:inline-block;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#lock{position:fixed;inset:0;background:var(--noir);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;padding:24px}
+#lock .logo{width:72px;height:72px;border-radius:18px;background:var(--jaune);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;color:var(--noir);margin-bottom:28px}
+#lock h1{color:#fff;font-size:20px;font-weight:600;margin-bottom:6px}
+#lock p{color:#9a9a95;font-size:14px;margin-bottom:28px;text-align:center}
+.pin-dots{display:flex;gap:14px;margin-bottom:30px}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid #4a4a47;transition:.15s}
+.pin-dot.on{background:var(--jaune);border-color:var(--jaune)}
+.pad{display:grid;grid-template-columns:repeat(3,72px);gap:14px}
+.pad button{height:72px;border-radius:50%;background:#262624;color:#fff;font-size:26px;font-weight:500;transition:.1s}
+.pad button:active{background:var(--jaune);color:var(--noir)}
+.pad button.ghost{background:transparent}
+.pad button.ghost:active{background:#262624;color:#fff}
+#lock .err{color:#ff7a6e;font-size:13px;height:18px;margin-top:14px}
+header{background:var(--noir);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;position:sticky;top:0;z-index:20}
+.brand{display:flex;align-items:center;gap:12px}
+.brand .mark{width:38px;height:38px;border-radius:9px;background:var(--jaune);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:var(--noir)}
+.brand .txt b{font-size:15px;font-weight:700;display:block}
+.brand .txt span{font-size:11px;color:#8f8f8a;text-transform:uppercase;letter-spacing:1.5px}
+.header-right{display:flex;align-items:center;gap:10px}
+#saveStatus{font-size:12px;font-weight:600;color:#8f8f8a;min-width:90px;text-align:right}
+.lock-btn{background:#262624;color:#fff;border-radius:9px;padding:9px 13px;font-size:13px;font-weight:500}
+.lock-btn:active{background:#333}
+nav{background:var(--noir);display:flex;padding:0 12px;position:sticky;top:66px;z-index:19}
+nav button{background:transparent;color:#8f8f8a;flex:1;padding:13px 8px 15px;font-size:14px;font-weight:600;border-bottom:3px solid transparent;transition:.15s}
+nav button.active{color:var(--jaune);border-color:var(--jaune)}
+main{max-width:740px;margin:0 auto;padding:22px 18px 80px}
+.view{display:none}.view.active{display:block}
+.card{background:var(--blanc);border-radius:var(--radius);box-shadow:var(--ombre);padding:22px;margin-bottom:18px}
+.card-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--gris);margin-bottom:16px}
+.dateline{font-size:13px;color:var(--gris);margin-bottom:18px;text-transform:capitalize;font-weight:500}
+label{display:block;font-size:13px;font-weight:600;color:var(--noir);margin-bottom:7px}
+.field{margin-bottom:16px}
+input[type=text],input[type=number],input[type=date],input[type=month],select{width:100%;padding:13px 14px;border:1.5px solid var(--gris-clair);border-radius:10px;background:var(--blanc);color:var(--noir);transition:.15s}
+input:focus,select:focus{outline:none;border-color:var(--jaune)}
+.with-unit{position:relative}
+.with-unit input{padding-right:54px}
+.with-unit .unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:13px;font-weight:700;color:var(--gris)}
+.btn{width:100%;padding:15px;border-radius:11px;font-size:15px;font-weight:700;transition:.12s}
+.btn-primary{background:var(--jaune);color:var(--noir)}
+.btn-primary:active{background:var(--jaune-fonce)}
+.btn-dark{background:var(--noir);color:#fff}
+.btn-dark:active{background:var(--noir-doux)}
+.btn-ghost{background:var(--gris-clair);color:var(--noir)}
+.btn-ghost:active{background:#e0e0da}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-row{display:flex;gap:10px}
+.btn-row .btn{flex:1}
+.solde-hero{background:var(--noir);border-radius:var(--radius);padding:24px;margin-bottom:18px;color:#fff;position:relative;overflow:hidden}
+.solde-hero::after{content:"";position:absolute;right:-30px;top:-30px;width:120px;height:120px;border-radius:50%;background:rgba(255,206,0,.12)}
+.solde-hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1.3px;color:#8f8f8a;font-weight:700;margin-bottom:8px}
+.solde-hero .val{font-size:38px;font-weight:800;letter-spacing:-1px}
+.solde-hero .val small{font-size:18px;color:var(--jaune);font-weight:700;margin-right:4px}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px}
+.stat{background:var(--blanc);border-radius:12px;padding:14px 12px;box-shadow:var(--ombre)}
+.stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--gris);font-weight:700}
+.stat .v{font-size:18px;font-weight:800;margin-top:4px;letter-spacing:-.3px}
+.stat .v.pos{color:var(--vert)}.stat .v.neg{color:var(--rouge)}
+.seg{display:flex;background:var(--gris-clair);border-radius:11px;padding:4px;margin-bottom:16px}
+.seg button{flex:1;background:transparent;padding:10px;border-radius:8px;font-size:14px;font-weight:700;color:var(--gris);transition:.12s}
+.seg button.on-in{background:var(--vert);color:#fff}
+.seg button.on-out{background:var(--rouge);color:#fff}
+.journal{list-style:none}
+.mvt{display:flex;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid var(--gris-clair)}
+.mvt:last-child{border-bottom:none}
+.mvt .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.mvt .dot.in{background:var(--vert)}.mvt .dot.out{background:var(--rouge)}
+.mvt .info{flex:1;min-width:0}
+.mvt .info b{font-size:14px;font-weight:700;display:block}
+.mvt .info span{font-size:12px;color:var(--gris);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mvt .amt{font-size:15px;font-weight:800;white-space:nowrap}
+.mvt .amt.in{color:var(--vert)}.mvt .amt.out{color:var(--rouge)}
+.mvt .del{background:var(--gris-clair);color:var(--gris);width:30px;height:30px;border-radius:8px;font-size:14px;flex-shrink:0}
+.mvt .del:active{background:var(--rouge);color:#fff}
+.empty{text-align:center;color:var(--gris);font-size:14px;padding:28px 0}
+.ecart-box{border-radius:12px;padding:16px;text-align:center;margin:14px 0}
+.ecart-box.ok{background:rgba(30,142,78,.1)}.ecart-box.bad{background:rgba(200,57,43,.1)}
+.ecart-box .e-lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.ecart-box.ok .e-lbl{color:var(--vert)}.ecart-box.bad .e-lbl{color:var(--rouge)}
+.ecart-box .e-val{font-size:28px;font-weight:800;margin-top:4px}
+.ecart-box.ok .e-val{color:var(--vert)}.ecart-box.bad .e-val{color:var(--rouge)}
+.recap{margin:4px 0}
+.recap-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--gris-clair);font-size:14px}
+.recap-row:last-child{border-bottom:none}
+.recap-row .k{color:var(--gris);font-weight:500}.recap-row .v{font-weight:700}
+.recap-row.total{border-top:2px solid var(--noir);margin-top:4px}
+.recap-row.total .k,.recap-row.total .v{font-weight:800;font-size:15px}
+.badge{display:inline-block;font-size:11px;font-weight:800;padding:3px 9px;border-radius:20px}
+.badge.open{background:var(--jaune);color:var(--noir)}
+.badge.ok{background:rgba(30,142,78,.15);color:var(--vert)}
+.badge.bad{background:rgba(200,57,43,.15);color:var(--rouge)}
+.hist-row{background:var(--blanc);border-radius:12px;box-shadow:var(--ombre);padding:15px 16px;margin-bottom:10px;cursor:pointer}
+.hist-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hist-head .d{font-size:14px;font-weight:700;text-transform:capitalize}
+.hist-head .r{display:flex;align-items:center;gap:8px}
+.hist-net{font-size:14px;font-weight:800}
+.hist-detail{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--gris-clair)}
+.hist-row.exp .hist-detail{display:block}
+.export-preview{background:var(--noir);color:#fff;border-radius:12px;padding:18px;margin:16px 0}
+.export-preview .pv-row{display:flex;justify-content:space-between;font-size:14px;padding:6px 0}
+.export-preview .pv-row .k{color:#8f8f8a}.export-preview .pv-row .v{font-weight:700}
+.export-preview .pv-big{border-top:1px solid #333;margin-top:8px;padding-top:12px}
+.export-preview .pv-big .v{color:var(--jaune);font-size:18px;font-weight:800}
+.hint{font-size:12px;color:var(--gris);margin-top:8px;line-height:1.5}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(80px);background:var(--noir);color:#fff;padding:13px 22px;border-radius:30px;font-size:14px;font-weight:600;z-index:60;transition:.25s;box-shadow:0 8px 30px rgba(0,0,0,.3);opacity:0}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+#report-print{display:none}
+@media print{body>*:not(#report-print){display:none!important}#report-print{display:block;padding:0}@page{margin:18mm}}
+#report-print .rp-head{border-bottom:3px solid #000;padding-bottom:14px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:flex-end}
+#report-print .rp-head h1{font-size:22px;font-weight:800}
+#report-print .rp-head .rp-sub{font-size:13px;color:#555;margin-top:3px}
+#report-print .rp-head .rp-club{text-align:right;font-size:12px;color:#555}
+#report-print .rp-head .rp-club b{font-size:15px;color:#000;display:block}
+#report-print h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;margin:24px 0 10px;color:#555}
+#report-print table{width:100%;border-collapse:collapse;font-size:12px}
+#report-print th{text-align:left;border-bottom:1.5px solid #000;padding:7px 6px;font-size:11px;text-transform:uppercase}
+#report-print td{border-bottom:1px solid #ddd;padding:7px 6px}
+#report-print td.num,#report-print th.num{text-align:right}
+#report-print .rp-totaux{margin-top:18px;border:1px solid #000;border-radius:8px;overflow:hidden}
+#report-print .rp-totaux .t-row{display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid #ddd;font-size:13px}
+#report-print .rp-totaux .t-row:last-child{border-bottom:none}
+#report-print .rp-totaux .t-row.grand{background:#FFCE00;font-weight:800;font-size:15px}
+#report-print .rp-foot{margin-top:30px;font-size:10px;color:#999;border-top:1px solid #ddd;padding-top:10px}
+</style>
+</head>
+<body>
+
+<div id="appLoader">
+  <a href="https://meyrinfc.ch" target="_blank" class="logo-link">
+    <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" 
+         alt="Meyrin FC" 
+         class="logo">
+  </a>
+
+  <p><span class="spin">⟳</span>&nbsp; Connexion au serveur…</p>
+</div>
+
+<div id="lock" style="display:none">
+  <a href="https://meyrinfc.ch" target="_blank" class="logo-link">
+    <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" 
+         alt="Meyrin FC" 
+         class="logo">
+  </a>
+
+  <h1 id="lockTitle">Caisse du club</h1>
+  <p id="lockSub">Saisissez votre code à 4 chiffres</p>
+
+  <div class="pin-dots" id="pinDots"></div>
+  <div class="pad" id="pad"></div>
+  <div class="err" id="lockErr"></div>
+</div>
+
+<header>
+  <div class="brand">
+
+    <a href="https://meyrinfc.ch" target="_blank">
+      <img 
+        src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg"
+        alt="Meyrin FC"
+        style="width:55px;height:55px;object-fit:contain;"
+      >
+    </a>
+
+    <div class="txt">
+      <b>Meyrin FC</b>
+      <span>Caisse</span>
+    </div>
+
+  </div>
+
+  <div class="header-right">
+    <span id="saveStatus"></span>
+    <button class="lock-btn" onclick="lockApp()">🔒 Verrouiller</button>
+  </div>
+</header>
+
+<nav>
+  <button class="active" data-tab="jour" onclick="showTab('jour')">Jour</button>
+  <button data-tab="histo" onclick="showTab('histo')">Historique</button>
+  <button data-tab="export" onclick="showTab('export')">Exports</button>
+</nav>
+
+<main>
+  <section class="view active" id="view-jour"></section>
+  <section class="view" id="view-histo"></section>
+  <section class="view" id="view-export"></section>
+</main>
+
+<div id="toast"></div>
+<div id="report-print"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+// CONFIGURATION — même valeur que dans api.php
+// ============================================================
+const API_URL = "api.php";
+const API_KEY = "MEYRIN_CAISSE_2026_VAL";
+// ============================================================
+
+const KEY_LOCAL = "mfc_caisse_v1";
+const CATS_IN   = ["Cotisation","Vente boutique","Billetterie","Divers"];
+const CATS_OUT  = ["Frais arbitre","Frais déplacement","Divers"];
+let DB = { pin:null, days:[] };
+
+/* ---- Persistance ---- */
+async function load(){
+  try{
+    const r=await fetch(API_URL+"?key="+API_KEY);
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    DB=await r.json();
+    if(!DB.days) DB.days=[];
+    try{localStorage.setItem(KEY_LOCAL,JSON.stringify(DB));}catch(e){}
+  }catch(e){
+    console.warn("Serveur inaccessible:",e.message);
+    try{const l=localStorage.getItem(KEY_LOCAL);if(l) DB=JSON.parse(l);}catch(e2){}
+    if(!DB.days) DB.days=[];
+    setSaveStatus("warn");
+  }
+}
+async function save(){
+  try{localStorage.setItem(KEY_LOCAL,JSON.stringify(DB));}catch(e){}
+  setSaveStatus("saving");
+  try{
+    const r=await fetch(API_URL+"?key="+API_KEY,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(DB)});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    setSaveStatus("ok");
+  }catch(e){
+    setSaveStatus("warn");
+    toast("⚠️ Sauvegarde serveur échouée — données en local");
+  }
+}
+function setSaveStatus(s){
+  const el=document.getElementById("saveStatus"); if(!el) return;
+  if(s==="saving"){el.textContent="⟳ Sauvegarde…";el.style.color="#8f8f8a";}
+  else if(s==="ok"){el.textContent="✓ Sauvegardé";el.style.color="var(--vert)";}
+  else if(s==="warn"){el.textContent="⚠ Hors ligne";el.style.color="var(--rouge)";}
+}
+
+/* ---- Utilitaires ---- */
+function todayISO(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function nowHM(){const d=new Date();return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");}
+function fmt(n){return Number(n||0).toLocaleString("de-CH",{minimumFractionDigits:2,maximumFractionDigits:2});}
+function frDate(iso){const d=new Date(iso+"T12:00:00");return d.toLocaleDateString("fr-CH",{weekday:"long",day:"numeric",month:"long",year:"numeric"});}
+function frDateShort(iso){const d=new Date(iso+"T12:00:00");return d.toLocaleDateString("fr-CH",{weekday:"short",day:"numeric",month:"short"});}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+function getDay(iso){return DB.days.find(d=>d.date===iso);}
+function totals(day){let e=0,s=0;(day.mouvements||[]).forEach(m=>{if(m.sens==="in")e+=m.montant;else s+=m.montant;});return{entrees:e,sorties:s,theorique:(day.fond||0)+e-s};}
+function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2400);}
+
+/* ---- PIN ---- */
+let pinBuf="",pinMode="verify",pinFirst="";
+function buildPad(){
+  const p=document.getElementById("pad");p.innerHTML="";
+  ["1","2","3","4","5","6","7","8","9","","0","⌫"].forEach(k=>{
+    const b=document.createElement("button");b.textContent=k;
+    if(k===""){b.className="ghost";b.disabled=true;}
+    else if(k==="⌫"){b.className="ghost";b.onclick=pinDel;}
+    else b.onclick=()=>pinPush(k);
+    p.appendChild(b);
+  });renderDots();
+}
+function renderDots(){const c=document.getElementById("pinDots");c.innerHTML="";for(let i=0;i<4;i++){const d=document.createElement("div");d.className="pin-dot"+(i<pinBuf.length?" on":"");c.appendChild(d);}}
+function pinPush(k){if(pinBuf.length>=4)return;pinBuf+=k;renderDots();document.getElementById("lockErr").textContent="";if(pinBuf.length===4)setTimeout(pinSubmit,150);}
+function pinDel(){pinBuf=pinBuf.slice(0,-1);renderDots();}
+function pinSubmit(){
+  if(pinMode==="create"){pinFirst=pinBuf;pinBuf="";pinMode="confirm";document.getElementById("lockTitle").textContent="Confirmez le code";document.getElementById("lockSub").textContent="Saisissez à nouveau les 4 chiffres";renderDots();}
+  else if(pinMode==="confirm"){
+    if(pinBuf===pinFirst){DB.pin=pinBuf;save();unlock();}
+    else{document.getElementById("lockErr").textContent="Les codes ne correspondent pas.";pinBuf="";pinFirst="";pinMode="create";document.getElementById("lockTitle").textContent="Définir un code PIN";document.getElementById("lockSub").textContent="Choisissez un code à 4 chiffres";renderDots();}
+  }else{if(pinBuf===DB.pin)unlock();else{document.getElementById("lockErr").textContent="Code incorrect";pinBuf="";renderDots();}}
+}
+function unlock(){pinBuf="";document.getElementById("lock").style.display="none";renderAll();}
+function lockApp(){pinBuf="";pinMode="verify";document.getElementById("lockTitle").textContent="Caisse du club";document.getElementById("lockSub").textContent="Saisissez votre code à 4 chiffres";document.getElementById("lockErr").textContent="";document.getElementById("lock").style.display="flex";renderDots();}
+
+/* ---- Onglets ---- */
+function showTab(tab){
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.getElementById("view-"+tab).classList.add("active");
+  if(tab==="jour")renderJour();if(tab==="histo")renderHisto();if(tab==="export")renderExport();
+}
+function renderAll(){renderJour();}
+
+/* ---- Jour ---- */
+let mvtSens="in";
+function renderJour(){
+  const el=document.getElementById("view-jour"),iso=todayISO(),day=getDay(iso);
+  if(!day){
+    el.innerHTML=`<div class="card"><div class="card-title">Ouvrir la journée</div><div class="dateline">${frDate(iso)}</div><div class="field"><label>Fond de caisse au départ</label><div class="with-unit"><input type="number" id="fondInput" inputmode="decimal" placeholder="0.00" step="0.05"><span class="unit">CHF</span></div></div><button class="btn btn-primary" onclick="openDay()">Ouvrir la caisse</button></div>`;
+    return;
+  }
+  if(day.cloture){
+    const t=totals(day),c=day.cloture,ok=Math.abs(c.ecart)<0.005;
+    el.innerHTML=`<div class="card"><div class="card-title">Journée clôturée</div><div class="dateline">${frDate(iso)} · clôturée à ${c.heure}</div><div class="recap"><div class="recap-row"><span class="k">Fond de départ</span><span class="v">${fmt(day.fond)}</span></div><div class="recap-row"><span class="k">Total entrées</span><span class="v" style="color:var(--vert)">+${fmt(t.entrees)}</span></div><div class="recap-row"><span class="k">Total sorties</span><span class="v" style="color:var(--rouge)">−${fmt(t.sorties)}</span></div><div class="recap-row total"><span class="k">Solde théorique</span><span class="v">${fmt(t.theorique)} CHF</span></div><div class="recap-row"><span class="k">Montant compté</span><span class="v">${fmt(c.compte)} CHF</span></div></div><div class="ecart-box ${ok?"ok":"bad"}"><div class="e-lbl">${ok?"Caisse juste":"Écart constaté"}</div><div class="e-val">${c.ecart>0?"+":""}${fmt(c.ecart)} CHF</div></div><div class="btn-row"><button class="btn btn-dark" onclick="showTab('export')">Exporter</button><button class="btn btn-ghost" onclick="reopenDay()">Rouvrir</button></div></div>`;
+    return;
+  }
+  const t=totals(day);
+  el.innerHTML=`<div class="solde-hero"><div class="lbl">Solde théorique en caisse</div><div class="val"><small>CHF</small>${fmt(t.theorique)}</div></div><div class="stats"><div class="stat"><div class="k">Fond départ</div><div class="v">${fmt(day.fond)}</div></div><div class="stat"><div class="k">Entrées</div><div class="v pos">+${fmt(t.entrees)}</div></div><div class="stat"><div class="k">Sorties</div><div class="v neg">−${fmt(t.sorties)}</div></div></div>
+  <div class="card"><div class="card-title">Enregistrer un mouvement</div><div class="seg"><button id="segIn" class="${mvtSens==="in"?"on-in":""}" onclick="setSens('in')">Entrée</button><button id="segOut" class="${mvtSens==="out"?"on-out":""}" onclick="setSens('out')">Sortie</button></div><div class="field"><label>Catégorie</label><select id="catSelect"></select></div><div class="field"><label>Montant</label><div class="with-unit"><input type="number" id="montInput" inputmode="decimal" placeholder="0.00" step="0.05"><span class="unit">CHF</span></div></div><div class="field"><label>Détail <span style="color:var(--gris);font-weight:400">(facultatif)</span></label><input type="text" id="detailInput" placeholder="Ex. cotisation junior, arbitre U15…" maxlength="80"></div><button class="btn btn-primary" onclick="addMvt()">Ajouter au journal</button></div>
+  <div class="card"><div class="card-title">Journal du jour · ${(day.mouvements||[]).length} mouvement(s)</div><ul class="journal" id="journalList"></ul></div>
+  <div class="card"><div class="card-title">Clôture de la journée</div><div class="field"><label>Montant réellement compté en caisse</label><div class="with-unit"><input type="number" id="compteInput" inputmode="decimal" placeholder="0.00" step="0.05" oninput="previewEcart()"><span class="unit">CHF</span></div></div><div id="ecartPreview"></div><button class="btn btn-dark" onclick="closeDay()">Clôturer la journée</button></div>`;
+  fillCats();renderJournal(day);
+}
+function setSens(s){mvtSens=s;document.getElementById("segIn").className=s==="in"?"on-in":"";document.getElementById("segOut").className=s==="out"?"on-out":"";fillCats();}
+function fillCats(){const sel=document.getElementById("catSelect");if(!sel)return;sel.innerHTML="";(mvtSens==="in"?CATS_IN:CATS_OUT).forEach(c=>{const o=document.createElement("option");o.textContent=c;sel.appendChild(o);});}
+function renderJournal(day){const ul=document.getElementById("journalList");if(!ul)return;const mv=(day.mouvements||[]).slice().reverse();if(mv.length===0){ul.innerHTML=`<li class="empty">Aucun mouvement.</li>`;return;}ul.innerHTML=mv.map(m=>`<li class="mvt"><div class="dot ${m.sens}"></div><div class="info"><b>${m.cat}</b><span>${m.heure}${m.detail?" · "+escapeHtml(m.detail):""}</span></div><div class="amt ${m.sens}">${m.sens==="in"?"+":"−"}${fmt(m.montant)}</div><button class="del" onclick="delMvt('${m.id}')">✕</button></li>`).join("");}
+async function openDay(){const v=parseFloat((document.getElementById("fondInput").value||"").replace(",","."));if(isNaN(v)||v<0){toast("Fond invalide");return;}DB.days.push({date:todayISO(),fond:v,mouvements:[],cloture:null});await save();renderJour();toast("Journée ouverte");}
+async function addMvt(){const day=getDay(todayISO());if(!day||day.cloture)return;const cat=document.getElementById("catSelect").value,v=parseFloat((document.getElementById("montInput").value||"").replace(",",".")),detail=document.getElementById("detailInput").value.trim();if(isNaN(v)||v<=0){toast("Montant invalide");return;}day.mouvements.push({id:uid(),sens:mvtSens,cat,montant:v,detail,heure:nowHM()});await save();renderJour();toast(mvtSens==="in"?"Entrée enregistrée":"Sortie enregistrée");}
+async function delMvt(id){const day=getDay(todayISO());if(!day||day.cloture)return;if(!confirm("Supprimer ce mouvement ?"))return;day.mouvements=day.mouvements.filter(m=>m.id!==id);await save();renderJour();}
+function previewEcart(){const day=getDay(todayISO()),box=document.getElementById("ecartPreview"),raw=document.getElementById("compteInput").value;if(raw===""){box.innerHTML="";return;}const compte=parseFloat(raw.replace(",","."));if(isNaN(compte)){box.innerHTML="";return;}const t=totals(day),ecart=compte-t.theorique,ok=Math.abs(ecart)<0.005;box.innerHTML=`<div class="ecart-box ${ok?"ok":"bad"}"><div class="e-lbl">${ok?"Caisse juste":"Écart"}</div><div class="e-val">${ecart>0?"+":""}${fmt(ecart)} CHF</div></div>`;}
+async function closeDay(){const day=getDay(todayISO());if(!day)return;const compte=parseFloat((document.getElementById("compteInput").value||"").replace(",","."));if(isNaN(compte)||compte<0){toast("Saisissez le montant compté");return;}const t=totals(day),ecart=compte-t.theorique;if(!confirm("Clôturer ?\nSolde théorique : "+fmt(t.theorique)+" CHF\nCompté : "+fmt(compte)+" CHF\nÉcart : "+(ecart>0?"+":"")+fmt(ecart)+" CHF"))return;day.cloture={compte,theorique:t.theorique,ecart,heure:nowHM()};await save();renderJour();toast("Journée clôturée");}
+async function reopenDay(){const day=getDay(todayISO());if(!day)return;if(!confirm("Rouvrir la journée ?"))return;day.cloture=null;await save();renderJour();toast("Journée rouverte");}
+
+/* ---- Historique ---- */
+let histFilter="tout";
+function weekRange(iso){const d=new Date(iso+"T12:00:00"),dow=(d.getDay()+6)%7,mon=new Date(d),sun=new Date(d);mon.setDate(d.getDate()-dow);sun.setDate(mon.getDate()+6);const f=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");return[f(mon),f(sun)];}
+function inHistFilter(iso){const n=new Date();if(histFilter==="tout")return true;if(histFilter==="annee")return iso.slice(0,4)===String(n.getFullYear());if(histFilter==="mois")return iso.slice(0,7)===todayISO().slice(0,7);if(histFilter==="semaine"){const[a,b]=weekRange(todayISO());return iso>=a&&iso<=b;}return true;}
+function setHistFilter(f){histFilter=f;renderHisto();}
+function histMvtList(d){if(!d.mouvements||!d.mouvements.length)return"";return`<ul class="journal" style="margin-top:8px">`+d.mouvements.map(m=>`<li class="mvt"><div class="dot ${m.sens}"></div><div class="info"><b>${m.cat}</b><span>${m.heure}${m.detail?" · "+escapeHtml(m.detail):""}</span></div><div class="amt ${m.sens}">${m.sens==="in"?"+":"−"}${fmt(m.montant)}</div></li>`).join("")+`</ul>`;}
+function renderHisto(){
+  const el=document.getElementById("view-histo"),days=DB.days.slice().sort((a,b)=>b.date.localeCompare(a.date)).filter(d=>inHistFilter(d.date));
+  const rows=days.length===0?`<div class="empty">Aucune journée.</div>`:days.map(d=>{const t=totals(d),net=t.entrees-t.sorties,closed=!!d.cloture,ok=closed&&Math.abs(d.cloture.ecart)<0.005;const eb=closed?`<span class="badge ${ok?"ok":"bad"}">${ok?"Juste":(d.cloture.ecart>0?"+":"")+fmt(d.cloture.ecart)}</span>`:`<span class="badge open">Ouverte</span>`;return`<div class="hist-row" onclick="this.classList.toggle('exp')"><div class="hist-head"><div class="d">${frDateShort(d.date)}</div><div class="r">${eb}<span class="hist-net" style="color:${net>=0?"var(--vert)":"var(--rouge)"}">${net>=0?"+":""}${fmt(net)}</span></div></div><div class="hist-detail"><div class="recap"><div class="recap-row"><span class="k">Fond</span><span class="v">${fmt(d.fond)}</span></div><div class="recap-row"><span class="k">Entrées</span><span class="v" style="color:var(--vert)">+${fmt(t.entrees)}</span></div><div class="recap-row"><span class="k">Sorties</span><span class="v" style="color:var(--rouge)">−${fmt(t.sorties)}</span></div><div class="recap-row total"><span class="k">Solde théorique</span><span class="v">${fmt(t.theorique)}</span></div>${closed?`<div class="recap-row"><span class="k">Compté</span><span class="v">${fmt(d.cloture.compte)}</span></div><div class="recap-row"><span class="k">Écart</span><span class="v" style="color:${ok?"var(--vert)":"var(--rouge)"}">${d.cloture.ecart>0?"+":""}${fmt(d.cloture.ecart)}</span></div>`:""}</div>${histMvtList(d)}</div></div>`;}).join("");
+  el.innerHTML=`<div class="card" style="padding:14px"><div class="seg" style="margin-bottom:0">${["tout","semaine","mois","annee"].map(f=>`<button class="${histFilter===f?"on-in":""}" style="${histFilter===f?"background:var(--noir)":""}" onclick="setHistFilter('${f}')">${{tout:"Tout",semaine:"Sem.",mois:"Mois",annee:"Année"}[f]}</button>`).join("")}</div></div>${rows}`;
+}
+
+/* ---- Exports ---- */
+let expPeriod="jour";
+function setExpPeriod(p){expPeriod=p;renderExport();}
+function aggregate(days){const bCI={},bCO={};CATS_IN.forEach(c=>bCI[c]=0);CATS_OUT.forEach(c=>bCO[c]=0);let e=0,s=0,ec=0,nc=0,nj=0;days.forEach(d=>{(d.mouvements||[]).forEach(m=>{if(m.sens==="in"){e+=m.montant;bCI[m.cat]=(bCI[m.cat]||0)+m.montant;}else{s+=m.montant;bCO[m.cat]=(bCO[m.cat]||0)+m.montant;}});if(d.cloture){nc++;ec+=d.cloture.ecart;if(Math.abs(d.cloture.ecart)<0.005)nj++;}});return{entrees:e,sorties:s,net:e-s,byCatIn:bCI,byCatOut:bCO,ecartTotal:ec,nbClot:nc,nbJuste:nj};}
+function expSelection(){const pick=document.getElementById("expPick").value;let a,b,label;if(expPeriod==="jour"){a=b=pick;label=cap(frDate(pick));}else if(expPeriod==="semaine"){[a,b]=weekRange(pick);label="Semaine du "+frDateShort(a)+" au "+frDateShort(b);}else if(expPeriod==="mois"){a=pick+"-01";const d2=new Date(pick+"-01T12:00:00"),last=new Date(d2.getFullYear(),d2.getMonth()+1,0).getDate();b=pick+"-"+String(last).padStart(2,"0");label=cap(new Date(pick+"-01T12:00:00").toLocaleDateString("fr-CH",{month:"long",year:"numeric"}));}else{a=pick+"-01-01";b=pick+"-12-31";label="Année "+pick;}const days=DB.days.filter(d=>d.date>=a&&d.date<=b).sort((x,y)=>x.date.localeCompare(y.date));return{label,days};}
+function renderExpPreview(){const s=expSelection(),ag=aggregate(s.days),box=document.getElementById("expPreview");box.innerHTML=`<div class="export-preview"><div class="pv-row"><span class="k">Période</span><span class="v">${s.label}</span></div><div class="pv-row"><span class="k">Journées</span><span class="v">${s.days.length}</span></div><div class="pv-row"><span class="k">Total entrées</span><span class="v">+${fmt(ag.entrees)} CHF</span></div><div class="pv-row"><span class="k">Total sorties</span><span class="v">−${fmt(ag.sorties)} CHF</span></div><div class="pv-row pv-big"><span class="k">Résultat net</span><span class="v">${ag.net>=0?"+":""}${fmt(ag.net)} CHF</span></div></div>`;}
+function renderExpPicker(){const w=document.getElementById("expPickerWrap"),iso=todayISO();if(expPeriod==="jour")w.innerHTML=`<label>Date</label><input type="date" id="expPick" value="${iso}" onchange="renderExpPreview()">`;else if(expPeriod==="semaine")w.innerHTML=`<label>Semaine (choisir une date)</label><input type="date" id="expPick" value="${iso}" onchange="renderExpPreview()">`;else if(expPeriod==="mois")w.innerHTML=`<label>Mois</label><input type="month" id="expPick" value="${iso.slice(0,7)}" onchange="renderExpPreview()">`;else{let o="";const y=new Date().getFullYear();for(let i=y;i>=y-6;i--)o+=`<option ${i===y?"selected":""}>${i}</option>`;w.innerHTML=`<label>Année</label><select id="expPick" onchange="renderExpPreview()">${o}</select>`;}renderExpPreview();}
+function renderExport(){document.getElementById("view-export").innerHTML=`<div class="card"><div class="card-title">Choisir la période</div><div class="seg">${["jour","semaine","mois","annee"].map(p=>`<button class="${expPeriod===p?"on-in":""}" style="${expPeriod===p?"background:var(--noir)":""}" onclick="setExpPeriod('${p}')">${{jour:"Jour",semaine:"Semaine",mois:"Mois",annee:"Année"}[p]}</button>`).join("")}</div><div class="field" id="expPickerWrap"></div><div id="expPreview"></div><div class="btn-row"><button class="btn btn-dark" onclick="exportPDF()">Télécharger PDF</button><button class="btn btn-primary" onclick="exportXLS()">Télécharger Excel</button></div><p class="hint">PDF : dialogue impression → "Enregistrer en PDF". Excel : téléchargement direct.</p></div>`;renderExpPicker();}
+
+function exportPDF(){
+  const sel=expSelection();if(sel.days.length===0){toast("Aucune donnée");return;}
+  const ag=aggregate(sel.days),S='style="border:1px solid #999;padding:5px 8px;"';
+  const lc=(obj,sign)=>Object.keys(obj).filter(c=>obj[c]>0).map(c=>`<tr><td>${c}</td><td class="num">${sign}${fmt(obj[c])}</td></tr>`).join("")||`<tr><td colspan="2" style="color:#999">Aucun</td></tr>`;
+  const lj=sel.days.map(d=>{const t=totals(d),ec=d.cloture?((d.cloture.ecart>0?"+":"")+fmt(d.cloture.ecart)):"—";return`<tr><td>${cap(frDateShort(d.date))}</td><td class="num">${fmt(d.fond)}</td><td class="num">+${fmt(t.entrees)}</td><td class="num">−${fmt(t.sorties)}</td><td class="num">${fmt(t.theorique)}</td><td class="num">${d.cloture?fmt(d.cloture.compte):"—"}</td><td class="num">${ec}</td></tr>`;}).join("");
+  document.getElementById("report-print").innerHTML=`<div class="rp-head"><div><h1>Rapport de caisse</h1><div class="rp-sub">${sel.label}</div></div><div class="rp-club"><b>Meyrin FC</b>Édité le ${cap(frDate(todayISO()))}</div></div><h2>Synthèse</h2><div class="rp-totaux"><div class="t-row"><span>Total entrées</span><span>+${fmt(ag.entrees)} CHF</span></div><div class="t-row"><span>Total sorties</span><span>−${fmt(ag.sorties)} CHF</span></div><div class="t-row grand"><span>Résultat net</span><span>${ag.net>=0?"+":""}${fmt(ag.net)} CHF</span></div></div><h2>Entrées par catégorie</h2><table><tr><th>Catégorie</th><th class="num">CHF</th></tr>${lc(ag.byCatIn,"+")}</table><h2>Sorties par catégorie</h2><table><tr><th>Catégorie</th><th class="num">CHF</th></tr>${lc(ag.byCatOut,"−")}</table><h2>Détail par journée</h2><table><tr><th>Date</th><th class="num">Fond</th><th class="num">Entrées</th><th class="num">Sorties</th><th class="num">Théorique</th><th class="num">Compté</th><th class="num">Écart</th></tr>${lj}</table><h2>Contrôle clôtures</h2><div class="rp-totaux"><div class="t-row"><span>Journées clôturées</span><span>${ag.nbClot} / ${sel.days.length}</span></div><div class="t-row"><span>Caisses justes</span><span>${ag.nbJuste} / ${ag.nbClot}</span></div><div class="t-row"><span>Écart cumulé</span><span>${ag.ecartTotal>0?"+":""}${fmt(ag.ecartTotal)} CHF</span></div></div><div class="rp-foot">Document généré par l'application Caisse — Meyrin FC.</div>`;
+  setTimeout(()=>window.print(),60);
+}
+function exportXLS(){
+  const sel=expSelection();if(sel.days.length===0){toast("Aucune donnée");return;}
+  const ag=aggregate(sel.days),S='style="border:1px solid #999;padding:5px 8px;"',SH='style="border:1px solid #999;padding:5px 8px;background:#FFCE00;font-weight:bold;"';
+  let rows="";sel.days.forEach(d=>{(d.mouvements||[]).forEach(m=>{rows+=`<tr><td ${S}>${d.date}</td><td ${S}>${m.heure}</td><td ${S}>${m.sens==="in"?"Entrée":"Sortie"}</td><td ${S}>${m.cat}</td><td ${S}>${(m.detail||"").replace(/"/g,"'")}</td><td ${S}>${m.sens==="in"?m.montant.toFixed(2):""}</td><td ${S}>${m.sens==="out"?m.montant.toFixed(2):""}</td></tr>`;});});
+  let recap="";sel.days.forEach(d=>{const t=totals(d);recap+=`<tr><td ${S}>${d.date}</td><td ${S}>${d.fond.toFixed(2)}</td><td ${S}>${t.entrees.toFixed(2)}</td><td ${S}>${t.sorties.toFixed(2)}</td><td ${S}>${t.theorique.toFixed(2)}</td><td ${S}>${d.cloture?d.cloture.compte.toFixed(2):""}</td><td ${S}>${d.cloture?d.cloture.ecart.toFixed(2):""}</td></tr>`;});
+  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><h2>Caisse Meyrin FC — ${sel.label}</h2><table cellspacing="0"><tr><td ${SH}>Total entrées</td><td ${S}>${ag.entrees.toFixed(2)}</td></tr><tr><td ${SH}>Total sorties</td><td ${S}>${ag.sorties.toFixed(2)}</td></tr><tr><td ${SH}>Résultat net</td><td ${S}>${ag.net.toFixed(2)}</td></tr><tr><td ${SH}>Écart cumulé</td><td ${S}>${ag.ecartTotal.toFixed(2)}</td></tr></table><br><h3>Récap journées</h3><table cellspacing="0"><tr><td ${SH}>Date</td><td ${SH}>Fond</td><td ${SH}>Entrées</td><td ${SH}>Sorties</td><td ${SH}>Théorique</td><td ${SH}>Compté</td><td ${SH}>Écart</td></tr>${recap}</table><br><h3>Détail mouvements</h3><table cellspacing="0"><tr><td ${SH}>Date</td><td ${SH}>Heure</td><td ${SH}>Type</td><td ${SH}>Catégorie</td><td ${SH}>Détail</td><td ${SH}>Entrée CHF</td><td ${SH}>Sortie CHF</td></tr>${rows||`<tr><td ${S} colspan="7">Aucun mouvement</td></tr>`}</table></body></html>`;
+  const blob=new Blob(["\ufeff"+html],{type:"application/vnd.ms-excel"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download="caisse-meyrin-fc-"+expPeriod+"-"+document.getElementById("expPick").value+".xls";
+  document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);toast("Excel téléchargé");
+}
+
+/* ---- Démarrage ---- */
+(async function init(){
+  await load();
+  document.getElementById("appLoader").style.display="none";
+  buildPad();
+  if(!DB.pin){pinMode="create";document.getElementById("lockTitle").textContent="Définir un code PIN";document.getElementById("lockSub").textContent="Choisissez un code à 4 chiffres";}
+  document.getElementById("lock").style.display="flex";
+})();
+</script>
+</body>
+</html>

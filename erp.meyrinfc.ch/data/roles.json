@@ -1,0 +1,23 @@
+{
+  "admin": {
+    "label": "Administrateur",
+    "color": "#7B59D8",
+    "color_bg": "#EEE8FB",
+    "apps": ["events", "sponsors", "caisse", "arbitrage"],
+    "can_access_settings": true
+  },
+  "staff": {
+    "label": "Staff",
+    "color": "#3B6FE0",
+    "color_bg": "#E6EDFB",
+    "apps": ["events", "sponsors", "arbitrage"],
+    "can_access_settings": false
+  },
+  "stagiaire": {
+    "label": "Stagiaire",
+    "color": "#E8902A",
+    "color_bg": "#FCEEDB",
+    "apps": ["events"],
+    "can_access_settings": false
+  }
+}

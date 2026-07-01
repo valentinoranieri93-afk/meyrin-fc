@@ -1,0 +1,12 @@
+# Serveur
+.user.ini
+.infomaniak-maintenance.html
+
+# Données sensibles
+**/caisse_data.json
+**/*.sqlite
+**/data/uploads/
+
+# Environnement
+.env
+*.env

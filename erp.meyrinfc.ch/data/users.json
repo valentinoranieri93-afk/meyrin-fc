@@ -1,0 +1,12 @@
+[
+  {
+    "id": "usr_1",
+    "login": "admin",
+    "password_hash": "__SETUP_REQUIRED__",
+    "name": "Valentino Ranieri",
+    "role": "admin",
+    "active": true,
+    "created_at": "2026-07-01",
+    "last_login": null
+  }
+]
