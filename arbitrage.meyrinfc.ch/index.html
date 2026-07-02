@@ -76,6 +76,10 @@ textarea.form-input{resize:vertical;min-height:90px}
 .brand-logo{width:40px;height:40px;object-fit:contain;flex-shrink:0}
 .brand-name{font-family:"Sora";font-weight:700;font-size:14.5px;letter-spacing:-.2px;line-height:1.1}
 .brand-sub{font-size:11px;color:#8C897C;margin-top:2px;font-weight:500}
+.season-picker{padding:0 18px 14px}
+.season-picker-label{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:#75736A;font-weight:700;margin-bottom:6px}
+.season-sel{width:100%;background:#211F18;border:1.5px solid #34322a;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;color:#E8E6DD;cursor:pointer;transition:.13s}
+.season-sel:focus{border-color:var(--jaune-fonce)}
 .nav{flex:1;overflow-y:auto;padding:4px 12px 12px}
 .nav-label{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:#75736A;font-weight:700;padding:14px 12px 6px}
 .nav-item{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:9px 12px;border-radius:9px;color:#C9C7BD;font-size:13.5px;font-weight:500;transition:.12s;margin-bottom:1px;cursor:pointer}
@@ -352,6 +356,12 @@ th.chk-col,td.chk-col{width:40px}
         <div class="brand-sub">Frais d'arbitrage</div>
       </div>
     </div>
+    <div class="season-picker">
+      <div class="season-picker-label">Saison</div>
+      <select id="season-selector" class="season-sel">
+        <option value="">Toutes les saisons</option>
+      </select>
+    </div>
     <nav class="nav">
       <div class="nav-label">Navigation</div>
       <button class="nav-item active" data-view="dashboard">
@@ -406,9 +416,6 @@ th.chk-col,td.chk-col{width:40px}
         <div class="page-sub" id="topbar-sub">Saison en cours</div>
       </div>
       <div class="topbar-spacer"></div>
-      <select id="season-selector" class="filter-sel" style="display:none">
-        <option value="">Toutes les saisons</option>
-      </select>
     </div>
 
     <div class="content">
@@ -1120,9 +1127,6 @@ function showView(v) {
   document.getElementById('topbar-title').textContent = title;
   document.getElementById('topbar-sub').textContent = sub;
 
-  const seasonSel = document.getElementById('season-selector');
-  seasonSel.style.display = (v === 'dashboard' || v === 'matches') ? '' : 'none';
-
   if (v === 'dashboard')  renderDashboard();
   if (v === 'matches')    loadMatches();
   if (v === 'coaches')    { const s = document.getElementById('coach-search'); if (s) s.value = ''; renderCoaches(); }
@@ -1156,8 +1160,11 @@ function buildSeasonSelector(seasons) {
 
 document.getElementById('season-selector').addEventListener('change', async function() {
   S.seasonId = parseInt(this.value) || 0;
-  if (S.currentView === 'dashboard') { await loadStats(); renderDashboard(); }
+  await Promise.all([loadStats(), loadTeams()]);
+  if (S.currentView === 'dashboard') renderDashboard();
   if (S.currentView === 'matches')   { S.matchesPage = 1; loadMatches(); }
+  if (S.currentView === 'coaches')   renderCoaches();
+  if (S.currentView === 'teams')     renderTeams();
 });
 
 /* ===============================================================
@@ -1976,7 +1983,9 @@ document.getElementById('btn-export-all-coaches').addEventListener('click', () =
 =============================================================== */
 async function loadTeams() {
   try {
-    S.teams = await api('teams') || [];
+    const params = {};
+    if (S.seasonId) params.season_id = S.seasonId;
+    S.teams = await apiGet('teams', params) || [];
     loadMatchFilters();
     if (S.currentView === 'teams') renderTeams();
     return S.teams;
@@ -2353,6 +2362,7 @@ document.getElementById('btn-do-import').addEventListener('click', async () => {
     fd.append('mapping', JSON.stringify(S.importMapping));
     const res = await apiFormPost('import_csv&confirm=1', fd);
     toast(`${res.imported} matchs importés · ${res.new_teams} équipe${res.new_teams>1?'s':''} créée${res.new_teams>1?'s':''}`);
+    S.seasonId = res.season_id;
     await Promise.all([loadTeams(), loadStats()]);
     if (res.needs_config) {
       setTimeout(() => {
@@ -2567,6 +2577,7 @@ document.getElementById('at-save').addEventListener('click', async () => {
       category:   document.getElementById('at-cat').value,
       coach_name: document.getElementById('at-coach').value.trim(),
       fee_amount: parseFloat(document.getElementById('at-fee').value || 0),
+      season_id:  S.seasonId,
     });
     closeAddTeamModal();
     toast('Équipe ajoutée');

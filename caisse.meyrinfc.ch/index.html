@@ -4,26 +4,37 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Caisse — Meyrin FC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --jaune:#FFCE00;--jaune-fonce:#E6B800;--noir:#0E0E0E;--noir-doux:#1C1C1A;
-  --gris:#6B6B66;--gris-clair:#EDEDE8;--bg:#F7F6F2;--blanc:#FFFFFF;
-  --vert:#1E8E4E;--rouge:#C8392B;
-  --ombre:0 1px 2px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.06);
-  --radius:14px;
+  --jaune:#ffdd00;--jaune-fonce:#c5a900;--jaune-soft:#FFF3C4;--jaune-pale:#FFF9D9;
+  --noir:#15140F;--noir-2:#211F18;--noir-3:#2C2A21;
+  --encre:#1A1915;--gris:#6E6C61;--gris-2:#9A988C;
+  --ligne:#E9E6DC;--ligne-2:#F0EDE4;--ligne-dark:#28261E;
+  --bg:#F6F4ED;--carte:#FFFFFF;
+  --vert:#1F9D5B;--vert-bg:#E4F4EA;--rouge:#D8463A;--rouge-bg:#FBE7E4;
+  --orange:#E8902A;--orange-bg:#FCEEDB;--bleu:#3B6FE0;--bleu-bg:#E6EDFB;--violet:#7B59D8;--violet-bg:#EEE8FB;
+  --ombre-s:0 1px 2px rgba(20,18,10,.05);
+  --ombre:0 1px 2px rgba(20,18,10,.04),0 6px 20px rgba(20,18,10,.06);
+  --radius:14px;--radius-s:10px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:var(--bg);color:var(--noir);-webkit-font-smoothing:antialiased;font-size:16px;line-height:1.45}
-button{font-family:inherit;cursor:pointer;border:none}
-input,select{font-family:inherit;font-size:16px}
+body{font-family:"Inter",-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--encre);-webkit-font-smoothing:antialiased;font-size:14px;line-height:1.5}
+h1,h2,h3,h4{font-family:"Sora","Inter",sans-serif}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select{font-family:inherit;font-size:14px}
+a{color:inherit;text-decoration:none}
+
 #appLoader{position:fixed;inset:0;background:var(--noir);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200}
-#appLoader .logo{width:72px;height:72px;border-radius:18px;background:var(--jaune);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;color:var(--noir);margin-bottom:20px}
+#appLoader .logo{width:72px;height:72px;object-fit:contain;margin-bottom:20px}
 #appLoader p{color:#8f8f8a;font-size:14px}
 .spin{display:inline-block;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+
 #lock{position:fixed;inset:0;background:var(--noir);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;padding:24px}
-#lock .logo{width:72px;height:72px;border-radius:18px;background:var(--jaune);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;color:var(--noir);margin-bottom:28px}
+#lock .logo{width:72px;height:72px;object-fit:contain;margin-bottom:28px}
 #lock h1{color:#fff;font-size:20px;font-weight:600;margin-bottom:6px}
 #lock p{color:#9a9a95;font-size:14px;margin-bottom:28px;text-align:center}
 .pin-dots{display:flex;gap:14px;margin-bottom:30px}
@@ -35,56 +46,97 @@ input,select{font-family:inherit;font-size:16px}
 .pad button.ghost{background:transparent}
 .pad button.ghost:active{background:#262624;color:#fff}
 #lock .err{color:#ff7a6e;font-size:13px;height:18px;margin-top:14px}
-header{background:var(--noir);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;position:sticky;top:0;z-index:20}
-.brand{display:flex;align-items:center;gap:12px}
-.brand .mark{width:38px;height:38px;border-radius:9px;background:var(--jaune);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:var(--noir)}
-.brand .txt b{font-size:15px;font-weight:700;display:block}
-.brand .txt span{font-size:11px;color:#8f8f8a;text-transform:uppercase;letter-spacing:1.5px}
-.header-right{display:flex;align-items:center;gap:10px}
-#saveStatus{font-size:12px;font-weight:600;color:#8f8f8a;min-width:90px;text-align:right}
-.lock-btn{background:#262624;color:#fff;border-radius:9px;padding:9px 13px;font-size:13px;font-weight:500}
-.lock-btn:active{background:#333}
-nav{background:var(--noir);display:flex;padding:0 12px;position:sticky;top:66px;z-index:19}
-nav button{background:transparent;color:#8f8f8a;flex:1;padding:13px 8px 15px;font-size:14px;font-weight:600;border-bottom:3px solid transparent;transition:.15s}
-nav button.active{color:var(--jaune);border-color:var(--jaune)}
-main{max-width:740px;margin:0 auto;padding:22px 18px 80px}
+
+/* ============ LAYOUT ============ */
+.app{display:grid;grid-template-columns:256px 1fr;height:100vh;overflow:hidden}
+
+.sidebar{background:var(--noir);color:#E8E6DD;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.brand{display:flex;align-items:center;gap:11px;padding:20px 18px 18px}
+.brand-logo{width:40px;height:40px;object-fit:contain;flex-shrink:0}
+.brand-name{font-family:"Sora";font-weight:700;font-size:15px;letter-spacing:-.2px;line-height:1.1}
+.brand-sub{font-size:11px;color:#8C897C;margin-top:2px;font-weight:500}
+.nav{flex:1;overflow-y:auto;padding:4px 12px 12px}
+.nav-label{font-size:10.5px;text-transform:uppercase;letter-spacing:1.2px;color:#75736A;font-weight:700;padding:14px 12px 7px}
+.nav-item{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:9px 12px;border-radius:9px;color:#C9C7BD;font-size:13.5px;font-weight:500;transition:.13s;margin-bottom:1px}
+.nav-item:hover{background:var(--noir-2);color:#fff}
+.nav-item.active{background:var(--jaune);color:var(--noir);font-weight:600}
+.nav-item.active .nav-ic{color:var(--noir)}
+.nav-ic{width:18px;height:18px;flex-shrink:0;color:#8E8C82}
+.nav-item:hover .nav-ic{color:#fff}
+.sidebar-foot{padding:14px 18px;border-top:1px solid var(--ligne-dark);font-size:11px;color:#85837A;line-height:1.5}
+
+.main{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.topbar{height:62px;display:flex;align-items:center;gap:16px;padding:0 26px;flex-shrink:0;border-bottom:1px solid var(--ligne);background:rgba(246,244,237,.85);backdrop-filter:blur(8px);position:relative;z-index:5}
+.page-title{font-family:"Sora";font-size:20px;font-weight:700;letter-spacing:-.4px}
+.page-sub{font-size:12.5px;color:var(--gris);margin-top:1px;font-weight:450;text-transform:capitalize}
+.topbar-spacer{flex:1}
+#saveStatus{font-size:12px;font-weight:600;color:var(--gris);min-width:90px;text-align:right}
+.lock-btn{background:var(--noir);color:#fff;border-radius:9px;padding:9px 13px;font-size:13px;font-weight:600}
+.lock-btn:hover{background:var(--noir-3)}
+.burger{display:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--ligne);background:var(--carte);align-items:center;justify-content:center;flex-shrink:0}
+
+.content{flex:1;overflow-y:auto;padding:22px 22px 80px}
+.content-wrap{max-width:740px;margin:0 auto}
 .view{display:none}.view.active{display:block}
-.card{background:var(--blanc);border-radius:var(--radius);box-shadow:var(--ombre);padding:22px;margin-bottom:18px}
+
+@media(max-width:820px){
+  .app{grid-template-columns:1fr}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:256px;z-index:60;transform:translateX(-100%);transition:.3s}
+  .sidebar.open{transform:none}
+  .burger{display:flex}
+}
+.overlay{position:fixed;inset:0;background:rgba(20,18,10,.5);z-index:40;opacity:0;pointer-events:none;transition:.25s}
+.overlay.show{opacity:1;pointer-events:auto}
+
+/* ============ CARDS / CAISSE ============ */
+.card{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--radius);box-shadow:var(--ombre-s);padding:22px;margin-bottom:18px}
 .card-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--gris);margin-bottom:16px}
 .dateline{font-size:13px;color:var(--gris);margin-bottom:18px;text-transform:capitalize;font-weight:500}
 label{display:block;font-size:13px;font-weight:600;color:var(--noir);margin-bottom:7px}
 .field{margin-bottom:16px}
-input[type=text],input[type=number],input[type=date],input[type=month],select{width:100%;padding:13px 14px;border:1.5px solid var(--gris-clair);border-radius:10px;background:var(--blanc);color:var(--noir);transition:.15s}
-input:focus,select:focus{outline:none;border-color:var(--jaune)}
+input[type=text],input[type=number],input[type=date],input[type=month],select{width:100%;padding:13px 14px;border:1.5px solid var(--ligne);border-radius:10px;background:var(--carte);color:var(--noir);transition:.15s}
+input:focus,select:focus{outline:none;border-color:var(--jaune-fonce);box-shadow:0 0 0 4px var(--jaune-soft)}
 .with-unit{position:relative}
 .with-unit input{padding-right:54px}
 .with-unit .unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:13px;font-weight:700;color:var(--gris)}
 .btn{width:100%;padding:15px;border-radius:11px;font-size:15px;font-weight:700;transition:.12s}
 .btn-primary{background:var(--jaune);color:var(--noir)}
-.btn-primary:active{background:var(--jaune-fonce)}
+.btn-primary:hover{background:var(--jaune-fonce)}
 .btn-dark{background:var(--noir);color:#fff}
-.btn-dark:active{background:var(--noir-doux)}
-.btn-ghost{background:var(--gris-clair);color:var(--noir)}
-.btn-ghost:active{background:#e0e0da}
+.btn-dark:hover{background:var(--noir-3)}
+.btn-ghost{background:var(--ligne-2);color:var(--noir)}
+.btn-ghost:hover{background:var(--ligne)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .btn-row{display:flex;gap:10px}
 .btn-row .btn{flex:1}
-.solde-hero{background:var(--noir);border-radius:var(--radius);padding:24px;margin-bottom:18px;color:#fff;position:relative;overflow:hidden}
-.solde-hero::after{content:"";position:absolute;right:-30px;top:-30px;width:120px;height:120px;border-radius:50%;background:rgba(255,206,0,.12)}
-.solde-hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1.3px;color:#8f8f8a;font-weight:700;margin-bottom:8px}
-.solde-hero .val{font-size:38px;font-weight:800;letter-spacing:-1px}
-.solde-hero .val small{font-size:18px;color:var(--jaune);font-weight:700;margin-right:4px}
-.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px}
-.stat{background:var(--blanc);border-radius:12px;padding:14px 12px;box-shadow:var(--ombre)}
-.stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--gris);font-weight:700}
-.stat .v{font-size:18px;font-weight:800;margin-top:4px;letter-spacing:-.3px}
+
+.solde-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.solde-mini{background:var(--noir);border-radius:var(--radius);padding:20px;color:#fff;position:relative;overflow:hidden}
+.solde-mini::after{content:"";position:absolute;right:-24px;top:-24px;width:90px;height:90px;border-radius:50%}
+.solde-mini.esp::after{background:rgba(255,221,0,.12)}
+.solde-mini.car::after{background:rgba(59,111,224,.18)}
+.solde-mini .lbl{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:#8f8f8a;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.solde-mini .val{font-size:26px;font-weight:800;letter-spacing:-.6px}
+.solde-mini .val small{font-size:14px;font-weight:700;margin-right:3px}
+.solde-mini.esp .val small{color:var(--jaune)}
+.solde-mini.car .val small{color:#7FA3F5}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.stat{background:var(--carte);border:1px solid var(--ligne);border-radius:12px;padding:13px 11px;box-shadow:var(--ombre-s)}
+.stat .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);font-weight:700}
+.stat .v{font-size:16px;font-weight:800;margin-top:4px;letter-spacing:-.3px}
 .stat .v.pos{color:var(--vert)}.stat .v.neg{color:var(--rouge)}
-.seg{display:flex;background:var(--gris-clair);border-radius:11px;padding:4px;margin-bottom:16px}
+@media(max-width:560px){.stats{grid-template-columns:1fr 1fr}.solde-grid{grid-template-columns:1fr 1fr}}
+
+.seg{display:flex;background:var(--ligne-2);border-radius:11px;padding:4px;margin-bottom:16px}
 .seg button{flex:1;background:transparent;padding:10px;border-radius:8px;font-size:14px;font-weight:700;color:var(--gris);transition:.12s}
 .seg button.on-in{background:var(--vert);color:#fff}
 .seg button.on-out{background:var(--rouge);color:#fff}
+.seg button.on-esp{background:var(--jaune);color:var(--noir)}
+.seg button.on-car{background:var(--bleu);color:#fff}
+
 .journal{list-style:none}
-.mvt{display:flex;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid var(--gris-clair)}
+.mvt{display:flex;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid var(--ligne-2)}
 .mvt:last-child{border-bottom:none}
 .mvt .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .mvt .dot.in{background:var(--vert)}.mvt .dot.out{background:var(--rouge)}
@@ -93,40 +145,50 @@ input:focus,select:focus{outline:none;border-color:var(--jaune)}
 .mvt .info span{font-size:12px;color:var(--gris);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mvt .amt{font-size:15px;font-weight:800;white-space:nowrap}
 .mvt .amt.in{color:var(--vert)}.mvt .amt.out{color:var(--rouge)}
-.mvt .del{background:var(--gris-clair);color:var(--gris);width:30px;height:30px;border-radius:8px;font-size:14px;flex-shrink:0}
-.mvt .del:active{background:var(--rouge);color:#fff}
+.mvt .del{background:var(--ligne-2);color:var(--gris);width:30px;height:30px;border-radius:8px;font-size:14px;flex-shrink:0}
+.mvt .del:hover{background:var(--rouge);color:#fff}
+.mode-ico{font-size:12px}
 .empty{text-align:center;color:var(--gris);font-size:14px;padding:28px 0}
+
 .ecart-box{border-radius:12px;padding:16px;text-align:center;margin:14px 0}
-.ecart-box.ok{background:rgba(30,142,78,.1)}.ecart-box.bad{background:rgba(200,57,43,.1)}
+.ecart-box.ok{background:var(--vert-bg)}.ecart-box.bad{background:var(--rouge-bg)}
 .ecart-box .e-lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
 .ecart-box.ok .e-lbl{color:var(--vert)}.ecart-box.bad .e-lbl{color:var(--rouge)}
-.ecart-box .e-val{font-size:28px;font-weight:800;margin-top:4px}
+.ecart-box .e-val{font-size:26px;font-weight:800;margin-top:4px}
 .ecart-box.ok .e-val{color:var(--vert)}.ecart-box.bad .e-val{color:var(--rouge)}
+.ecart-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
 .recap{margin:4px 0}
-.recap-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--gris-clair);font-size:14px}
+.recap-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--ligne-2);font-size:14px}
 .recap-row:last-child{border-bottom:none}
 .recap-row .k{color:var(--gris);font-weight:500}.recap-row .v{font-weight:700}
 .recap-row.total{border-top:2px solid var(--noir);margin-top:4px}
 .recap-row.total .k,.recap-row.total .v{font-weight:800;font-size:15px}
+.recap-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gris-2);margin:14px 0 4px}
+.recap-h:first-child{margin-top:0}
+
 .badge{display:inline-block;font-size:11px;font-weight:800;padding:3px 9px;border-radius:20px}
 .badge.open{background:var(--jaune);color:var(--noir)}
-.badge.ok{background:rgba(30,142,78,.15);color:var(--vert)}
-.badge.bad{background:rgba(200,57,43,.15);color:var(--rouge)}
-.hist-row{background:var(--blanc);border-radius:12px;box-shadow:var(--ombre);padding:15px 16px;margin-bottom:10px;cursor:pointer}
+.badge.ok{background:var(--vert-bg);color:var(--vert)}
+.badge.bad{background:var(--rouge-bg);color:var(--rouge)}
+.hist-row{background:var(--carte);border:1px solid var(--ligne);border-radius:12px;box-shadow:var(--ombre-s);padding:15px 16px;margin-bottom:10px;cursor:pointer}
 .hist-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .hist-head .d{font-size:14px;font-weight:700;text-transform:capitalize}
 .hist-head .r{display:flex;align-items:center;gap:8px}
 .hist-net{font-size:14px;font-weight:800}
-.hist-detail{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--gris-clair)}
+.hist-detail{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--ligne-2)}
 .hist-row.exp .hist-detail{display:block}
+
 .export-preview{background:var(--noir);color:#fff;border-radius:12px;padding:18px;margin:16px 0}
 .export-preview .pv-row{display:flex;justify-content:space-between;font-size:14px;padding:6px 0}
 .export-preview .pv-row .k{color:#8f8f8a}.export-preview .pv-row .v{font-weight:700}
 .export-preview .pv-big{border-top:1px solid #333;margin-top:8px;padding-top:12px}
 .export-preview .pv-big .v{color:var(--jaune);font-size:18px;font-weight:800}
 .hint{font-size:12px;color:var(--gris);margin-top:8px;line-height:1.5}
+
 #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(80px);background:var(--noir);color:#fff;padding:13px 22px;border-radius:30px;font-size:14px;font-weight:600;z-index:60;transition:.25s;box-shadow:0 8px 30px rgba(0,0,0,.3);opacity:0}
 #toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
 #report-print{display:none}
 @media print{body>*:not(#report-print){display:none!important}#report-print{display:block;padding:0}@page{margin:18mm}}
 #report-print .rp-head{border-bottom:3px solid #000;padding-bottom:14px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:flex-end}
@@ -142,72 +204,77 @@ input:focus,select:focus{outline:none;border-color:var(--jaune)}
 #report-print .rp-totaux{margin-top:18px;border:1px solid #000;border-radius:8px;overflow:hidden}
 #report-print .rp-totaux .t-row{display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid #ddd;font-size:13px}
 #report-print .rp-totaux .t-row:last-child{border-bottom:none}
-#report-print .rp-totaux .t-row.grand{background:#FFCE00;font-weight:800;font-size:15px}
+#report-print .rp-totaux .t-row.grand{background:#ffdd00;font-weight:800;font-size:15px}
 #report-print .rp-foot{margin-top:30px;font-size:10px;color:#999;border-top:1px solid #ddd;padding-top:10px}
 </style>
 </head>
 <body>
 
 <div id="appLoader">
-  <a href="https://meyrinfc.ch" target="_blank" class="logo-link">
-    <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" 
-         alt="Meyrin FC" 
-         class="logo">
-  </a>
-
+  <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC" class="logo">
   <p><span class="spin">⟳</span>&nbsp; Connexion au serveur…</p>
 </div>
 
 <div id="lock" style="display:none">
-  <a href="https://meyrinfc.ch" target="_blank" class="logo-link">
-    <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" 
-         alt="Meyrin FC" 
-         class="logo">
-  </a>
-
+  <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC" class="logo">
   <h1 id="lockTitle">Caisse du club</h1>
   <p id="lockSub">Saisissez votre code à 4 chiffres</p>
-
   <div class="pin-dots" id="pinDots"></div>
   <div class="pad" id="pad"></div>
   <div class="err" id="lockErr"></div>
 </div>
 
-<header>
-  <div class="brand">
-
-    <a href="https://meyrinfc.ch" target="_blank">
-      <img 
-        src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg"
-        alt="Meyrin FC"
-        style="width:55px;height:55px;object-fit:contain;"
-      >
-    </a>
-
-    <div class="txt">
-      <b>Meyrin FC</b>
-      <span>Caisse</span>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC">
+      <div>
+        <div class="brand-name">Meyrin FC</div>
+        <div class="brand-sub">Caisse</div>
+      </div>
     </div>
+    <nav class="nav" id="nav">
+      <div class="nav-label">Caisse</div>
+      <button class="nav-item active" data-tab="jour" onclick="showTab('jour')">
+        <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="2" y="6" width="20" height="14" rx="2.5"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+        Jour
+      </button>
+      <button class="nav-item" data-tab="histo" onclick="showTab('histo')">
+        <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+        Historique
+      </button>
+      <button class="nav-item" data-tab="export" onclick="showTab('export')">
+        <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 18h16v2H4z"/></svg>
+        Exports
+      </button>
+    </nav>
+    <div class="sidebar-foot">Meyrin FC · Application Caisse</div>
+  </aside>
 
+  <div class="main">
+    <header class="topbar">
+      <button class="burger" id="burger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
+      <div>
+        <div class="page-title" id="pgTitle">Jour</div>
+        <div class="page-sub" id="pgSub"></div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <span id="saveStatus"></span>
+      <button class="lock-btn" onclick="lockApp()">🔒 Verrouiller</button>
+    </header>
+    <div class="content">
+      <div class="content-wrap">
+        <section class="view active" id="view-jour"></section>
+        <section class="view" id="view-histo"></section>
+        <section class="view" id="view-export"></section>
+      </div>
+    </div>
   </div>
+</div>
 
-  <div class="header-right">
-    <span id="saveStatus"></span>
-    <button class="lock-btn" onclick="lockApp()">🔒 Verrouiller</button>
-  </div>
-</header>
-
-<nav>
-  <button class="active" data-tab="jour" onclick="showTab('jour')">Jour</button>
-  <button data-tab="histo" onclick="showTab('histo')">Historique</button>
-  <button data-tab="export" onclick="showTab('export')">Exports</button>
-</nav>
-
-<main>
-  <section class="view active" id="view-jour"></section>
-  <section class="view" id="view-histo"></section>
-  <section class="view" id="view-export"></section>
-</main>
+<div class="overlay" id="overlay" onclick="document.getElementById('sidebar').classList.remove('open');this.classList.remove('show')"></div>
 
 <div id="toast"></div>
 <div id="report-print"></div>
@@ -225,7 +292,19 @@ const API_KEY = "MEYRIN_CAISSE_2026_VAL";
 const KEY_LOCAL = "mfc_caisse_v1";
 const CATS_IN   = ["Cotisation","Vente boutique","Billetterie","Divers"];
 const CATS_OUT  = ["Frais arbitre","Frais déplacement","Divers"];
+const PAGE_TITLES = {jour:["Jour","Gestion de la caisse du jour"],histo:["Historique","Journées passées"],export:["Exports","Générer un rapport PDF ou Excel"]};
 let DB = { pin:null, days:[] };
+
+/* ---- Migration des anciennes données (avant gestion Espèces/Carte) ---- */
+function migrate(){
+  (DB.days||[]).forEach(day=>{
+    (day.mouvements||[]).forEach(m=>{ if(!m.mode) m.mode="especes"; });
+    if(day.cloture && !day.cloture.especes){
+      const old=day.cloture;
+      day.cloture={especes:{compte:old.compte,theorique:old.theorique,ecart:old.ecart},carte:{compte:0,theorique:0,ecart:0},heure:old.heure};
+    }
+  });
+}
 
 /* ---- Persistance ---- */
 async function load(){
@@ -241,6 +320,7 @@ async function load(){
     if(!DB.days) DB.days=[];
     setSaveStatus("warn");
   }
+  migrate();
 }
 async function save(){
   try{localStorage.setItem(KEY_LOCAL,JSON.stringify(DB));}catch(e){}
@@ -256,7 +336,7 @@ async function save(){
 }
 function setSaveStatus(s){
   const el=document.getElementById("saveStatus"); if(!el) return;
-  if(s==="saving"){el.textContent="⟳ Sauvegarde…";el.style.color="#8f8f8a";}
+  if(s==="saving"){el.textContent="⟳ Sauvegarde…";el.style.color="var(--gris)";}
   else if(s==="ok"){el.textContent="✓ Sauvegardé";el.style.color="var(--vert)";}
   else if(s==="warn"){el.textContent="⚠ Hors ligne";el.style.color="var(--rouge)";}
 }
@@ -270,7 +350,14 @@ function frDateShort(iso){const d=new Date(iso+"T12:00:00");return d.toLocaleDat
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 function getDay(iso){return DB.days.find(d=>d.date===iso);}
-function totals(day){let e=0,s=0;(day.mouvements||[]).forEach(m=>{if(m.sens==="in")e+=m.montant;else s+=m.montant;});return{entrees:e,sorties:s,theorique:(day.fond||0)+e-s};}
+function totals(day){
+  let eEsp=0,eCar=0,s=0;
+  (day.mouvements||[]).forEach(m=>{
+    if(m.sens==="in"){ if(m.mode==="carte") eCar+=m.montant; else eEsp+=m.montant; }
+    else s+=m.montant;
+  });
+  return{entreesEspeces:eEsp,entreesCarte:eCar,sorties:s,theoriqueEspeces:(day.fond||0)+eEsp-s,theoriqueCarte:eCar};
+}
 function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2400);}
 
@@ -299,43 +386,95 @@ function pinSubmit(){
 function unlock(){pinBuf="";document.getElementById("lock").style.display="none";renderAll();}
 function lockApp(){pinBuf="";pinMode="verify";document.getElementById("lockTitle").textContent="Caisse du club";document.getElementById("lockSub").textContent="Saisissez votre code à 4 chiffres";document.getElementById("lockErr").textContent="";document.getElementById("lock").style.display="flex";renderDots();}
 
-/* ---- Onglets ---- */
+/* ---- Navigation / sidebar mobile ---- */
+document.getElementById("burger").addEventListener("click",()=>{
+  document.getElementById("sidebar").classList.toggle("open");
+  document.getElementById("overlay").classList.toggle("show");
+});
 function showTab(tab){
-  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  document.querySelectorAll(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.getElementById("view-"+tab).classList.add("active");
+  document.getElementById("pgTitle").textContent=PAGE_TITLES[tab][0];
+  document.getElementById("pgSub").textContent=PAGE_TITLES[tab][1];
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("overlay").classList.remove("show");
   if(tab==="jour")renderJour();if(tab==="histo")renderHisto();if(tab==="export")renderExport();
 }
-function renderAll(){renderJour();}
+function renderAll(){showTab("jour");}
 
 /* ---- Jour ---- */
-let mvtSens="in";
+let mvtSens="in",mvtMode="especes";
 function renderJour(){
   const el=document.getElementById("view-jour"),iso=todayISO(),day=getDay(iso);
   if(!day){
-    el.innerHTML=`<div class="card"><div class="card-title">Ouvrir la journée</div><div class="dateline">${frDate(iso)}</div><div class="field"><label>Fond de caisse au départ</label><div class="with-unit"><input type="number" id="fondInput" inputmode="decimal" placeholder="0.00" step="0.05"><span class="unit">CHF</span></div></div><button class="btn btn-primary" onclick="openDay()">Ouvrir la caisse</button></div>`;
+    el.innerHTML=`<div class="card"><div class="card-title">Ouvrir la journée</div><div class="dateline">${frDate(iso)}</div><div class="field"><label>Fond de caisse en espèces au départ</label><div class="with-unit"><input type="number" id="fondInput" inputmode="decimal" placeholder="0.00" step="0.05"><span class="unit">CHF</span></div></div><p class="hint">La carte démarre toujours à 0 CHF : son solde théorique correspondra à la somme des paiements carte du jour.</p><button class="btn btn-primary" onclick="openDay()">Ouvrir la caisse</button></div>`;
     return;
   }
   if(day.cloture){
-    const t=totals(day),c=day.cloture,ok=Math.abs(c.ecart)<0.005;
-    el.innerHTML=`<div class="card"><div class="card-title">Journée clôturée</div><div class="dateline">${frDate(iso)} · clôturée à ${c.heure}</div><div class="recap"><div class="recap-row"><span class="k">Fond de départ</span><span class="v">${fmt(day.fond)}</span></div><div class="recap-row"><span class="k">Total entrées</span><span class="v" style="color:var(--vert)">+${fmt(t.entrees)}</span></div><div class="recap-row"><span class="k">Total sorties</span><span class="v" style="color:var(--rouge)">−${fmt(t.sorties)}</span></div><div class="recap-row total"><span class="k">Solde théorique</span><span class="v">${fmt(t.theorique)} CHF</span></div><div class="recap-row"><span class="k">Montant compté</span><span class="v">${fmt(c.compte)} CHF</span></div></div><div class="ecart-box ${ok?"ok":"bad"}"><div class="e-lbl">${ok?"Caisse juste":"Écart constaté"}</div><div class="e-val">${c.ecart>0?"+":""}${fmt(c.ecart)} CHF</div></div><div class="btn-row"><button class="btn btn-dark" onclick="showTab('export')">Exporter</button><button class="btn btn-ghost" onclick="reopenDay()">Rouvrir</button></div></div>`;
+    const t=totals(day),cE=day.cloture.especes,cC=day.cloture.carte,okE=Math.abs(cE.ecart)<0.005,okC=Math.abs(cC.ecart)<0.005;
+    el.innerHTML=`<div class="card"><div class="card-title">Journée clôturée</div><div class="dateline">${frDate(iso)} · clôturée à ${day.cloture.heure}</div>
+    <div class="recap-h">Espèces</div>
+    <div class="recap"><div class="recap-row"><span class="k">Fond de départ</span><span class="v">${fmt(day.fond)}</span></div><div class="recap-row"><span class="k">Entrées espèces</span><span class="v" style="color:var(--vert)">+${fmt(t.entreesEspeces)}</span></div><div class="recap-row"><span class="k">Sorties</span><span class="v" style="color:var(--rouge)">−${fmt(t.sorties)}</span></div><div class="recap-row total"><span class="k">Théorique espèces</span><span class="v">${fmt(cE.theorique)} CHF</span></div><div class="recap-row"><span class="k">Compté</span><span class="v">${fmt(cE.compte)} CHF</span></div></div>
+    <div class="recap-h">Carte</div>
+    <div class="recap"><div class="recap-row"><span class="k">Entrées carte</span><span class="v" style="color:var(--vert)">+${fmt(t.entreesCarte)}</span></div><div class="recap-row total"><span class="k">Théorique carte</span><span class="v">${fmt(cC.theorique)} CHF</span></div><div class="recap-row"><span class="k">Reçu (ticket terminal)</span><span class="v">${fmt(cC.compte)} CHF</span></div></div>
+    <div class="ecart-2"><div class="ecart-box ${okE?"ok":"bad"}"><div class="e-lbl">${okE?"Espèces justes":"Écart espèces"}</div><div class="e-val">${cE.ecart>0?"+":""}${fmt(cE.ecart)}</div></div><div class="ecart-box ${okC?"ok":"bad"}"><div class="e-lbl">${okC?"Carte juste":"Écart carte"}</div><div class="e-val">${cC.ecart>0?"+":""}${fmt(cC.ecart)}</div></div></div>
+    <div class="btn-row"><button class="btn btn-dark" onclick="showTab('export')">Exporter</button><button class="btn btn-ghost" onclick="reopenDay()">Rouvrir</button></div></div>`;
     return;
   }
   const t=totals(day);
-  el.innerHTML=`<div class="solde-hero"><div class="lbl">Solde théorique en caisse</div><div class="val"><small>CHF</small>${fmt(t.theorique)}</div></div><div class="stats"><div class="stat"><div class="k">Fond départ</div><div class="v">${fmt(day.fond)}</div></div><div class="stat"><div class="k">Entrées</div><div class="v pos">+${fmt(t.entrees)}</div></div><div class="stat"><div class="k">Sorties</div><div class="v neg">−${fmt(t.sorties)}</div></div></div>
-  <div class="card"><div class="card-title">Enregistrer un mouvement</div><div class="seg"><button id="segIn" class="${mvtSens==="in"?"on-in":""}" onclick="setSens('in')">Entrée</button><button id="segOut" class="${mvtSens==="out"?"on-out":""}" onclick="setSens('out')">Sortie</button></div><div class="field"><label>Catégorie</label><select id="catSelect"></select></div><div class="field"><label>Montant</label><div class="with-unit"><input type="number" id="montInput" inputmode="decimal" placeholder="0.00" step="0.05"><span class="unit">CHF</span></div></div><div class="field"><label>Détail <span style="color:var(--gris);font-weight:400">(facultatif)</span></label><input type="text" id="detailInput" placeholder="Ex. cotisation junior, arbitre U15…" maxlength="80"></div><button class="btn btn-primary" onclick="addMvt()">Ajouter au journal</button></div>
+  el.innerHTML=`<div class="solde-grid">
+    <div class="solde-mini esp"><div class="lbl">💵 Espèces</div><div class="val"><small>CHF</small>${fmt(t.theoriqueEspeces)}</div></div>
+    <div class="solde-mini car"><div class="lbl">💳 Carte</div><div class="val"><small>CHF</small>${fmt(t.theoriqueCarte)}</div></div>
+  </div>
+  <div class="stats"><div class="stat"><div class="k">Fond départ</div><div class="v">${fmt(day.fond)}</div></div><div class="stat"><div class="k">Entrées esp.</div><div class="v pos">+${fmt(t.entreesEspeces)}</div></div><div class="stat"><div class="k">Entrées carte</div><div class="v pos">+${fmt(t.entreesCarte)}</div></div><div class="stat"><div class="k">Sorties</div><div class="v neg">−${fmt(t.sorties)}</div></div></div>
+  <div class="card"><div class="card-title">Enregistrer un mouvement</div><div class="seg"><button id="segIn" class="${mvtSens==="in"?"on-in":""}" onclick="setSens('in')">Entrée</button><button id="segOut" class="${mvtSens==="out"?"on-out":""}" onclick="setSens('out')">Sortie</button></div><div class="field" id="modeField" style="${mvtSens==="out"?"display:none":""}"><label>Mode de paiement</label><div class="seg" style="margin-bottom:0"><button id="segEsp" class="${mvtMode==="especes"?"on-esp":""}" onclick="setMode('especes')">💵 Espèces</button><button id="segCar" class="${mvtMode==="carte"?"on-car":""}" onclick="setMode('carte')">💳 Carte</button></div></div><div class="field"><label>Catégorie</label><select id="catSelect"></select></div><div class="field"><label>Montant</label><div class="with-unit"><input type="number" id="montInput" inputmode="decimal" placeholder="0.00" step="0.05"><span class="unit">CHF</span></div></div><div class="field"><label>Détail <span style="color:var(--gris);font-weight:400">(facultatif — utile pour noter une info liée à un paiement carte)</span></label><input type="text" id="detailInput" placeholder="Ex. cotisation junior, réf. transaction carte…" maxlength="80"></div><button class="btn btn-primary" onclick="addMvt()">Ajouter au journal</button></div>
   <div class="card"><div class="card-title">Journal du jour · ${(day.mouvements||[]).length} mouvement(s)</div><ul class="journal" id="journalList"></ul></div>
-  <div class="card"><div class="card-title">Clôture de la journée</div><div class="field"><label>Montant réellement compté en caisse</label><div class="with-unit"><input type="number" id="compteInput" inputmode="decimal" placeholder="0.00" step="0.05" oninput="previewEcart()"><span class="unit">CHF</span></div></div><div id="ecartPreview"></div><button class="btn btn-dark" onclick="closeDay()">Clôturer la journée</button></div>`;
+  <div class="card"><div class="card-title">Clôture de la journée</div><div class="field"><label>Montant réellement compté en caisse (espèces)</label><div class="with-unit"><input type="number" id="compteEspecesInput" inputmode="decimal" placeholder="0.00" step="0.05" oninput="previewEcart('especes')"><span class="unit">CHF</span></div></div><div id="ecartPreviewEspeces"></div><div class="field"><label>Montant reçu par carte (ticket terminal)</label><div class="with-unit"><input type="number" id="compteCarteInput" inputmode="decimal" placeholder="0.00" step="0.05" oninput="previewEcart('carte')"><span class="unit">CHF</span></div></div><div id="ecartPreviewCarte"></div><button class="btn btn-dark" onclick="closeDay()">Clôturer la journée</button></div>`;
   fillCats();renderJournal(day);
 }
-function setSens(s){mvtSens=s;document.getElementById("segIn").className=s==="in"?"on-in":"";document.getElementById("segOut").className=s==="out"?"on-out":"";fillCats();}
+function setSens(s){
+  mvtSens=s;
+  document.getElementById("segIn").className=s==="in"?"on-in":"";
+  document.getElementById("segOut").className=s==="out"?"on-out":"";
+  document.getElementById("modeField").style.display=s==="out"?"none":"";
+  if(s==="out")mvtMode="especes";
+  fillCats();
+}
+function setMode(m){mvtMode=m;document.getElementById("segEsp").className=m==="especes"?"on-esp":"";document.getElementById("segCar").className=m==="carte"?"on-car":"";}
 function fillCats(){const sel=document.getElementById("catSelect");if(!sel)return;sel.innerHTML="";(mvtSens==="in"?CATS_IN:CATS_OUT).forEach(c=>{const o=document.createElement("option");o.textContent=c;sel.appendChild(o);});}
-function renderJournal(day){const ul=document.getElementById("journalList");if(!ul)return;const mv=(day.mouvements||[]).slice().reverse();if(mv.length===0){ul.innerHTML=`<li class="empty">Aucun mouvement.</li>`;return;}ul.innerHTML=mv.map(m=>`<li class="mvt"><div class="dot ${m.sens}"></div><div class="info"><b>${m.cat}</b><span>${m.heure}${m.detail?" · "+escapeHtml(m.detail):""}</span></div><div class="amt ${m.sens}">${m.sens==="in"?"+":"−"}${fmt(m.montant)}</div><button class="del" onclick="delMvt('${m.id}')">✕</button></li>`).join("");}
+function renderJournal(day){const ul=document.getElementById("journalList");if(!ul)return;const mv=(day.mouvements||[]).slice().reverse();if(mv.length===0){ul.innerHTML=`<li class="empty">Aucun mouvement.</li>`;return;}ul.innerHTML=mv.map(m=>`<li class="mvt"><div class="dot ${m.sens}"></div><div class="info"><b>${m.sens==="in"?(m.mode==="carte"?'<span class="mode-ico">💳</span> ':'<span class="mode-ico">💵</span> '):""}${m.cat}</b><span>${m.heure}${m.detail?" · "+escapeHtml(m.detail):""}</span></div><div class="amt ${m.sens}">${m.sens==="in"?"+":"−"}${fmt(m.montant)}</div><button class="del" onclick="delMvt('${m.id}')">✕</button></li>`).join("");}
 async function openDay(){const v=parseFloat((document.getElementById("fondInput").value||"").replace(",","."));if(isNaN(v)||v<0){toast("Fond invalide");return;}DB.days.push({date:todayISO(),fond:v,mouvements:[],cloture:null});await save();renderJour();toast("Journée ouverte");}
-async function addMvt(){const day=getDay(todayISO());if(!day||day.cloture)return;const cat=document.getElementById("catSelect").value,v=parseFloat((document.getElementById("montInput").value||"").replace(",",".")),detail=document.getElementById("detailInput").value.trim();if(isNaN(v)||v<=0){toast("Montant invalide");return;}day.mouvements.push({id:uid(),sens:mvtSens,cat,montant:v,detail,heure:nowHM()});await save();renderJour();toast(mvtSens==="in"?"Entrée enregistrée":"Sortie enregistrée");}
+async function addMvt(){const day=getDay(todayISO());if(!day||day.cloture)return;const cat=document.getElementById("catSelect").value,v=parseFloat((document.getElementById("montInput").value||"").replace(",",".")),detail=document.getElementById("detailInput").value.trim(),mode=mvtSens==="out"?"especes":mvtMode;if(isNaN(v)||v<=0){toast("Montant invalide");return;}day.mouvements.push({id:uid(),sens:mvtSens,mode,cat,montant:v,detail,heure:nowHM()});await save();renderJour();toast(mvtSens==="in"?"Entrée enregistrée":"Sortie enregistrée");}
 async function delMvt(id){const day=getDay(todayISO());if(!day||day.cloture)return;if(!confirm("Supprimer ce mouvement ?"))return;day.mouvements=day.mouvements.filter(m=>m.id!==id);await save();renderJour();}
-function previewEcart(){const day=getDay(todayISO()),box=document.getElementById("ecartPreview"),raw=document.getElementById("compteInput").value;if(raw===""){box.innerHTML="";return;}const compte=parseFloat(raw.replace(",","."));if(isNaN(compte)){box.innerHTML="";return;}const t=totals(day),ecart=compte-t.theorique,ok=Math.abs(ecart)<0.005;box.innerHTML=`<div class="ecart-box ${ok?"ok":"bad"}"><div class="e-lbl">${ok?"Caisse juste":"Écart"}</div><div class="e-val">${ecart>0?"+":""}${fmt(ecart)} CHF</div></div>`;}
-async function closeDay(){const day=getDay(todayISO());if(!day)return;const compte=parseFloat((document.getElementById("compteInput").value||"").replace(",","."));if(isNaN(compte)||compte<0){toast("Saisissez le montant compté");return;}const t=totals(day),ecart=compte-t.theorique;if(!confirm("Clôturer ?\nSolde théorique : "+fmt(t.theorique)+" CHF\nCompté : "+fmt(compte)+" CHF\nÉcart : "+(ecart>0?"+":"")+fmt(ecart)+" CHF"))return;day.cloture={compte,theorique:t.theorique,ecart,heure:nowHM()};await save();renderJour();toast("Journée clôturée");}
+function previewEcart(kind){
+  const day=getDay(todayISO()),t=totals(day);
+  if(kind==="especes"){
+    const box=document.getElementById("ecartPreviewEspeces"),raw=document.getElementById("compteEspecesInput").value;
+    if(raw===""){box.innerHTML="";return;}
+    const compte=parseFloat(raw.replace(",","."));if(isNaN(compte)){box.innerHTML="";return;}
+    const ecart=compte-t.theoriqueEspeces,ok=Math.abs(ecart)<0.005;
+    box.innerHTML=`<div class="ecart-box ${ok?"ok":"bad"}"><div class="e-lbl">${ok?"Espèces justes":"Écart espèces"}</div><div class="e-val">${ecart>0?"+":""}${fmt(ecart)} CHF</div></div>`;
+  }else{
+    const box=document.getElementById("ecartPreviewCarte"),raw=document.getElementById("compteCarteInput").value;
+    if(raw===""){box.innerHTML="";return;}
+    const compte=parseFloat(raw.replace(",","."));if(isNaN(compte)){box.innerHTML="";return;}
+    const ecart=compte-t.theoriqueCarte,ok=Math.abs(ecart)<0.005;
+    box.innerHTML=`<div class="ecart-box ${ok?"ok":"bad"}"><div class="e-lbl">${ok?"Carte juste":"Écart carte"}</div><div class="e-val">${ecart>0?"+":""}${fmt(ecart)} CHF</div></div>`;
+  }
+}
+async function closeDay(){
+  const day=getDay(todayISO());if(!day)return;
+  const t=totals(day);
+  const compteEspeces=parseFloat((document.getElementById("compteEspecesInput").value||"").replace(",","."));
+  const compteCarte=parseFloat((document.getElementById("compteCarteInput").value||"").replace(",","."));
+  if(isNaN(compteEspeces)||compteEspeces<0){toast("Saisissez le montant compté en espèces");return;}
+  if(isNaN(compteCarte)||compteCarte<0){toast("Saisissez le montant reçu par carte");return;}
+  const ecartEspeces=compteEspeces-t.theoriqueEspeces,ecartCarte=compteCarte-t.theoriqueCarte;
+  if(!confirm("Clôturer ?\nEspèces — théorique "+fmt(t.theoriqueEspeces)+" / compté "+fmt(compteEspeces)+" / écart "+(ecartEspeces>0?"+":"")+fmt(ecartEspeces)+"\nCarte — théorique "+fmt(t.theoriqueCarte)+" / reçu "+fmt(compteCarte)+" / écart "+(ecartCarte>0?"+":"")+fmt(ecartCarte)))return;
+  day.cloture={especes:{compte:compteEspeces,theorique:t.theoriqueEspeces,ecart:ecartEspeces},carte:{compte:compteCarte,theorique:t.theoriqueCarte,ecart:ecartCarte},heure:nowHM()};
+  await save();renderJour();toast("Journée clôturée");
+}
 async function reopenDay(){const day=getDay(todayISO());if(!day)return;if(!confirm("Rouvrir la journée ?"))return;day.cloture=null;await save();renderJour();toast("Journée rouverte");}
 
 /* ---- Historique ---- */
@@ -343,37 +482,58 @@ let histFilter="tout";
 function weekRange(iso){const d=new Date(iso+"T12:00:00"),dow=(d.getDay()+6)%7,mon=new Date(d),sun=new Date(d);mon.setDate(d.getDate()-dow);sun.setDate(mon.getDate()+6);const f=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");return[f(mon),f(sun)];}
 function inHistFilter(iso){const n=new Date();if(histFilter==="tout")return true;if(histFilter==="annee")return iso.slice(0,4)===String(n.getFullYear());if(histFilter==="mois")return iso.slice(0,7)===todayISO().slice(0,7);if(histFilter==="semaine"){const[a,b]=weekRange(todayISO());return iso>=a&&iso<=b;}return true;}
 function setHistFilter(f){histFilter=f;renderHisto();}
-function histMvtList(d){if(!d.mouvements||!d.mouvements.length)return"";return`<ul class="journal" style="margin-top:8px">`+d.mouvements.map(m=>`<li class="mvt"><div class="dot ${m.sens}"></div><div class="info"><b>${m.cat}</b><span>${m.heure}${m.detail?" · "+escapeHtml(m.detail):""}</span></div><div class="amt ${m.sens}">${m.sens==="in"?"+":"−"}${fmt(m.montant)}</div></li>`).join("")+`</ul>`;}
+function histMvtList(d){if(!d.mouvements||!d.mouvements.length)return"";return`<ul class="journal" style="margin-top:8px">`+d.mouvements.map(m=>`<li class="mvt"><div class="dot ${m.sens}"></div><div class="info"><b>${m.sens==="in"?(m.mode==="carte"?'<span class="mode-ico">💳</span> ':'<span class="mode-ico">💵</span> '):""}${m.cat}</b><span>${m.heure}${m.detail?" · "+escapeHtml(m.detail):""}</span></div><div class="amt ${m.sens}">${m.sens==="in"?"+":"−"}${fmt(m.montant)}</div></li>`).join("")+`</ul>`;}
 function renderHisto(){
   const el=document.getElementById("view-histo"),days=DB.days.slice().sort((a,b)=>b.date.localeCompare(a.date)).filter(d=>inHistFilter(d.date));
-  const rows=days.length===0?`<div class="empty">Aucune journée.</div>`:days.map(d=>{const t=totals(d),net=t.entrees-t.sorties,closed=!!d.cloture,ok=closed&&Math.abs(d.cloture.ecart)<0.005;const eb=closed?`<span class="badge ${ok?"ok":"bad"}">${ok?"Juste":(d.cloture.ecart>0?"+":"")+fmt(d.cloture.ecart)}</span>`:`<span class="badge open">Ouverte</span>`;return`<div class="hist-row" onclick="this.classList.toggle('exp')"><div class="hist-head"><div class="d">${frDateShort(d.date)}</div><div class="r">${eb}<span class="hist-net" style="color:${net>=0?"var(--vert)":"var(--rouge)"}">${net>=0?"+":""}${fmt(net)}</span></div></div><div class="hist-detail"><div class="recap"><div class="recap-row"><span class="k">Fond</span><span class="v">${fmt(d.fond)}</span></div><div class="recap-row"><span class="k">Entrées</span><span class="v" style="color:var(--vert)">+${fmt(t.entrees)}</span></div><div class="recap-row"><span class="k">Sorties</span><span class="v" style="color:var(--rouge)">−${fmt(t.sorties)}</span></div><div class="recap-row total"><span class="k">Solde théorique</span><span class="v">${fmt(t.theorique)}</span></div>${closed?`<div class="recap-row"><span class="k">Compté</span><span class="v">${fmt(d.cloture.compte)}</span></div><div class="recap-row"><span class="k">Écart</span><span class="v" style="color:${ok?"var(--vert)":"var(--rouge)"}">${d.cloture.ecart>0?"+":""}${fmt(d.cloture.ecart)}</span></div>`:""}</div>${histMvtList(d)}</div></div>`;}).join("");
+  const rows=days.length===0?`<div class="empty">Aucune journée.</div>`:days.map(d=>{
+    const t=totals(d),net=t.entreesEspeces+t.entreesCarte-t.sorties,closed=!!d.cloture;
+    const okE=closed&&Math.abs(d.cloture.especes.ecart)<0.005,okC=closed&&Math.abs(d.cloture.carte.ecart)<0.005,ok=okE&&okC;
+    const eb=closed?`<span class="badge ${ok?"ok":"bad"}">${ok?"Juste":"Écart"}</span>`:`<span class="badge open">Ouverte</span>`;
+    return`<div class="hist-row" onclick="this.classList.toggle('exp')"><div class="hist-head"><div class="d">${frDateShort(d.date)}</div><div class="r">${eb}<span class="hist-net" style="color:${net>=0?"var(--vert)":"var(--rouge)"}">${net>=0?"+":""}${fmt(net)}</span></div></div><div class="hist-detail">
+    <div class="recap-h">Espèces</div>
+    <div class="recap"><div class="recap-row"><span class="k">Fond</span><span class="v">${fmt(d.fond)}</span></div><div class="recap-row"><span class="k">Entrées</span><span class="v" style="color:var(--vert)">+${fmt(t.entreesEspeces)}</span></div><div class="recap-row"><span class="k">Sorties</span><span class="v" style="color:var(--rouge)">−${fmt(t.sorties)}</span></div><div class="recap-row total"><span class="k">Théorique</span><span class="v">${fmt(t.theoriqueEspeces)}</span></div>${closed?`<div class="recap-row"><span class="k">Compté</span><span class="v">${fmt(d.cloture.especes.compte)}</span></div><div class="recap-row"><span class="k">Écart</span><span class="v" style="color:${okE?"var(--vert)":"var(--rouge)"}">${d.cloture.especes.ecart>0?"+":""}${fmt(d.cloture.especes.ecart)}</span></div>`:""}</div>
+    <div class="recap-h">Carte</div>
+    <div class="recap"><div class="recap-row"><span class="k">Entrées</span><span class="v" style="color:var(--vert)">+${fmt(t.entreesCarte)}</span></div><div class="recap-row total"><span class="k">Théorique</span><span class="v">${fmt(t.theoriqueCarte)}</span></div>${closed?`<div class="recap-row"><span class="k">Reçu</span><span class="v">${fmt(d.cloture.carte.compte)}</span></div><div class="recap-row"><span class="k">Écart</span><span class="v" style="color:${okC?"var(--vert)":"var(--rouge)"}">${d.cloture.carte.ecart>0?"+":""}${fmt(d.cloture.carte.ecart)}</span></div>`:""}</div>
+    ${histMvtList(d)}</div></div>`;
+  }).join("");
   el.innerHTML=`<div class="card" style="padding:14px"><div class="seg" style="margin-bottom:0">${["tout","semaine","mois","annee"].map(f=>`<button class="${histFilter===f?"on-in":""}" style="${histFilter===f?"background:var(--noir)":""}" onclick="setHistFilter('${f}')">${{tout:"Tout",semaine:"Sem.",mois:"Mois",annee:"Année"}[f]}</button>`).join("")}</div></div>${rows}`;
 }
 
 /* ---- Exports ---- */
 let expPeriod="jour";
 function setExpPeriod(p){expPeriod=p;renderExport();}
-function aggregate(days){const bCI={},bCO={};CATS_IN.forEach(c=>bCI[c]=0);CATS_OUT.forEach(c=>bCO[c]=0);let e=0,s=0,ec=0,nc=0,nj=0;days.forEach(d=>{(d.mouvements||[]).forEach(m=>{if(m.sens==="in"){e+=m.montant;bCI[m.cat]=(bCI[m.cat]||0)+m.montant;}else{s+=m.montant;bCO[m.cat]=(bCO[m.cat]||0)+m.montant;}});if(d.cloture){nc++;ec+=d.cloture.ecart;if(Math.abs(d.cloture.ecart)<0.005)nj++;}});return{entrees:e,sorties:s,net:e-s,byCatIn:bCI,byCatOut:bCO,ecartTotal:ec,nbClot:nc,nbJuste:nj};}
+function aggregate(days){
+  const bCI={},bCO={};CATS_IN.forEach(c=>bCI[c]=0);CATS_OUT.forEach(c=>bCO[c]=0);
+  let eEsp=0,eCar=0,s=0,ecE=0,ecC=0,nc=0,nj=0;
+  days.forEach(d=>{
+    (d.mouvements||[]).forEach(m=>{
+      if(m.sens==="in"){ if(m.mode==="carte")eCar+=m.montant; else eEsp+=m.montant; bCI[m.cat]=(bCI[m.cat]||0)+m.montant; }
+      else{ s+=m.montant; bCO[m.cat]=(bCO[m.cat]||0)+m.montant; }
+    });
+    if(d.cloture){nc++;ecE+=d.cloture.especes.ecart;ecC+=d.cloture.carte.ecart;if(Math.abs(d.cloture.especes.ecart)<0.005&&Math.abs(d.cloture.carte.ecart)<0.005)nj++;}
+  });
+  return{entreesEspeces:eEsp,entreesCarte:eCar,entrees:eEsp+eCar,sorties:s,net:eEsp+eCar-s,byCatIn:bCI,byCatOut:bCO,ecartEspecesTotal:ecE,ecartCarteTotal:ecC,nbClot:nc,nbJuste:nj};
+}
 function expSelection(){const pick=document.getElementById("expPick").value;let a,b,label;if(expPeriod==="jour"){a=b=pick;label=cap(frDate(pick));}else if(expPeriod==="semaine"){[a,b]=weekRange(pick);label="Semaine du "+frDateShort(a)+" au "+frDateShort(b);}else if(expPeriod==="mois"){a=pick+"-01";const d2=new Date(pick+"-01T12:00:00"),last=new Date(d2.getFullYear(),d2.getMonth()+1,0).getDate();b=pick+"-"+String(last).padStart(2,"0");label=cap(new Date(pick+"-01T12:00:00").toLocaleDateString("fr-CH",{month:"long",year:"numeric"}));}else{a=pick+"-01-01";b=pick+"-12-31";label="Année "+pick;}const days=DB.days.filter(d=>d.date>=a&&d.date<=b).sort((x,y)=>x.date.localeCompare(y.date));return{label,days};}
-function renderExpPreview(){const s=expSelection(),ag=aggregate(s.days),box=document.getElementById("expPreview");box.innerHTML=`<div class="export-preview"><div class="pv-row"><span class="k">Période</span><span class="v">${s.label}</span></div><div class="pv-row"><span class="k">Journées</span><span class="v">${s.days.length}</span></div><div class="pv-row"><span class="k">Total entrées</span><span class="v">+${fmt(ag.entrees)} CHF</span></div><div class="pv-row"><span class="k">Total sorties</span><span class="v">−${fmt(ag.sorties)} CHF</span></div><div class="pv-row pv-big"><span class="k">Résultat net</span><span class="v">${ag.net>=0?"+":""}${fmt(ag.net)} CHF</span></div></div>`;}
+function renderExpPreview(){const s=expSelection(),ag=aggregate(s.days),box=document.getElementById("expPreview");box.innerHTML=`<div class="export-preview"><div class="pv-row"><span class="k">Période</span><span class="v">${s.label}</span></div><div class="pv-row"><span class="k">Journées</span><span class="v">${s.days.length}</span></div><div class="pv-row"><span class="k">Entrées espèces</span><span class="v">+${fmt(ag.entreesEspeces)} CHF</span></div><div class="pv-row"><span class="k">Entrées carte</span><span class="v">+${fmt(ag.entreesCarte)} CHF</span></div><div class="pv-row"><span class="k">Total sorties</span><span class="v">−${fmt(ag.sorties)} CHF</span></div><div class="pv-row pv-big"><span class="k">Résultat net</span><span class="v">${ag.net>=0?"+":""}${fmt(ag.net)} CHF</span></div></div>`;}
 function renderExpPicker(){const w=document.getElementById("expPickerWrap"),iso=todayISO();if(expPeriod==="jour")w.innerHTML=`<label>Date</label><input type="date" id="expPick" value="${iso}" onchange="renderExpPreview()">`;else if(expPeriod==="semaine")w.innerHTML=`<label>Semaine (choisir une date)</label><input type="date" id="expPick" value="${iso}" onchange="renderExpPreview()">`;else if(expPeriod==="mois")w.innerHTML=`<label>Mois</label><input type="month" id="expPick" value="${iso.slice(0,7)}" onchange="renderExpPreview()">`;else{let o="";const y=new Date().getFullYear();for(let i=y;i>=y-6;i--)o+=`<option ${i===y?"selected":""}>${i}</option>`;w.innerHTML=`<label>Année</label><select id="expPick" onchange="renderExpPreview()">${o}</select>`;}renderExpPreview();}
 function renderExport(){document.getElementById("view-export").innerHTML=`<div class="card"><div class="card-title">Choisir la période</div><div class="seg">${["jour","semaine","mois","annee"].map(p=>`<button class="${expPeriod===p?"on-in":""}" style="${expPeriod===p?"background:var(--noir)":""}" onclick="setExpPeriod('${p}')">${{jour:"Jour",semaine:"Semaine",mois:"Mois",annee:"Année"}[p]}</button>`).join("")}</div><div class="field" id="expPickerWrap"></div><div id="expPreview"></div><div class="btn-row"><button class="btn btn-dark" onclick="exportPDF()">Télécharger PDF</button><button class="btn btn-primary" onclick="exportXLS()">Télécharger Excel</button></div><p class="hint">PDF : dialogue impression → "Enregistrer en PDF". Excel : téléchargement direct.</p></div>`;renderExpPicker();}
 
 function exportPDF(){
   const sel=expSelection();if(sel.days.length===0){toast("Aucune donnée");return;}
-  const ag=aggregate(sel.days),S='style="border:1px solid #999;padding:5px 8px;"';
+  const ag=aggregate(sel.days);
   const lc=(obj,sign)=>Object.keys(obj).filter(c=>obj[c]>0).map(c=>`<tr><td>${c}</td><td class="num">${sign}${fmt(obj[c])}</td></tr>`).join("")||`<tr><td colspan="2" style="color:#999">Aucun</td></tr>`;
-  const lj=sel.days.map(d=>{const t=totals(d),ec=d.cloture?((d.cloture.ecart>0?"+":"")+fmt(d.cloture.ecart)):"—";return`<tr><td>${cap(frDateShort(d.date))}</td><td class="num">${fmt(d.fond)}</td><td class="num">+${fmt(t.entrees)}</td><td class="num">−${fmt(t.sorties)}</td><td class="num">${fmt(t.theorique)}</td><td class="num">${d.cloture?fmt(d.cloture.compte):"—"}</td><td class="num">${ec}</td></tr>`;}).join("");
-  document.getElementById("report-print").innerHTML=`<div class="rp-head"><div><h1>Rapport de caisse</h1><div class="rp-sub">${sel.label}</div></div><div class="rp-club"><b>Meyrin FC</b>Édité le ${cap(frDate(todayISO()))}</div></div><h2>Synthèse</h2><div class="rp-totaux"><div class="t-row"><span>Total entrées</span><span>+${fmt(ag.entrees)} CHF</span></div><div class="t-row"><span>Total sorties</span><span>−${fmt(ag.sorties)} CHF</span></div><div class="t-row grand"><span>Résultat net</span><span>${ag.net>=0?"+":""}${fmt(ag.net)} CHF</span></div></div><h2>Entrées par catégorie</h2><table><tr><th>Catégorie</th><th class="num">CHF</th></tr>${lc(ag.byCatIn,"+")}</table><h2>Sorties par catégorie</h2><table><tr><th>Catégorie</th><th class="num">CHF</th></tr>${lc(ag.byCatOut,"−")}</table><h2>Détail par journée</h2><table><tr><th>Date</th><th class="num">Fond</th><th class="num">Entrées</th><th class="num">Sorties</th><th class="num">Théorique</th><th class="num">Compté</th><th class="num">Écart</th></tr>${lj}</table><h2>Contrôle clôtures</h2><div class="rp-totaux"><div class="t-row"><span>Journées clôturées</span><span>${ag.nbClot} / ${sel.days.length}</span></div><div class="t-row"><span>Caisses justes</span><span>${ag.nbJuste} / ${ag.nbClot}</span></div><div class="t-row"><span>Écart cumulé</span><span>${ag.ecartTotal>0?"+":""}${fmt(ag.ecartTotal)} CHF</span></div></div><div class="rp-foot">Document généré par l'application Caisse — Meyrin FC.</div>`;
+  const lj=sel.days.map(d=>{const t=totals(d),ecE=d.cloture?((d.cloture.especes.ecart>0?"+":"")+fmt(d.cloture.especes.ecart)):"—",ecC=d.cloture?((d.cloture.carte.ecart>0?"+":"")+fmt(d.cloture.carte.ecart)):"—";return`<tr><td>${cap(frDateShort(d.date))}</td><td class="num">${fmt(d.fond)}</td><td class="num">+${fmt(t.entreesEspeces)}</td><td class="num">+${fmt(t.entreesCarte)}</td><td class="num">−${fmt(t.sorties)}</td><td class="num">${d.cloture?fmt(d.cloture.especes.compte):"—"}</td><td class="num">${ecE}</td><td class="num">${d.cloture?fmt(d.cloture.carte.compte):"—"}</td><td class="num">${ecC}</td></tr>`;}).join("");
+  document.getElementById("report-print").innerHTML=`<div class="rp-head"><div><h1>Rapport de caisse</h1><div class="rp-sub">${sel.label}</div></div><div class="rp-club"><b>Meyrin FC</b>Édité le ${cap(frDate(todayISO()))}</div></div><h2>Synthèse</h2><div class="rp-totaux"><div class="t-row"><span>Entrées espèces</span><span>+${fmt(ag.entreesEspeces)} CHF</span></div><div class="t-row"><span>Entrées carte</span><span>+${fmt(ag.entreesCarte)} CHF</span></div><div class="t-row"><span>Total sorties</span><span>−${fmt(ag.sorties)} CHF</span></div><div class="t-row grand"><span>Résultat net</span><span>${ag.net>=0?"+":""}${fmt(ag.net)} CHF</span></div></div><h2>Entrées par catégorie</h2><table><tr><th>Catégorie</th><th class="num">CHF</th></tr>${lc(ag.byCatIn,"+")}</table><h2>Sorties par catégorie</h2><table><tr><th>Catégorie</th><th class="num">CHF</th></tr>${lc(ag.byCatOut,"−")}</table><h2>Détail par journée</h2><table><tr><th>Date</th><th class="num">Fond</th><th class="num">Entrées esp.</th><th class="num">Entrées carte</th><th class="num">Sorties</th><th class="num">Compté esp.</th><th class="num">Écart esp.</th><th class="num">Reçu carte</th><th class="num">Écart carte</th></tr>${lj}</table><h2>Contrôle clôtures</h2><div class="rp-totaux"><div class="t-row"><span>Journées clôturées</span><span>${ag.nbClot} / ${sel.days.length}</span></div><div class="t-row"><span>Caisses justes (esp. + carte)</span><span>${ag.nbJuste} / ${ag.nbClot}</span></div><div class="t-row"><span>Écart cumulé espèces</span><span>${ag.ecartEspecesTotal>0?"+":""}${fmt(ag.ecartEspecesTotal)} CHF</span></div><div class="t-row"><span>Écart cumulé carte</span><span>${ag.ecartCarteTotal>0?"+":""}${fmt(ag.ecartCarteTotal)} CHF</span></div></div><div class="rp-foot">Document généré par l'application Caisse — Meyrin FC.</div>`;
   setTimeout(()=>window.print(),60);
 }
 function exportXLS(){
   const sel=expSelection();if(sel.days.length===0){toast("Aucune donnée");return;}
-  const ag=aggregate(sel.days),S='style="border:1px solid #999;padding:5px 8px;"',SH='style="border:1px solid #999;padding:5px 8px;background:#FFCE00;font-weight:bold;"';
-  let rows="";sel.days.forEach(d=>{(d.mouvements||[]).forEach(m=>{rows+=`<tr><td ${S}>${d.date}</td><td ${S}>${m.heure}</td><td ${S}>${m.sens==="in"?"Entrée":"Sortie"}</td><td ${S}>${m.cat}</td><td ${S}>${(m.detail||"").replace(/"/g,"'")}</td><td ${S}>${m.sens==="in"?m.montant.toFixed(2):""}</td><td ${S}>${m.sens==="out"?m.montant.toFixed(2):""}</td></tr>`;});});
-  let recap="";sel.days.forEach(d=>{const t=totals(d);recap+=`<tr><td ${S}>${d.date}</td><td ${S}>${d.fond.toFixed(2)}</td><td ${S}>${t.entrees.toFixed(2)}</td><td ${S}>${t.sorties.toFixed(2)}</td><td ${S}>${t.theorique.toFixed(2)}</td><td ${S}>${d.cloture?d.cloture.compte.toFixed(2):""}</td><td ${S}>${d.cloture?d.cloture.ecart.toFixed(2):""}</td></tr>`;});
-  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><h2>Caisse Meyrin FC — ${sel.label}</h2><table cellspacing="0"><tr><td ${SH}>Total entrées</td><td ${S}>${ag.entrees.toFixed(2)}</td></tr><tr><td ${SH}>Total sorties</td><td ${S}>${ag.sorties.toFixed(2)}</td></tr><tr><td ${SH}>Résultat net</td><td ${S}>${ag.net.toFixed(2)}</td></tr><tr><td ${SH}>Écart cumulé</td><td ${S}>${ag.ecartTotal.toFixed(2)}</td></tr></table><br><h3>Récap journées</h3><table cellspacing="0"><tr><td ${SH}>Date</td><td ${SH}>Fond</td><td ${SH}>Entrées</td><td ${SH}>Sorties</td><td ${SH}>Théorique</td><td ${SH}>Compté</td><td ${SH}>Écart</td></tr>${recap}</table><br><h3>Détail mouvements</h3><table cellspacing="0"><tr><td ${SH}>Date</td><td ${SH}>Heure</td><td ${SH}>Type</td><td ${SH}>Catégorie</td><td ${SH}>Détail</td><td ${SH}>Entrée CHF</td><td ${SH}>Sortie CHF</td></tr>${rows||`<tr><td ${S} colspan="7">Aucun mouvement</td></tr>`}</table></body></html>`;
-  const blob=new Blob(["\ufeff"+html],{type:"application/vnd.ms-excel"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  const ag=aggregate(sel.days),S='style="border:1px solid #999;padding:5px 8px;"',SH='style="border:1px solid #999;padding:5px 8px;background:#ffdd00;font-weight:bold;"';
+  let rows="";sel.days.forEach(d=>{(d.mouvements||[]).forEach(m=>{rows+=`<tr><td ${S}>${d.date}</td><td ${S}>${m.heure}</td><td ${S}>${m.sens==="in"?"Entrée":"Sortie"}</td><td ${S}>${m.sens==="in"?(m.mode==="carte"?"Carte":"Espèces"):"Espèces"}</td><td ${S}>${m.cat}</td><td ${S}>${(m.detail||"").replace(/"/g,"'")}</td><td ${S}>${m.sens==="in"?m.montant.toFixed(2):""}</td><td ${S}>${m.sens==="out"?m.montant.toFixed(2):""}</td></tr>`;});});
+  let recap="";sel.days.forEach(d=>{const t=totals(d);recap+=`<tr><td ${S}>${d.date}</td><td ${S}>${d.fond.toFixed(2)}</td><td ${S}>${t.entreesEspeces.toFixed(2)}</td><td ${S}>${t.entreesCarte.toFixed(2)}</td><td ${S}>${t.sorties.toFixed(2)}</td><td ${S}>${d.cloture?d.cloture.especes.compte.toFixed(2):""}</td><td ${S}>${d.cloture?d.cloture.especes.ecart.toFixed(2):""}</td><td ${S}>${d.cloture?d.cloture.carte.compte.toFixed(2):""}</td><td ${S}>${d.cloture?d.cloture.carte.ecart.toFixed(2):""}</td></tr>`;});
+  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><h2>Caisse Meyrin FC — ${sel.label}</h2><table cellspacing="0"><tr><td ${SH}>Entrées espèces</td><td ${S}>${ag.entreesEspeces.toFixed(2)}</td></tr><tr><td ${SH}>Entrées carte</td><td ${S}>${ag.entreesCarte.toFixed(2)}</td></tr><tr><td ${SH}>Total sorties</td><td ${S}>${ag.sorties.toFixed(2)}</td></tr><tr><td ${SH}>Résultat net</td><td ${S}>${ag.net.toFixed(2)}</td></tr><tr><td ${SH}>Écart cumulé espèces</td><td ${S}>${ag.ecartEspecesTotal.toFixed(2)}</td></tr><tr><td ${SH}>Écart cumulé carte</td><td ${S}>${ag.ecartCarteTotal.toFixed(2)}</td></tr></table><br><h3>Récap journées</h3><table cellspacing="0"><tr><td ${SH}>Date</td><td ${SH}>Fond</td><td ${SH}>Entrées esp.</td><td ${SH}>Entrées carte</td><td ${SH}>Sorties</td><td ${SH}>Compté esp.</td><td ${SH}>Écart esp.</td><td ${SH}>Reçu carte</td><td ${SH}>Écart carte</td></tr>${recap}</table><br><h3>Détail mouvements</h3><table cellspacing="0"><tr><td ${SH}>Date</td><td ${SH}>Heure</td><td ${SH}>Type</td><td ${SH}>Mode</td><td ${SH}>Catégorie</td><td ${SH}>Détail</td><td ${SH}>Entrée CHF</td><td ${SH}>Sortie CHF</td></tr>${rows||`<tr><td ${S} colspan="8">Aucun mouvement</td></tr>`}</table></body></html>`;
+  const blob=new Blob(["﻿"+html],{type:"application/vnd.ms-excel"}),url=URL.createObjectURL(blob),a=document.createElement("a");
   a.href=url;a.download="caisse-meyrin-fc-"+expPeriod+"-"+document.getElementById("expPick").value+".xls";
   document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);toast("Excel téléchargé");
 }

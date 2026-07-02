@@ -55,6 +55,7 @@ function init_schema(PDO $pdo): void {
     );
     CREATE TABLE IF NOT EXISTS teams (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        season_id INTEGER REFERENCES seasons(id),
         name TEXT NOT NULL,
         category TEXT NOT NULL DEFAULT '',
         coach_name TEXT DEFAULT '',
@@ -97,6 +98,24 @@ function init_schema(PDO $pdo): void {
     if (!in_array('payment_method', $cols)) {
         $pdo->exec("ALTER TABLE matches ADD COLUMN payment_method TEXT DEFAULT ''");
     }
+    // Migrate: add season_id to teams if missing (existing databases).
+    // Teams used to be shared across all seasons; each season now owns its own team records
+    // (coach/fee can differ from one season to the next).
+    $teamCols = array_column($pdo->query('PRAGMA table_info(teams)')->fetchAll(), 'name');
+    if (!in_array('season_id', $teamCols)) {
+        $pdo->exec('ALTER TABLE teams ADD COLUMN season_id INTEGER REFERENCES seasons(id)');
+        $latestSeason = $pdo->query('SELECT id FROM seasons ORDER BY id DESC LIMIT 1')->fetch();
+        if (!$latestSeason) {
+            $hasTeams = (int) $pdo->query('SELECT COUNT(*) FROM teams')->fetchColumn();
+            if ($hasTeams > 0) {
+                $pdo->prepare('INSERT INTO seasons (label, match_count) VALUES (?, 0)')->execute(['Saison précédente']);
+                $latestSeason = ['id' => (int) $pdo->lastInsertId()];
+            }
+        }
+        if ($latestSeason) {
+            $pdo->prepare('UPDATE teams SET season_id = ? WHERE season_id IS NULL')->execute([(int) $latestSeason['id']]);
+        }
+    }
     // Seed default categories on first run
     $count = (int) $pdo->query('SELECT COUNT(*) FROM categories')->fetchColumn();
     if ($count === 0) {
@@ -135,6 +154,12 @@ function n(array $b, string $k, float $def = 0.0): float {
 
 function i(array $b, string $k, int $def = 0): int {
     return (int)($b[$k] ?? $def);
+}
+
+function resolve_season_id(PDO $pdo, int $season_id): int {
+    if ($season_id > 0) return $season_id;
+    $row = $pdo->query('SELECT id FROM seasons ORDER BY id DESC LIMIT 1')->fetch();
+    return $row ? (int) $row['id'] : 0;
 }
 
 function current_user(): ?array {
@@ -278,14 +303,18 @@ switch ($action) {
     case 'teams': {
         require_auth();
         if ($method === 'GET') {
-            $rows = db()->query('SELECT * FROM teams ORDER BY category, name')->fetchAll();
-            out($rows);
+            $season_id = resolve_season_id(db(), (int)($_GET['season_id'] ?? 0));
+            $st = db()->prepare('SELECT * FROM teams WHERE season_id = ? ORDER BY category, name');
+            $st->execute([$season_id]);
+            out($st->fetchAll());
         }
         if ($method === 'POST') {
             $name = s($b, 'name');
             if (!$name) fail('Nom de l\'équipe requis');
-            db()->prepare('INSERT INTO teams (name, category, coach_name, fee_amount) VALUES (?,?,?,?)')
-                ->execute([$name, s($b, 'category'), s($b, 'coach_name'), n($b, 'fee_amount')]);
+            $season_id = resolve_season_id(db(), i($b, 'season_id'));
+            if (!$season_id) fail('Aucune saison disponible : créez d\'abord une saison');
+            db()->prepare('INSERT INTO teams (season_id, name, category, coach_name, fee_amount) VALUES (?,?,?,?,?)')
+                ->execute([$season_id, $name, s($b, 'category'), s($b, 'coach_name'), n($b, 'fee_amount')]);
             out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
         }
         if ($method === 'PUT') {
@@ -514,10 +543,13 @@ switch ($action) {
         $pdo->prepare('INSERT INTO seasons (label, match_count) VALUES (?, 0)')->execute([$season_label]);
         $season_id = (int) $pdo->lastInsertId();
 
-        // Build team lookup map (name|||category) → id
-        // A team is uniquely identified by the combination of name + category.
-        // "Meyrin FC 1" in U14 and "Meyrin FC 1" in U18 are two distinct teams.
-        $teamRows = $pdo->query('SELECT id, name, category FROM teams')->fetchAll();
+        // Build team lookup map (name|||category) → id, scoped to the season being imported.
+        // A team is uniquely identified by the combination of name + category *within a season*:
+        // each season gets its own team records (coach/fee can change from one season to the next),
+        // so teams from other seasons are never reused here.
+        $teamSt = $pdo->prepare('SELECT id, name, category FROM teams WHERE season_id = ?');
+        $teamSt->execute([$season_id]);
+        $teamRows = $teamSt->fetchAll();
         $teamMap  = [];
         foreach ($teamRows as $t) {
             $key = mb_strtolower($t['name']) . '|||' . mb_strtolower($t['category']);
@@ -530,12 +562,12 @@ switch ($action) {
         $pdo->beginTransaction();
         try {
             $insMatch = $pdo->prepare('INSERT INTO matches (season_id, match_number, match_date, match_time, team_id, opponent, is_home, competition, venue) VALUES (?,?,?,?,?,?,?,?,?)');
-            $insTeam  = $pdo->prepare('INSERT INTO teams (name, category, coach_name, fee_amount) VALUES (?,?,?,0)');
+            $insTeam  = $pdo->prepare('INSERT INTO teams (season_id, name, category, coach_name, fee_amount) VALUES (?,?,?,?,0)');
 
             foreach ($matches as $p) {
                 $key = mb_strtolower($p['team_name']) . '|||' . mb_strtolower($p['category']);
                 if (!isset($teamMap[$key])) {
-                    $insTeam->execute([$p['team_name'], $p['category'], '']);
+                    $insTeam->execute([$season_id, $p['team_name'], $p['category'], '']);
                     $teamId        = (int) $pdo->lastInsertId();
                     $teamMap[$key] = $teamId;
                     $newTeamCount++;
@@ -672,13 +704,7 @@ switch ($action) {
         require_auth();
         $pdo = db();
 
-        $season_id = (int)($_GET['season_id'] ?? 0);
-
-        // Use most recent season if not specified
-        if ($season_id === 0) {
-            $row = $pdo->query('SELECT id FROM seasons ORDER BY id DESC LIMIT 1')->fetch();
-            $season_id = $row ? (int)$row['id'] : 0;
-        }
+        $season_id = resolve_season_id($pdo, (int)($_GET['season_id'] ?? 0));
 
         // Totals
         $totSt = $pdo->prepare('
@@ -721,11 +747,11 @@ switch ($action) {
                 COALESCE(SUM(CASE WHEN m.status IN ("pending","paid") THEN 1 ELSE 0 END), 0) as count_total
             FROM teams t
             LEFT JOIN matches m ON m.team_id = t.id AND m.season_id = ?
-            WHERE t.active = 1
+            WHERE t.active = 1 AND t.season_id = ?
             GROUP BY t.id
             ORDER BY t.category, t.name
         ');
-        $tSt->execute([$season_id]);
+        $tSt->execute([$season_id, $season_id]);
         $teams = $tSt->fetchAll();
 
         // Seasons list
