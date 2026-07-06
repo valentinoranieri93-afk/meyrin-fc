@@ -319,10 +319,10 @@ tbody tr:last-child td{border-bottom:none}
 .cal-month{font-family:"Sora";font-size:17px;font-weight:700;min-width:150px}
 .cal-nav{width:32px;height:32px;border-radius:8px;border:1px solid var(--ligne);display:flex;align-items:center;justify-content:center;color:var(--gris)}
 .cal-nav:hover{border-color:var(--gris-2);color:var(--encre)}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
-.cal-dow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:auto;grid-auto-rows:minmax(104px,auto)}
+.cal-dow{min-width:0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);
   padding:10px;text-align:center;border-bottom:1px solid var(--ligne-2)}
-.cal-cell{min-height:104px;border-right:1px solid var(--ligne-2);border-bottom:1px solid var(--ligne-2);padding:7px;position:relative}
+.cal-cell{min-width:0;border-right:1px solid var(--ligne-2);border-bottom:1px solid var(--ligne-2);padding:7px;position:relative}
 .cal-cell:nth-child(7n){border-right:none}
 .cal-cell.off{background:#FAF9F4}
 .cal-num{font-size:12.5px;font-weight:600;color:var(--gris);width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:7px}
@@ -953,8 +953,9 @@ function renderEvTable(){
    DRAWER — fiche événement
    ===================================================================== */
 let drawerEv=null,drawerTab='infos';
-function openEvent(id){drawerEv=EVENTS.find(e=>e.id===id);drawerTab='infos';renderDrawer();
+function openEvent(id){drawerEv=EVENTS.find(e=>e.id===id)||EVENTS_ALL.find(e=>e.id===id);drawerTab='infos';renderDrawer();
   document.getElementById('overlay').classList.add('show');document.getElementById('drawer').classList.add('show');}
+function openEventTeam(id){openEvent(id);setDTab('equipe');}
 function closeDrawer(){document.getElementById('overlay').classList.remove('show');document.getElementById('drawer').classList.remove('show');}
 function setDTab(t){drawerTab=t;renderDrawer();}
 function renderDrawer(){
@@ -1038,11 +1039,12 @@ function drawerPane(e){
   if(drawerTab==='equipe'){
     const roles=Array.isArray(e.roles)?e.roles:[];
     const volById=id=>VOLUNTEERS.find(v=>v.id===id);
-    const roleRow=r=>{const v=r.volId?volById(r.volId):null;
+    const roleRow=r=>{const ids=Array.isArray(r.volIds)?r.volIds:(r.volId?[r.volId]:[]);
+      const vs=ids.map(volById).filter(Boolean);
       return `<div class="role-row">
         <div class="role-main">
-          <div class="role-name">${esc(r.label)}</div>
-          ${v?`<div class="role-vol"><span class="vol-av" style="width:20px;height:20px;font-size:9px;background:${TEAM[v.id%TEAM.length].c}">${v.p[0]}${v.n[0]}</span>${v.p} ${v.n}</div>`:'<div class="role-vol empty">Non assigné</div>'}
+          <div class="role-name">${esc(r.label)} <span style="font-weight:400;color:var(--gris);font-size:12px">(${vs.length}/${r.places||1})</span></div>
+          ${vs.length?vs.map(v=>`<div class="role-vol"><span class="vol-av" style="width:20px;height:20px;font-size:9px;background:${TEAM[v.id%TEAM.length].c}">${v.p[0]}${v.n[0]}</span>${v.p} ${v.n}</div>`).join(''):'<div class="role-vol empty">Non assigné</div>'}
         </div>
         ${canEdit()?`<div class="role-acts">
           <button class="icon-btn" onclick="roleForm(${e.id},${r.id})" title="Modifier"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
@@ -1131,8 +1133,19 @@ RENDER.benevoles=function(){
     </div>
     <div class="vol-col">
       <h4><span class="kcol-dot" style="background:var(--rouge)"></span>Postes à pourvoir</h4>
-      ${[['Tournoi Pentecôte','Buvette',3],['Tournoi Pentecôte','Sécurité',2],['Fête du club','Accueil',2],['Loto annuel','Caisse',1]].map(p=>`
-        <div class="vol-chip" style="background:var(--rouge-bg)"><div style="flex:1"><div class="vol-n">${p[1]}</div><div class="vol-m">${p[0]}</div></div><span class="badge st-annule" style="background:var(--rouge);color:#fff">${p[2]} manquant${p[2]>1?'s':''}</span></div>`).join('')}
+      ${(()=>{
+        const open=[];
+        EVENTS.filter(e=>e.statut!=='termine'&&e.statut!=='annule').forEach(e=>{
+          (Array.isArray(e.roles)?e.roles:[]).forEach(r=>{
+            const filled=Array.isArray(r.volIds)?r.volIds.length:(r.volId?1:0);
+            const missing=(r.places||1)-filled;
+            if(missing>0) open.push([e.id,e.nom,r.label,missing]);
+          });
+        });
+        return open.length?open.map(p=>`
+        <div class="vol-chip" style="background:var(--rouge-bg);cursor:pointer" onclick="openEventTeam(${p[0]})" title="Ouvrir la fiche événement"><div style="flex:1"><div class="vol-n">${esc(p[2])}</div><div class="vol-m">${esc(p[1])}</div></div><span class="badge st-annule" style="background:var(--rouge);color:#fff">${p[3]} manquant${p[3]>1?'s':''}</span></div>`).join('')
+        : '<div class="empty-soft">Tous les postes sont pourvus.</div>';
+      })()}
     </div>
   </div>
 
@@ -1346,7 +1359,19 @@ function calRerender(){ const w=document.getElementById('cal-wrap'); if(w)w.inne
 function calSetMode(m){ calMode=m; if(m==='annee'){calMonth=6;calYear=SEASON;} calRerender(); }
 function calGoMonth(y,m){ calMode='mois'; calYear=y; calMonth=m; calRerender(); }
 function calStep(d){ calMonth+=d; if(calMonth>11){calMonth=0;calYear++;} if(calMonth<0){calMonth=11;calYear--;} calRerender(); }
-function evDaysIn(year,month){ const map={}; EVENTS.forEach(e=>{const[y,m,d]=e.date.split('-').map(Number); if(y===year&&m-1===month)(map[d]=map[d]||[]).push(e);}); return map; }
+function evDaysIn(year,month){
+  const map={};
+  EVENTS.forEach(e=>{
+    const start=new Date(e.date+'T00:00:00'); const end=new Date((e.dateFin||e.date)+'T00:00:00');
+    if(isNaN(start)||isNaN(end))return;
+    const cur=new Date(start);
+    while(cur<=end){
+      if(cur.getFullYear()===year&&cur.getMonth()===month)(map[cur.getDate()]=map[cur.getDate()]||[]).push(e);
+      cur.setDate(cur.getDate()+1);
+    }
+  });
+  return map;
+}
 function renderCalMonth(){
   const moisN=["Janvier","F\u00e9vrier","Mars","Avril","Mai","Juin","Juillet","Ao\u00fbt","Septembre","Octobre","Novembre","D\u00e9cembre"];
   const first=new Date(calYear,calMonth,1); let startDow=(first.getDay()+6)%7;
@@ -1372,8 +1397,7 @@ function renderCalMonth(){
     <div style="flex:1"></div>${calSeg()}
   </div>
   <div class="cal">
-    <div class="cal-grid">${['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(d=>`<div class="cal-dow">${d}</div>`).join('')}</div>
-    <div class="cal-grid">${cells}</div>
+    <div class="cal-grid">${['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(d=>`<div class="cal-dow">${d}</div>`).join('')}${cells}</div>
   </div>`;
 }
 function renderCalYear(){
@@ -1627,6 +1651,19 @@ function updatePrimary(view){
 }
 function primaryAction(){ if(canEdit()) _primaryFn(); }
 
+/* ---- Sélecteur d'heure 24h (évite le widget natif 12h/AM-PM du navigateur) ---- */
+function timeSelect(id, value){
+  value = value || '00:00';
+  const parts = String(value).split(':'); const hh = (parts[0]||'00').padStart(2,'0'); const mm = (parts[1]||'00').padStart(2,'0');
+  const hOpt = Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(x=>`<option value="${x}" ${x===hh?'selected':''}>${x}</option>`).join('');
+  const mOpt = Array.from({length:60},(_,i)=>String(i).padStart(2,'0')).map(x=>`<option value="${x}" ${x===mm?'selected':''}>${x}</option>`).join('');
+  return `<div style="display:flex;gap:4px;align-items:center">
+    <select id="${id}_h" style="padding:8px;border:1px solid var(--ligne);border-radius:8px;font-family:inherit">${hOpt}</select><span>:</span>
+    <select id="${id}_m" style="padding:8px;border:1px solid var(--ligne);border-radius:8px;font-family:inherit">${mOpt}</select>
+  </div>`;
+}
+function timeVal(id){ const h=val(id+'_h'), m=val(id+'_m'); return (h&&m)?(h+':'+m):''; }
+
 /* =====================================================================
    FORMULAIRE ÉVÉNEMENT (créer / modifier / supprimer)
    ===================================================================== */
@@ -1648,9 +1685,9 @@ function eventForm(id){
       <div class="fld"><label>Type</label><select id="f_type">${typeOpt}</select></div>
       <div class="fld"><label>Statut</label><select id="f_statut">${statOpt}</select></div>
       <div class="fld"><label>Date de d\u00e9but *</label><input id="f_date" type="date" value="${e?e.date:''}"></div>
-      <div class="fld"><label>Heure de d\u00e9but</label><input id="f_heure" type="time" value="${e?(e.heure||'18:00'):'18:00'}"></div>
+      <div class="fld"><label>Heure de d\u00e9but</label>${timeSelect('f_heure', e?(e.heure||'18:00'):'18:00')}</div>
       <div class="fld"><label>Date de fin</label><input id="f_dateFin" type="date" value="${e?(e.dateFin||e.date):''}"></div>
-      <div class="fld"><label>Heure de fin</label><input id="f_heureFin" type="time" value="${e?(e.heureFin||'22:00'):'22:00'}"></div>
+      <div class="fld"><label>Heure de fin</label>${timeSelect('f_heureFin', e?(e.heureFin||'22:00'):'22:00')}</div>
       <div class="fld"><label>Responsable</label><select id="f_resp">${teamOpt}</select></div>
       <div class="fld col2"><label>Lieu</label><input id="f_lieu" value="${e?esc(e.lieu):''}"></div>
       <div class="fld"><label>Capacit\u00e9</label><input id="f_cap" type="number" min="0" value="${e?e.cap:0}"></div>
@@ -1671,7 +1708,7 @@ async function saveEvent(id){
   let fin=val('f_dateFin')||deb; if(fin<deb) fin=deb;
   const obj=Object.assign({}, base||{}, {
     nom, type:val('f_type'), statut:val('f_statut'),
-    date:deb, dateFin:fin, heure:val('f_heure')||'18:00', heureFin:val('f_heureFin')||'', lieu:val('f_lieu'),
+    date:deb, dateFin:fin, heure:timeVal('f_heure')||'18:00', heureFin:timeVal('f_heureFin')||'', lieu:val('f_lieu'),
     resp, part:Math.round(numv('f_part')), cap:Math.round(numv('f_cap')),
     desc:val('f_desc'),
     budget: base&&Array.isArray(base.budget)?base.budget:[],
@@ -2186,26 +2223,35 @@ function roleForm(eid, rid){
   const e=EVENTS_ALL.find(x=>x.id===eid)||EVENTS.find(x=>x.id===eid); if(!e)return;
   const roles=Array.isArray(e.roles)?e.roles:[];
   const role=rid?roles.find(r=>r.id===rid):null;
-  const volOpt='<option value="">— Non assigné —</option>'+
-    VOLUNTEERS.map(v=>`<option value="${v.id}" ${role&&role.volId===v.id?'selected':''}>${v.p} ${v.n} (${v.type==='responsable'?'Resp.':'Bén.'})</option>`).join('');
+  const roleVolIds=role?(Array.isArray(role.volIds)?role.volIds:(role.volId?[role.volId]:[])):[];
+  const volChecks=VOLUNTEERS.map(v=>`<label class="ev-check"><input type="checkbox" class="r_vol_cb" value="${v.id}" ${roleVolIds.includes(v.id)?'checked':''} onchange="enforceRolePlaces()"><span>${v.p} ${v.n} (${v.type==='responsable'?'Resp.':'Bén.'})</span></label>`).join('')||'<div class="empty-soft">Aucun bénévole enregistré.</div>';
   modal(role?'Modifier le rôle':'Ajouter un rôle',
    `<div class="form-grid">
       <div class="fld col2"><label>Intitulé du rôle *</label><input id="r_label" value="${role?esc(role.label):''}" placeholder="ex. Buvette, Accueil, Sécurité…"></div>
-      <div class="fld"><label>Nombre de places</label><input id="r_places" type="number" min="1" value="${role?role.places:1}"></div>
-      <div class="fld"><label>Bénévole assigné</label><select id="r_vol">${volOpt}</select></div>
-    </div>`,
+      <div class="fld"><label>Nombre de places</label><input id="r_places" type="number" min="1" value="${role?role.places:1}" oninput="enforceRolePlaces()"></div>
+    </div>
+    <div class="form-sec">Bénévoles affectés <span id="r_vol_count" style="font-weight:400;color:var(--gris)"></span></div>
+    <div class="ev-check-list">${volChecks}</div>`,
    `${role?`<button class="btn btn-ghost" style="color:var(--rouge);margin-right:auto" onclick="deleteRole(${eid},${role.id})">Supprimer</button>`:''}
     <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
     <button class="btn btn-primary" onclick="saveRole(${eid},${rid||0})">Enregistrer</button>`);
+  enforceRolePlaces();
+}
+function enforceRolePlaces(){
+  const places=Math.max(1,parseInt(val('r_places'))||1);
+  const boxes=Array.from(document.querySelectorAll('.r_vol_cb'));
+  const checked=boxes.filter(b=>b.checked);
+  boxes.forEach(b=>{ b.disabled = !b.checked && checked.length>=places; });
+  const cnt=document.getElementById('r_vol_count'); if(cnt) cnt.textContent=`(${checked.length} / ${places} places)`;
 }
 async function saveRole(eid,rid){
   const e=EVENTS_ALL.find(x=>x.id===eid)||EVENTS.find(x=>x.id===eid); if(!e)return;
   const label=val('r_label'); if(!label){toast('⚠ Intitulé requis');return;}
   const places=Math.max(1,parseInt(val('r_places'))||1);
-  const volId=val('r_vol')?parseInt(val('r_vol')):null;
+  const volIds=Array.from(document.querySelectorAll('.r_vol_cb')).filter(b=>b.checked).map(b=>parseInt(b.value)).slice(0,places);
   if(!Array.isArray(e.roles)) e.roles=[];
-  if(rid){ const r=e.roles.find(x=>x.id===rid); if(r){r.label=label;r.places=places;r.volId=volId;} }
-  else { const nid=e.roles.reduce((m,r)=>Math.max(m,r.id),0)+1; e.roles.push({id:nid,label,places,volId}); }
+  if(rid){ const r=e.roles.find(x=>x.id===rid); if(r){r.label=label;r.places=places;r.volIds=volIds;delete r.volId;} }
+  else { const nid=e.roles.reduce((m,r)=>Math.max(m,r.id),0)+1; e.roles.push({id:nid,label,places,volIds}); }
   closeModal();
   try{ await persistEvent(e); toast('Rôle enregistré'); }catch(err){ toast('⚠ '+err.message); }
 }

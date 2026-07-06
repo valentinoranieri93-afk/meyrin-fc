@@ -288,6 +288,12 @@ input:focus,select:focus{outline:none;border-color:var(--jaune-fonce);box-shadow
 const API_URL = "api.php";
 const API_KEY = "MEYRIN_CAISSE_2026_VAL";
 // ============================================================
+// Intégration CRM Commande — décrémente le stock des articles boutique
+// La clé doit correspondre à celle affichée dans commandes.meyrinfc.ch (Paramètres → Exercice & alertes)
+// ============================================================
+const CMD_API_URL = "https://commandes.meyrinfc.ch/api.php";
+const CMD_API_KEY = "À_REMPLACER_DEPUIS_PARAMETRES_CRM_COMMANDE";
+// ============================================================
 
 const KEY_LOCAL = "mfc_caisse_v1";
 const CATS_IN   = ["Cotisation","Vente boutique","Billetterie","Divers"];
@@ -428,7 +434,7 @@ function renderJour(){
     <div class="solde-mini car"><div class="lbl">💳 Carte</div><div class="val"><small>CHF</small>${fmt(t.theoriqueCarte)}</div></div>
   </div>
   <div class="stats"><div class="stat"><div class="k">Fond départ</div><div class="v">${fmt(day.fond)}</div></div><div class="stat"><div class="k">Entrées esp.</div><div class="v pos">+${fmt(t.entreesEspeces)}</div></div><div class="stat"><div class="k">Entrées carte</div><div class="v pos">+${fmt(t.entreesCarte)}</div></div><div class="stat"><div class="k">Sorties</div><div class="v neg">−${fmt(t.sorties)}</div></div></div>
-  <div class="card"><div class="card-title">Enregistrer un mouvement</div><div class="seg"><button id="segIn" class="${mvtSens==="in"?"on-in":""}" onclick="setSens('in')">Entrée</button><button id="segOut" class="${mvtSens==="out"?"on-out":""}" onclick="setSens('out')">Sortie</button></div><div class="field" id="modeField" style="${mvtSens==="out"?"display:none":""}"><label>Mode de paiement</label><div class="seg" style="margin-bottom:0"><button id="segEsp" class="${mvtMode==="especes"?"on-esp":""}" onclick="setMode('especes')">💵 Espèces</button><button id="segCar" class="${mvtMode==="carte"?"on-car":""}" onclick="setMode('carte')">💳 Carte</button></div></div><div class="field"><label>Catégorie</label><select id="catSelect"></select></div><div class="field"><label>Montant</label><div class="with-unit"><input type="number" id="montInput" inputmode="decimal" placeholder="0.00" step="0.05"><span class="unit">CHF</span></div></div><div class="field"><label>Détail <span style="color:var(--gris);font-weight:400">(facultatif — utile pour noter une info liée à un paiement carte)</span></label><input type="text" id="detailInput" placeholder="Ex. cotisation junior, réf. transaction carte…" maxlength="80"></div><button class="btn btn-primary" onclick="addMvt()">Ajouter au journal</button></div>
+  <div class="card"><div class="card-title">Enregistrer un mouvement</div><div class="seg"><button id="segIn" class="${mvtSens==="in"?"on-in":""}" onclick="setSens('in')">Entrée</button><button id="segOut" class="${mvtSens==="out"?"on-out":""}" onclick="setSens('out')">Sortie</button></div><div class="field" id="modeField" style="${mvtSens==="out"?"display:none":""}"><label>Mode de paiement</label><div class="seg" style="margin-bottom:0"><button id="segEsp" class="${mvtMode==="especes"?"on-esp":""}" onclick="setMode('especes')">💵 Espèces</button><button id="segCar" class="${mvtMode==="carte"?"on-car":""}" onclick="setMode('carte')">💳 Carte</button></div></div><div class="field"><label>Catégorie</label><select id="catSelect" onchange="onCatChange()"></select></div><div class="field" id="boutiqueField" style="display:none"><label>Article boutique <span style="color:var(--gris);font-weight:400">(facultatif — décrémente le stock automatiquement)</span></label><select id="boutiqueSelect" onchange="onBoutiqueArticleChange()"><option value="">— Aucun (montant libre) —</option></select><div style="margin-top:8px"><label style="font-size:12px">Quantité</label><input type="number" id="boutiqueQty" value="1" min="1" step="1" oninput="onBoutiqueArticleChange()"></div></div><div class="field"><label>Montant</label><div class="with-unit"><input type="number" id="montInput" inputmode="decimal" placeholder="0.00" step="0.05"><span class="unit">CHF</span></div></div><div class="field"><label>Détail <span style="color:var(--gris);font-weight:400">(facultatif — utile pour noter une info liée à un paiement carte)</span></label><input type="text" id="detailInput" placeholder="Ex. cotisation junior, réf. transaction carte…" maxlength="80"></div><button class="btn btn-primary" onclick="addMvt()">Ajouter au journal</button></div>
   <div class="card"><div class="card-title">Journal du jour · ${(day.mouvements||[]).length} mouvement(s)</div><ul class="journal" id="journalList"></ul></div>
   <div class="card"><div class="card-title">Clôture de la journée</div><div class="field"><label>Montant réellement compté en caisse (espèces)</label><div class="with-unit"><input type="number" id="compteEspecesInput" inputmode="decimal" placeholder="0.00" step="0.05" oninput="previewEcart('especes')"><span class="unit">CHF</span></div></div><div id="ecartPreviewEspeces"></div><div class="field"><label>Montant reçu par carte (ticket terminal)</label><div class="with-unit"><input type="number" id="compteCarteInput" inputmode="decimal" placeholder="0.00" step="0.05" oninput="previewEcart('carte')"><span class="unit">CHF</span></div></div><div id="ecartPreviewCarte"></div><button class="btn btn-dark" onclick="closeDay()">Clôturer la journée</button></div>`;
   fillCats();renderJournal(day);
@@ -442,10 +448,55 @@ function setSens(s){
   fillCats();
 }
 function setMode(m){mvtMode=m;document.getElementById("segEsp").className=m==="especes"?"on-esp":"";document.getElementById("segCar").className=m==="carte"?"on-car":"";}
-function fillCats(){const sel=document.getElementById("catSelect");if(!sel)return;sel.innerHTML="";(mvtSens==="in"?CATS_IN:CATS_OUT).forEach(c=>{const o=document.createElement("option");o.textContent=c;sel.appendChild(o);});}
+function fillCats(){const sel=document.getElementById("catSelect");if(!sel)return;sel.innerHTML="";(mvtSens==="in"?CATS_IN:CATS_OUT).forEach(c=>{const o=document.createElement("option");o.textContent=c;sel.appendChild(o);});onCatChange();}
+
+/* ---- Intégration CRM Commande : décrément de stock sur vente boutique ---- */
+let VENDABLE_ARTICLES=null;
+async function loadVendableArticles(){
+  if(VENDABLE_ARTICLES)return VENDABLE_ARTICLES;
+  try{
+    const r=await fetch(CMD_API_URL+"?action=vendable_articles",{headers:{"X-Api-Key":CMD_API_KEY}});
+    VENDABLE_ARTICLES=r.ok?await r.json():[];
+  }catch(e){VENDABLE_ARTICLES=[];}
+  return VENDABLE_ARTICLES;
+}
+async function onCatChange(){
+  const sel=document.getElementById("catSelect"),box=document.getElementById("boutiqueField");
+  if(!sel||!box)return;
+  const isBoutique=mvtSens==="in"&&sel.value==="Vente boutique";
+  box.style.display=isBoutique?"":"none";
+  if(isBoutique){
+    const arts=await loadVendableArticles();
+    const bsel=document.getElementById("boutiqueSelect");
+    bsel.innerHTML='<option value="">— Aucun (montant libre) —</option>'+arts.map(a=>`<option value="${a.barcode}" data-price="${a.sale_price_ttc}">${escapeHtml(a.name)} — ${fmt(a.sale_price_ttc)} CHF</option>`).join("");
+  }
+}
+function onBoutiqueArticleChange(){
+  const bsel=document.getElementById("boutiqueSelect"),qty=parseInt(document.getElementById("boutiqueQty").value||"1",10)||1;
+  const opt=bsel.selectedOptions[0];
+  if(bsel.value&&opt){document.getElementById("montInput").value=((+opt.dataset.price||0)*qty).toFixed(2);}
+}
+async function decrementStockRemote(barcode,qty){
+  try{
+    await fetch(CMD_API_URL+"?action=decrement_stock",{method:"POST",headers:{"Content-Type":"application/json","X-Api-Key":CMD_API_KEY},body:JSON.stringify({barcode,quantity:qty})});
+  }catch(e){/* le stock CRM Commande est indisponible : la vente en caisse n'est jamais bloquée */}
+}
 function renderJournal(day){const ul=document.getElementById("journalList");if(!ul)return;const mv=(day.mouvements||[]).slice().reverse();if(mv.length===0){ul.innerHTML=`<li class="empty">Aucun mouvement.</li>`;return;}ul.innerHTML=mv.map(m=>`<li class="mvt"><div class="dot ${m.sens}"></div><div class="info"><b>${m.sens==="in"?(m.mode==="carte"?'<span class="mode-ico">💳</span> ':'<span class="mode-ico">💵</span> '):""}${m.cat}</b><span>${m.heure}${m.detail?" · "+escapeHtml(m.detail):""}</span></div><div class="amt ${m.sens}">${m.sens==="in"?"+":"−"}${fmt(m.montant)}</div><button class="del" onclick="delMvt('${m.id}')">✕</button></li>`).join("");}
 async function openDay(){const v=parseFloat((document.getElementById("fondInput").value||"").replace(",","."));if(isNaN(v)||v<0){toast("Fond invalide");return;}DB.days.push({date:todayISO(),fond:v,mouvements:[],cloture:null});await save();renderJour();toast("Journée ouverte");}
-async function addMvt(){const day=getDay(todayISO());if(!day||day.cloture)return;const cat=document.getElementById("catSelect").value,v=parseFloat((document.getElementById("montInput").value||"").replace(",",".")),detail=document.getElementById("detailInput").value.trim(),mode=mvtSens==="out"?"especes":mvtMode;if(isNaN(v)||v<=0){toast("Montant invalide");return;}day.mouvements.push({id:uid(),sens:mvtSens,mode,cat,montant:v,detail,heure:nowHM()});await save();renderJour();toast(mvtSens==="in"?"Entrée enregistrée":"Sortie enregistrée");}
+async function addMvt(){
+  const day=getDay(todayISO());if(!day||day.cloture)return;
+  const cat=document.getElementById("catSelect").value,v=parseFloat((document.getElementById("montInput").value||"").replace(",","."));
+  const detail=document.getElementById("detailInput").value.trim(),mode=mvtSens==="out"?"especes":mvtMode;
+  if(isNaN(v)||v<=0){toast("Montant invalide");return;}
+  const boutiqueBox=document.getElementById("boutiqueField"),boutiqueVisible=boutiqueBox&&boutiqueBox.style.display!=="none";
+  const barcode=boutiqueVisible?document.getElementById("boutiqueSelect").value:"";
+  const qty=boutiqueVisible?(parseInt(document.getElementById("boutiqueQty").value||"1",10)||1):0;
+  const mvt={id:uid(),sens:mvtSens,mode,cat,montant:v,detail,heure:nowHM()};
+  if(barcode){mvt.article_barcode=barcode;mvt.article_qty=qty;}
+  day.mouvements.push(mvt);
+  await save();renderJour();toast(mvtSens==="in"?"Entrée enregistrée":"Sortie enregistrée");
+  if(barcode)decrementStockRemote(barcode,qty);
+}
 async function delMvt(id){const day=getDay(todayISO());if(!day||day.cloture)return;if(!confirm("Supprimer ce mouvement ?"))return;day.mouvements=day.mouvements.filter(m=>m.id!==id);await save();renderJour();}
 function previewEcart(kind){
   const day=getDay(todayISO()),t=totals(day);

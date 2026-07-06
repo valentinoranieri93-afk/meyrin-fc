@@ -3,7 +3,7 @@
  * guard.php â€” CopiÃ© depuis erp.meyrinfc.ch/guard.php
  * La clÃ© JWT_SECRET DOIT correspondre Ã  celle de config.php dans l'ERP.
  */
-const GUARD_JWT_SECRET  = 'YPeBEiu4XgHx6,c/s@<GiwPp6*iNF9z0&/gGuOg|COs|j.St';
+const GUARD_JWT_SECRET  = 'w`ct^\'3:O[Y1Su?Xp+V,P{Mo54B.ab]9HRE~>JDn;_=}g!"L';
 const GUARD_COOKIE_NAME = 'mfc_session';
 const GUARD_ERP_URL     = 'https://erp.meyrinfc.ch';
 

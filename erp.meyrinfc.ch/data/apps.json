@@ -38,5 +38,15 @@
     "color": "#7B59D8",
     "color_bg": "#EEE8FB",
     "active": true
+  },
+  {
+    "slug": "commandes",
+    "name": "CRM Commande",
+    "url": "https://commandes.meyrinfc.ch",
+    "description": "Stock, commandes fournisseurs et budgets par catégorie",
+    "icon": "package",
+    "color": "#D8463A",
+    "color_bg": "#FBE7E4",
+    "active": true
   }
 ]

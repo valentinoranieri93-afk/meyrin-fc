@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM Commande — Meyrin FC</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: { extend: {
+    fontFamily: { sans:['Inter','system-ui','sans-serif'], display:['Sora','Inter','sans-serif'] },
+    colors: {
+      ink:{DEFAULT:'#15140F', soft:'#6E6C61'}, mute:'#9A988C', line:'#E9E6DC', canvas:'#F6F4ED',
+      brand:{50:'#FFF9D9',100:'#FFF3C4',500:'#ffdd00',600:'#c5a900',700:'#a88d00',800:'#8a7300'},
+      amber2:{50:'#FFF8E6',600:'#B45309'}, rose2:{50:'#FEF1F2',600:'#DC2626'},
+      blue2:{50:'#EFF4FF',600:'#2563EB'}, violet2:{50:'#F4F1FE',600:'#7C3AED'},
+      green2:{50:'#E4F4EA',600:'#1F9D5B'},
+    },
+    boxShadow: {
+      card:'0 1px 2px rgba(12,18,32,.04), 0 1px 3px rgba(12,18,32,.06)',
+      pop:'0 4px 6px -1px rgba(12,18,32,.07), 0 12px 24px -8px rgba(12,18,32,.12)',
+      ring:'0 0 0 4px rgba(255,221,0,.25)',
+    },
+    borderRadius:{ xl2:'14px' },
+  }}
+}
+</script>
+<style>
+  html { -webkit-font-smoothing: antialiased; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#C8C5BB; border-radius:8px; border:2px solid #F6F4ED; }
+  ::-webkit-scrollbar-track { background:transparent; }
+
+  .view { display:none; animation:viewIn .28s cubic-bezier(.21,.61,.35,1) both; }
+  .view.active { display:block; }
+  @keyframes viewIn { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+
+  .nav-item { position:relative; transition:background .15s,color .15s; }
+  .nav-item.active { background:#ffdd00; color:#15140F; font-weight:600; }
+  .nav-item.active svg { color:#15140F; }
+
+  .ptab-btn { background:#fff; border:1px solid #E9E6DC; color:#6E6C61; }
+  .ptab-btn.active { background:#ffdd00; border-color:#ffdd00; color:#15140F; }
+
+  summary::-webkit-details-marker { display:none; }
+  summary { list-style:none; }
+
+  .fade-up { animation:fadeUp .5s cubic-bezier(.21,.61,.35,1) both; }
+  @keyframes fadeUp { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;} }
+  .progress-anim { animation:groww 1s .2s cubic-bezier(.21,.61,.35,1) both; transform-origin:left; }
+  @keyframes groww { from{transform:scaleX(0);} to{transform:scaleX(1);} }
+
+  .toast { animation:toastIn .3s cubic-bezier(.21,.61,.35,1) both; }
+  @keyframes toastIn { from{opacity:0; transform:translateY(12px) scale(.97);} to{opacity:1; transform:none;} }
+
+  .modal-bg { animation:fadeIn .2s both; }
+  .modal-card { animation:modalIn .25s cubic-bezier(.21,.61,.35,1) both; }
+  @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+  @keyframes modalIn { from{opacity:0; transform:translateY(14px) scale(.98);} to{opacity:1; transform:none;} }
+
+  .field { width:100%; height:38px; padding:0 12px; border:1px solid #E9E6DC; border-radius:10px; background:#fff;
+           font-size:13px; outline:none; transition:border .15s, box-shadow .15s; }
+  .field:focus { border-color:#ffdd00; box-shadow:0 0 0 4px rgba(255,221,0,.25); }
+  textarea.field { height:auto; padding:10px 12px; }
+  .lbl { display:block; font-size:11.5px; font-weight:600; color:#6E6C61; margin:0 0 5px; }
+
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+    outline:2px solid #c5a900; outline-offset:2px; border-radius:6px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
+  }
+
+  @media print {
+    body * { visibility:hidden; }
+    #printZone, #printZone * { visibility:visible; }
+    #printZone { position:absolute; left:0; top:0; width:100%; }
+  }
+  #printZone { display:none; }
+</style>
+</head>
+<body class="bg-canvas text-ink font-sans text-[14px] leading-relaxed">
+
+<!-- ============ ÉCRAN AUTH ============ -->
+<div id="authScreen" class="hidden min-h-screen grid place-items-center p-4">
+  <div class="w-full max-w-sm">
+    <div class="flex items-center justify-center gap-2.5 mb-6">
+      <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC" class="w-10 h-10 object-contain">
+      <div>
+        <p class="font-display font-bold text-[18px] tracking-tight leading-none">CRM Commande</p>
+        <p class="text-[11px] text-mute mt-0.5">Meyrin FC · Stock, commandes & budgets</p>
+      </div>
+    </div>
+
+    <div id="loginCard" class="hidden bg-white border border-line rounded-xl2 shadow-card p-6 fade-up">
+      <h1 class="font-display font-bold text-[17px] tracking-tight">Connexion</h1>
+      <p class="text-[12.5px] text-mute mt-0.5 mb-5">Accédez à la gestion du stock et des commandes.</p>
+      <div class="space-y-3.5">
+        <div><label class="lbl" for="loginEmail">E-mail</label><input id="loginEmail" type="email" class="field" autocomplete="username" placeholder="prenom@meyrinfc.ch"></div>
+        <div><label class="lbl" for="loginPass">Mot de passe</label><input id="loginPass" type="password" class="field" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+        <p id="loginError" class="hidden text-[12px] text-rose2-600 font-medium"></p>
+        <button onclick="doLogin()" class="w-full h-10 rounded-xl bg-brand-600 text-[#15140F] text-[13px] font-semibold hover:bg-brand-700 shadow-card transition">Se connecter</button>
+      </div>
+    </div>
+
+    <div id="setupCard" class="hidden bg-white border border-line rounded-xl2 shadow-card p-6 fade-up">
+      <span class="inline-block text-[10px] font-bold bg-brand-50 text-brand-700 px-2 py-0.5 rounded-md mb-2">PREMIER LANCEMENT</span>
+      <h1 class="font-display font-bold text-[17px] tracking-tight">Créer le compte administrateur</h1>
+      <p class="text-[12.5px] text-mute mt-0.5 mb-5">Ce compte gérera les utilisateurs et leurs droits d'accès.</p>
+      <div class="space-y-3.5">
+        <div><label class="lbl" for="setupName">Nom complet</label><input id="setupName" type="text" class="field" placeholder="Valentino A."></div>
+        <div><label class="lbl" for="setupEmail">E-mail</label><input id="setupEmail" type="email" class="field" placeholder="valentino@meyrinfc.ch"></div>
+        <div><label class="lbl" for="setupPass">Mot de passe <span class="font-normal text-mute">(8 caractères min.)</span></label><input id="setupPass" type="password" class="field" placeholder="••••••••" onkeydown="if(event.key==='Enter')doSetup()"></div>
+        <p id="setupError" class="hidden text-[12px] text-rose2-600 font-medium"></p>
+        <button onclick="doSetup()" class="w-full h-10 rounded-xl bg-brand-600 text-[#15140F] text-[13px] font-semibold hover:bg-brand-700 shadow-card transition">Créer et accéder à l'application</button>
+      </div>
+    </div>
+    <p class="text-center text-[11px] text-mute mt-4">CRM Commande · usage interne Meyrin FC</p>
+  </div>
+</div>
+
+<!-- ============ APPLICATION ============ -->
+<div id="app" class="hidden">
+<div class="flex h-screen overflow-hidden">
+
+  <aside id="sidebar" class="hidden md:flex w-[248px] shrink-0 flex-col bg-[#15140F] border-r border-[#28261E]">
+    <div class="h-16 flex items-center gap-2.5 px-5 border-b border-[#28261E]">
+      <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC" class="w-8 h-8 object-contain">
+      <div>
+        <div class="font-display font-bold text-[15px] tracking-tight leading-none text-white">CRM Commande</div>
+        <div class="text-[10.5px] text-[#8C897C] mt-0.5 tracking-wide">Stock & Achats</div>
+      </div>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-0.5" id="sideNav">
+      <p class="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Pilotage</p>
+      <a href="#" data-view="dashboard" class="nav-item active flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Dashboard
+      </a>
+      <p class="px-3 pt-4 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Achats</p>
+      <a href="#" data-view="demandes" class="nav-item flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Demandes
+        <span class="ml-auto text-[10.5px] font-semibold bg-rose2-50 text-rose2-600 px-1.5 py-0.5 rounded-md tnum hidden" id="badgeRequests"></span>
+      </a>
+      <a href="#" data-view="commandes" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        Commandes fournisseurs
+      </a>
+      <a href="#" data-view="fournisseurs" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Fournisseurs
+      </a>
+      <p class="px-3 pt-4 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Stock</p>
+      <a href="#" data-view="catalogue" class="nav-item flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.9 19.8 17 15.9C18.9 13.7 19 10.4 17 8.2c-2.2-2.2-5.7-2.2-7.9 0-2.2 2.2-2.2 5.7 0 7.9 2.1 2 5.4 2.1 7.6.2l3.9 3.9z"/></svg>
+        Catalogue articles
+      </a>
+      <a href="#" data-view="stock" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
+        Stock & Lieux
+      </a>
+      <a href="#" data-view="etiquettes" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="2"/><line x1="7" y1="7" x2="7" y2="17"/><line x1="11" y1="7" x2="11" y2="17"/><line x1="15" y1="7" x2="15" y2="17"/></svg>
+        Étiquettes
+      </a>
+      <p class="px-3 pt-4 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Finance</p>
+      <a href="#" data-view="budgets" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Budgets
+      </a>
+      <a href="#" data-view="rapports" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+        Rapports
+      </a>
+      <a href="#" data-view="parametres" class="nav-item flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Paramètres
+      </a>
+    </nav>
+
+    <div class="p-3 border-t border-[#28261E]">
+      <div class="rounded-xl bg-[#211F18] p-3.5">
+        <div class="flex items-center justify-between">
+          <p class="text-[12px] font-semibold text-white">CRM Commande</p>
+          <span class="text-[10px] bg-brand-500/20 text-brand-500 rounded-md px-1.5 py-0.5" id="fyTag">…</span>
+        </div>
+        <p class="text-[11px] text-[#75736A] mt-1">Exercice en cours</p>
+      </div>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-w-0">
+    <header class="h-16 shrink-0 bg-white border-b border-line flex items-center gap-3 px-4 lg:px-6 relative">
+      <button class="md:hidden p-2 -ml-2 rounded-lg hover:bg-canvas" onclick="document.getElementById('sidebar').classList.toggle('hidden');document.getElementById('sidebar').classList.toggle('flex')" aria-label="Menu">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="relative flex-1 max-w-md">
+        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="scanInput" type="text" placeholder="Rechercher ou scanner un code-barres…" class="w-full h-9 pl-9 pr-4 rounded-lg border border-line bg-canvas/60 placeholder:text-mute/80 focus:bg-white focus:border-brand-500 focus:shadow-ring transition text-[13px] outline-none"
+               onkeydown="if(event.key==='Enter'){onGlobalScan(this.value);this.value=''}">
+      </div>
+      <div class="ml-auto flex items-center gap-1.5">
+        <button id="notifBtn" class="relative p-2 rounded-lg hover:bg-canvas transition" aria-label="Alertes" onclick="toggleNotif()">
+          <svg class="w-[18px] h-[18px] text-ink-soft" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose2-600 ring-2 ring-white hidden" id="notifDot"></span>
+        </button>
+        <div class="w-px h-6 bg-line mx-1"></div>
+        <button class="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-lg hover:bg-canvas transition" onclick="go('parametres')">
+          <div class="w-8 h-8 rounded-full bg-brand-600 text-[#15140F] grid place-items-center text-[12px] font-semibold" id="meAvatar">·</div>
+          <div class="hidden lg:block text-left">
+            <p class="text-[12.5px] font-semibold leading-tight" id="meName">…</p>
+            <p class="text-[10.5px] text-mute leading-tight" id="meRole">…</p>
+          </div>
+        </button>
+        <button onclick="doLogout()" class="p-2 rounded-lg hover:bg-canvas transition" title="Se déconnecter" aria-label="Se déconnecter">
+          <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+      <div id="notifPanel" class="hidden absolute right-4 top-[60px] w-[380px] max-w-[calc(100vw-2rem)] bg-white border border-line rounded-xl shadow-pop z-50 overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-line"><p class="font-semibold text-[13.5px]">Alertes</p></div>
+        <div class="max-h-[380px] overflow-y-auto divide-y divide-line" id="notifList"></div>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto" id="mainScroll">
+
+      <!-- ============ DASHBOARD ============ -->
+      <section id="view-dashboard" class="view active px-4 lg:px-6 py-6">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-6">
+          <div>
+            <p class="text-[11px] font-semibold uppercase tracking-[.1em] text-brand-600 mb-1" id="dashFy"></p>
+            <h1 class="font-display text-[22px] font-bold tracking-tight">Dashboard</h1>
+            <p class="text-mute text-[13px] mt-0.5">Vue d'ensemble des demandes, commandes et budgets</p>
+          </div>
+        </div>
+        <div id="dashKpis" class="grid grid-cols-2 xl:grid-cols-4 gap-3.5"></div>
+        <div class="grid lg:grid-cols-3 gap-3.5 mt-3.5">
+          <div class="lg:col-span-2 bg-white border border-line rounded-xl2 shadow-card p-5">
+            <h2 class="font-semibold text-[14.5px]">Alertes</h2>
+            <p class="text-[12px] text-mute mb-3">Réceptions en retard, commandes oubliées, demandes bloquées, budgets dépassés</p>
+            <div id="dashAlerts"></div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
+            <h2 class="font-semibold text-[14.5px]">Stock bas</h2>
+            <p class="text-[12px] text-mute mb-3">Articles sous leur seuil d'alerte</p>
+            <div id="dashLowStock"></div>
+          </div>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-3.5 mt-3.5">
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
+            <h2 class="font-semibold text-[14.5px] mb-3">Budgets par catégorie</h2>
+            <div id="dashBudgets"></div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card">
+            <div class="flex items-center justify-between px-5 pt-4 pb-2">
+              <h2 class="font-semibold text-[14.5px]">Commandes récentes</h2>
+              <button onclick="go('commandes')" class="text-[12px] font-medium text-brand-600 hover:underline">Tout voir →</button>
+            </div>
+            <div id="dashOrders" class="divide-y divide-line"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ DEMANDES ============ -->
+      <section id="view-demandes" class="view px-4 lg:px-6 py-6">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h1 class="font-display text-[22px] font-bold tracking-tight">Demandes</h1>
+            <p class="text-mute text-[13px] mt-0.5" id="requestsSub"></p>
+          </div>
+          <button onclick="modalRequest()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Nouvelle demande</button>
+        </div>
+        <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-[12.5px] min-w-[760px]">
+              <thead>
+                <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                  <th class="px-4 py-2.5 font-semibold">Article</th><th class="px-4 py-2.5 font-semibold">Qté</th>
+                  <th class="px-4 py-2.5 font-semibold">Demandeur</th><th class="px-4 py-2.5 font-semibold">Motif</th>
+                  <th class="px-4 py-2.5 font-semibold">Statut</th><th class="px-4 py-2.5 font-semibold">Date</th><th class="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody id="requestRows" class="divide-y divide-line"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ COMMANDES FOURNISSEURS ============ -->
+      <section id="view-commandes" class="view px-4 lg:px-6 py-6">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h1 class="font-display text-[22px] font-bold tracking-tight">Commandes fournisseurs</h1>
+            <p class="text-mute text-[13px] mt-0.5" id="ordersSub"></p>
+          </div>
+          <button onclick="modalOrder()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Nouvelle commande</button>
+        </div>
+        <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-[12.5px] min-w-[760px]">
+              <thead>
+                <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                  <th class="px-4 py-2.5 font-semibold">#</th><th class="px-4 py-2.5 font-semibold">Fournisseur</th>
+                  <th class="px-4 py-2.5 font-semibold">Statut</th><th class="px-4 py-2.5 font-semibold">Livraison prévue</th>
+                  <th class="px-4 py-2.5 font-semibold text-right">Total</th><th class="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody id="orderRows" class="divide-y divide-line"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ FICHE COMMANDE ============ -->
+      <section id="view-fiche-commande" class="view px-4 lg:px-6 py-6">
+        <button onclick="go('commandes')" class="text-[12.5px] text-mute hover:text-ink flex items-center gap-1.5 mb-4 transition">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Retour aux commandes
+        </button>
+        <div id="ficheCommandeContent"></div>
+      </section>
+
+      <!-- ============ FOURNISSEURS ============ -->
+      <section id="view-fournisseurs" class="view px-4 lg:px-6 py-6">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div><h1 class="font-display text-[22px] font-bold tracking-tight">Fournisseurs</h1></div>
+          <button onclick="modalSupplier()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Fournisseur</button>
+        </div>
+        <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-3.5" id="supplierCards"></div>
+      </section>
+
+      <!-- ============ CATALOGUE ============ -->
+      <section id="view-catalogue" class="view px-4 lg:px-6 py-6">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h1 class="font-display text-[22px] font-bold tracking-tight">Catalogue articles</h1>
+            <p class="text-mute text-[13px] mt-0.5" id="catalogueSub"></p>
+          </div>
+          <div class="flex items-center gap-2 staff-only">
+            <button onclick="modalImport()" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Importer</button>
+            <button onclick="modalExportArticles()" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Exporter</button>
+            <button onclick="modalArticle()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Nouvel article</button>
+          </div>
+        </div>
+        <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+          <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
+            <input id="articleSearch" oninput="filterArticles()" type="text" placeholder="Rechercher…" class="h-8 w-52 px-3 rounded-lg border border-line bg-canvas/60 text-[12.5px] outline-none focus:bg-white focus:border-brand-500 transition">
+            <select id="articleCat" onchange="filterArticles()" class="h-8 px-2.5 rounded-lg border border-line bg-white text-[12.5px] text-ink-soft outline-none"><option value="">Toutes catégories</option></select>
+            <select id="articleNature" onchange="filterArticles()" class="h-8 px-2.5 rounded-lg border border-line bg-white text-[12.5px] text-ink-soft outline-none">
+              <option value="">Toute nature</option><option value="vendable">Vendable</option><option value="interne">Interne</option>
+            </select>
+            <span class="ml-auto text-[12px] text-mute tnum" id="articleCount"></span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-[12.5px] min-w-[820px]">
+              <thead>
+                <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                  <th class="px-4 py-2.5 font-semibold"></th><th class="px-4 py-2.5 font-semibold">Article</th>
+                  <th class="px-4 py-2.5 font-semibold">Catégorie</th><th class="px-4 py-2.5 font-semibold">Nature</th>
+                  <th class="px-4 py-2.5 font-semibold text-right">Prix achat</th><th class="px-4 py-2.5 font-semibold text-right">Prix vente TTC</th>
+                  <th class="px-4 py-2.5 font-semibold text-right">Attributs</th>
+                  <th class="px-4 py-2.5 font-semibold text-right">Stock total</th><th class="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody id="articleRows" class="divide-y divide-line"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ FICHE ARTICLE ============ -->
+      <section id="view-fiche-article" class="view px-4 lg:px-6 py-6">
+        <button onclick="go('catalogue')" class="text-[12.5px] text-mute hover:text-ink flex items-center gap-1.5 mb-4 transition">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Retour au catalogue
+        </button>
+        <div id="ficheArticleContent"></div>
+      </section>
+
+      <!-- ============ STOCK & LIEUX ============ -->
+      <section id="view-stock" class="view px-4 lg:px-6 py-6">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div><h1 class="font-display text-[22px] font-bold tracking-tight">Stock & Lieux</h1></div>
+          <div class="flex items-center gap-2">
+            <button onclick="modalTransfer()" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Transfert</button>
+            <button onclick="modalMovement()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Mouvement</button>
+          </div>
+        </div>
+        <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-[12.5px] min-w-[600px]">
+              <thead>
+                <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                  <th class="px-4 py-2.5 font-semibold">Article</th><th class="px-4 py-2.5 font-semibold">Lieu</th>
+                  <th class="px-4 py-2.5 font-semibold text-right">Quantité</th><th class="px-4 py-2.5 font-semibold">Seuil alerte</th>
+                </tr>
+              </thead>
+              <tbody id="stockRows" class="divide-y divide-line"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ÉTIQUETTES ============ -->
+      <section id="view-etiquettes" class="view px-4 lg:px-6 py-6">
+        <div class="mb-5"><h1 class="font-display text-[22px] font-bold tracking-tight">Étiquettes</h1><p class="text-mute text-[13px] mt-0.5">Génération de codes-barres, impression au format Brother QL</p></div>
+        <div class="grid lg:grid-cols-3 gap-3.5">
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-1">
+            <label class="lbl">Articles à imprimer</label>
+            <select id="labelArticles" multiple size="10" class="w-full border border-line rounded-lg text-[12.5px] p-2 outline-none focus:border-brand-500"></select>
+            <label class="lbl mt-3">Format d'étiquette (Brother QL)</label>
+            <select id="labelFormat" class="field">
+              <option value="62x29">DK-11209 — 62 × 29 mm</option>
+              <option value="62x100">DK-11202 — 62 × 100 mm</option>
+              <option value="29x90">DK-11201 — 29 × 90 mm</option>
+              <option value="62cont">Ruban continu 62 mm</option>
+            </select>
+            <label class="lbl mt-3">Nombre de copies par article</label>
+            <input id="labelCopies" type="number" min="1" value="1" class="field">
+            <button onclick="generateLabels()" class="w-full mt-4 h-9 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 transition">Générer l'aperçu</button>
+            <button onclick="printLabels()" class="w-full mt-2 h-9 rounded-lg bg-ink text-white text-[12.5px] font-semibold hover:bg-slate-800 transition">Imprimer</button>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-2">
+            <p class="text-[12px] text-mute mb-3">Aperçu</p>
+            <div id="labelPreview" class="flex flex-wrap gap-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ BUDGETS ============ -->
+      <section id="view-budgets" class="view px-4 lg:px-6 py-6">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h1 class="font-display text-[22px] font-bold tracking-tight">Budgets</h1>
+            <p class="text-mute text-[13px] mt-0.5" id="budgetsSub"></p>
+          </div>
+          <button onclick="modalBudget()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Budget</button>
+        </div>
+        <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-3.5" id="budgetCards"></div>
+      </section>
+
+      <!-- ============ RAPPORTS ============ -->
+      <section id="view-rapports" class="view px-4 lg:px-6 py-6">
+        <div class="mb-5"><h1 class="font-display text-[22px] font-bold tracking-tight">Rapports</h1><p class="text-mute text-[13px] mt-0.5">Comptabilité analytique — filtrable et exportable vers Odoo</p></div>
+        <div class="bg-white border border-line rounded-xl2 shadow-card p-4 mb-3.5">
+          <div class="flex flex-wrap items-end gap-3">
+            <div><label class="lbl">Du</label><input id="repFrom" type="date" class="field w-40"></div>
+            <div><label class="lbl">Au</label><input id="repTo" type="date" class="field w-40"></div>
+            <div><label class="lbl">Catégorie</label><select id="repCat" class="field w-44"><option value="">Toutes</option></select></div>
+            <div><label class="lbl">Fournisseur</label><select id="repSupplier" class="field w-44"><option value="">Tous</option></select></div>
+            <div><label class="lbl">Lieu</label><select id="repLoc" class="field w-44"><option value="">Tous</option></select></div>
+            <button onclick="loadReports()" class="h-9 px-4 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 transition">Filtrer</button>
+            <button onclick="exportOdoo()" class="h-9 px-4 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Export Odoo (CSV)</button>
+          </div>
+        </div>
+        <div class="grid lg:grid-cols-3 gap-3.5 mb-3.5">
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-1">
+            <h2 class="font-semibold text-[14.5px] mb-3">Par catégorie</h2>
+            <div id="repByCategory"></div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden lg:col-span-2">
+            <div class="overflow-x-auto">
+              <table class="w-full text-[12.5px] min-w-[700px]">
+                <thead><tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                  <th class="px-4 py-2.5 font-semibold">Date</th><th class="px-4 py-2.5 font-semibold">Article</th><th class="px-4 py-2.5 font-semibold">Fournisseur</th>
+                  <th class="px-4 py-2.5 font-semibold text-right">Qté</th><th class="px-4 py-2.5 font-semibold text-right">Total</th>
+                </tr></thead>
+                <tbody id="repRows" class="divide-y divide-line"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ PARAMÈTRES ============ -->
+      <section id="view-parametres" class="view px-4 lg:px-6 py-6">
+        <div class="mb-5"><h1 class="font-display text-[22px] font-bold tracking-tight">Paramètres</h1></div>
+        <div class="flex gap-2 mb-4" id="paramTabs">
+          <button data-ptab="produits" onclick="setParamTab('produits')" class="ptab-btn h-9 px-3.5 rounded-lg text-[12.5px] font-semibold transition">Produits</button>
+          <button data-ptab="general" onclick="setParamTab('general')" class="ptab-btn h-9 px-3.5 rounded-lg text-[12.5px] font-semibold transition">Général</button>
+        </div>
+
+        <div class="ptab-panel grid lg:grid-cols-2 gap-3.5" data-ptab-panel="produits">
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 staff-only">
+            <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-[14.5px]">Lieux de stockage</h2><button onclick="modalLocation()" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">+ Lieu</button></div>
+            <div class="space-y-2" id="locationList"></div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 staff-only">
+            <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-[14.5px]">Catégories</h2><button onclick="modalCategory()" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">+ Catégorie</button></div>
+            <div class="space-y-2" id="categoryList"></div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 staff-only lg:col-span-2">
+            <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-[14.5px]">Attributs personnalisés</h2><button onclick="modalAttribute()" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">+ Attribut</button></div>
+            <p class="text-[11.5px] text-mute mb-3">Ex. Taille avec des valeurs XS, S, M, L… À renseigner ensuite au cas par cas sur chaque article.</p>
+            <div class="space-y-2" id="attributeList"></div>
+          </div>
+        </div>
+
+        <div class="ptab-panel grid lg:grid-cols-2 gap-3.5 hidden" data-ptab-panel="general">
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 admin-only">
+            <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-[14.5px]">Équipe & droits d'accès</h2><button onclick="modalUser()" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">+ Inviter</button></div>
+            <div class="space-y-3" id="userList"></div>
+            <div class="mt-4 pt-4 border-t border-line text-[11.5px] text-mute leading-relaxed">
+              <p><b class="text-ink">Admin</b> : tout, y compris utilisateurs et paramètres.</p>
+              <p><b class="text-ink">Responsable achats</b> : valide les demandes, gère stock/commandes/budgets.</p>
+              <p><b class="text-ink">Demandeur</b> : crée des demandes, consultation du catalogue/stock.</p>
+            </div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 admin-only">
+            <h2 class="font-semibold text-[14.5px] mb-4">Exercice & alertes</h2>
+            <div class="space-y-3.5">
+              <div><label class="lbl">Mois de départ de l'exercice (1-12)</label><input id="setFyMonth" type="number" min="1" max="12" class="field"></div>
+              <div><label class="lbl">Demande bloquée après (jours)</label><input id="setReqDays" type="number" min="1" class="field"></div>
+              <div><label class="lbl">Commande oubliée après (jours)</label><input id="setOrdDays" type="number" min="1" class="field"></div>
+              <button onclick="saveSettings()" class="h-9 px-4 rounded-lg bg-ink text-white text-[12.5px] font-semibold hover:bg-slate-800 transition">Enregistrer</button>
+            </div>
+            <div class="mt-4 pt-4 border-t border-line">
+              <p class="text-[11.5px] text-mute">Clé API pour la connexion avec Caisse (à renseigner côté <code class="text-[11px] bg-canvas border border-line rounded px-1">caisse.meyrinfc.ch</code>) :</p>
+              <p class="text-[12px] font-mono bg-canvas border border-line rounded-lg px-2 py-1.5 mt-1.5 select-all" id="caisseKey">…</p>
+            </div>
+            <div class="mt-4 pt-4 border-t border-line">
+              <p class="text-[11.5px] text-mute mb-2">Aucune sauvegarde automatique n'existe pour cette base : télécharge ce fichier régulièrement (ex. avant chaque mise à jour) et garde-le en lieu sûr.</p>
+              <a href="api.php?action=backup_db" class="inline-flex h-9 px-4 rounded-lg bg-ink text-white text-[12.5px] font-semibold hover:bg-slate-800 transition items-center">Télécharger une sauvegarde (.sqlite)</a>
+            </div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
+            <h2 class="font-semibold text-[14.5px] mb-4">Mon compte</h2>
+            <div class="space-y-3.5">
+              <div><label class="lbl">Mot de passe actuel</label><input id="pwOld" type="password" class="field" autocomplete="current-password"></div>
+              <div><label class="lbl">Nouveau mot de passe (8 car. min.)</label><input id="pwNew" type="password" class="field" autocomplete="new-password"></div>
+              <button onclick="changePassword()" class="h-9 px-4 rounded-lg bg-ink text-white text-[12.5px] font-semibold hover:bg-slate-800 transition">Changer le mot de passe</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+</div>
+
+<!-- Modale générique -->
+<div id="modal" class="hidden fixed inset-0 z-[70]">
+  <div class="modal-bg absolute inset-0 bg-ink/40" onclick="closeModal()"></div>
+  <div class="absolute inset-0 grid place-items-center p-4 pointer-events-none overflow-y-auto">
+    <div class="modal-card pointer-events-auto w-full max-w-lg bg-white rounded-xl2 shadow-pop border border-line max-h-[90vh] flex flex-col my-8">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-line">
+        <h2 class="font-display font-bold text-[15.5px] tracking-tight" id="modalTitle"></h2>
+        <button onclick="closeModal()" class="p-1.5 rounded-lg hover:bg-canvas" aria-label="Fermer">
+          <svg class="w-4 h-4 text-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="px-5 py-4 overflow-y-auto" id="modalBody"></div>
+      <div class="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-line">
+        <button onclick="closeModal()" class="h-9 px-3.5 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Annuler</button>
+        <button id="modalSubmit" class="h-9 px-4 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 transition">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="fixed bottom-5 right-5 z-[80] space-y-2"></div>
+<div id="printZone"></div>
+
+<script>
+/* ================================================================ ÉTAT */
+const S = { user:null, categories:[], locations:[], suppliers:[], attributes:[], articles:[], requests:[], orders:[], budgets:[], dashboard:null };
+const NATURE_LABEL = { vendable:'Vendable', interne:'Interne' };
+const REQ_STATUS_LABEL = { pending:'En attente', approved:'Validée', rejected:'Rejetée', ordered:'Commandée', received:'Reçue' };
+const ORDER_STATUS_LABEL = { draft:'Brouillon', sent:'Envoyée', confirmed:'Confirmée', received_partial:'Reçue partiellement', received_total:'Reçue totalement' };
+
+/* ================================================================ API */
+async function api(action, method = 'GET', body = null, isForm = false) {
+  const opt = { method, headers: {} };
+  if (body) {
+    if (isForm) opt.body = body;
+    else { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  }
+  const url = 'api.php?action=' + action + (method === 'GET' && body ? '&' + new URLSearchParams(body) : '');
+  const r = await fetch(url, method === 'GET' ? {} : opt);
+  let data = {};
+  try { data = await r.json(); } catch (e) { /* réponse non-JSON (erreur serveur brute, ex. fatal PHP) */ }
+  if (!r.ok) {
+    if (r.status === 401 && action !== 'login' && action !== 'status') showAuth();
+    throw new Error(data.error || ('Erreur serveur (HTTP ' + r.status + ')'));
+  }
+  return data;
+}
+
+/* ================================================================ HELPERS */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const chf = v => new Intl.NumberFormat('fr-CH', { maximumFractionDigits: 2 }).format(+v || 0).replace(/ /g, "'");
+const dateCH = d => d ? String(d).slice(0,10).split('-').reverse().join('.') : '—';
+const initials = n => (n || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+const avatarColors = ['bg-blue2-50 text-blue2-600','bg-violet2-50 text-violet2-600','bg-amber2-50 text-amber2-600','bg-brand-50 text-brand-700','bg-rose2-50 text-rose2-600'];
+const avatarC = id => avatarColors[id % avatarColors.length];
+const reqBadge = st => ({pending:'bg-amber2-50 text-amber2-600',approved:'bg-blue2-50 text-blue2-600',rejected:'bg-rose2-50 text-rose2-600',ordered:'bg-violet2-50 text-violet2-600',received:'bg-green2-50 text-green2-600'}[st] || 'bg-slate-100 text-slate-600');
+const orderBadge = st => ({draft:'bg-slate-100 text-slate-600',sent:'bg-blue2-50 text-blue2-600',confirmed:'bg-violet2-50 text-violet2-600',received_partial:'bg-amber2-50 text-amber2-600',received_total:'bg-green2-50 text-green2-600'}[st] || 'bg-slate-100 text-slate-600');
+function toast(msg, isErr = false) {
+  const box = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast px-4 py-2.5 rounded-xl shadow-pop text-[12.5px] font-medium ' + (isErr ? 'bg-rose2-600 text-white' : 'bg-ink text-white');
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+function isStaff() { return S.user && ['responsable','admin'].includes(S.user.role); }
+function isAdmin() { return S.user && S.user.role === 'admin'; }
+function applyRoleVisibility() {
+  document.querySelectorAll('.staff-only').forEach(el => el.classList.toggle('hidden', !isStaff()));
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin()));
+}
+
+/* ================================================================ NAVIGATION */
+function go(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + view)?.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === view));
+  document.getElementById('mainScroll').scrollTop = 0;
+  const loaders = { dashboard: loadDashboard, demandes: loadRequests, commandes: loadOrders, fournisseurs: loadSuppliers,
+                     catalogue: loadArticles, stock: loadStock, etiquettes: loadLabelSelect, budgets: loadBudgets,
+                     rapports: loadReportFilters, parametres: loadSettingsView };
+  loaders[view]?.();
+}
+document.querySelectorAll('.nav-item[data-view]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.view); }));
+
+function toggleNotif() {
+  const p = document.getElementById('notifPanel');
+  p.classList.toggle('hidden');
+  if (!p.classList.contains('hidden') && S.dashboard) renderNotifPanel();
+}
+function renderNotifPanel() {
+  const list = document.getElementById('notifList');
+  const alerts = S.dashboard?.alerts || [];
+  list.innerHTML = alerts.length ? alerts.map(a => `<div class="px-4 py-3 text-[12.5px]">${esc(a.label)}</div>`).join('') : '<div class="px-4 py-6 text-center text-mute text-[12.5px]">Aucune alerte</div>';
+}
+
+/* ================================================================ SCAN (douchette Bluetooth = clavier) */
+async function onGlobalScan(code) {
+  if (!code) return;
+  try {
+    const v = await api('article_lookup', 'GET', { barcode: code });
+    go('catalogue');
+    setTimeout(() => openFicheArticle(v.article_id), 150);
+  } catch (e) { toast('Aucun article pour ce code : ' + code, true); }
+}
+
+/* ================================================================ AUTH */
+function showAuth() {
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('authScreen').classList.remove('hidden');
+}
+async function boot() {
+  try {
+    const st = await api('status');
+    document.getElementById('authScreen').classList.remove('hidden');
+    if (st.installed) {
+      document.getElementById('setupCard').classList.add('hidden');
+      document.getElementById('loginCard').classList.remove('hidden');
+    } else {
+      document.getElementById('loginCard').classList.add('hidden');
+      document.getElementById('setupCard').classList.remove('hidden');
+    }
+    if (st.user) startApp(st.user);
+  } catch (e) { toast('Impossible de contacter le serveur', true); }
+}
+async function doLogin() {
+  try {
+    const r = await api('login', 'POST', { email: document.getElementById('loginEmail').value, password: document.getElementById('loginPass').value });
+    startApp(r.user);
+  } catch (e) { document.getElementById('loginError').textContent = e.message; document.getElementById('loginError').classList.remove('hidden'); }
+}
+async function doSetup() {
+  try {
+    const r = await api('setup', 'POST', { name: document.getElementById('setupName').value, email: document.getElementById('setupEmail').value, password: document.getElementById('setupPass').value });
+    startApp(r.user);
+  } catch (e) { document.getElementById('setupError').textContent = e.message; document.getElementById('setupError').classList.remove('hidden'); }
+}
+async function doLogout() { await api('logout', 'POST'); location.reload(); }
+async function startApp(user) {
+  S.user = user;
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('meAvatar').textContent = initials(user.name);
+  document.getElementById('meName').textContent = user.name;
+  document.getElementById('meRole').textContent = { admin: 'Administrateur', responsable: 'Responsable achats', demandeur: 'Demandeur' }[user.role] || user.role;
+  applyRoleVisibility();
+  await Promise.all([loadRefData()]);
+  go('dashboard');
+}
+
+/* ================================================================ RÉFÉRENTIELS */
+async function loadRefData() {
+  const [cats, locs, sups, attrs] = await Promise.all([api('categories'), api('locations'), api('suppliers'), api('attributes')]);
+  S.categories = cats; S.locations = locs; S.suppliers = sups; S.attributes = attrs;
+  const catSel = document.getElementById('articleCat');
+  catSel.innerHTML = '<option value="">Toutes catégories</option>' + cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+}
+
+/* ================================================================ DASHBOARD */
+async function loadDashboard() {
+  const d = await api('dashboard');
+  S.dashboard = d;
+  document.getElementById('fyTag').textContent = d.fiscal_year;
+  document.getElementById('dashFy').textContent = 'Exercice ' + d.fiscal_year;
+  document.getElementById('badgeRequests').textContent = d.pending_requests || '';
+  document.getElementById('badgeRequests').classList.toggle('hidden', !d.pending_requests);
+  document.getElementById('notifDot').classList.toggle('hidden', !(d.alerts && d.alerts.length));
+
+  const kpis = [
+    { label: 'Demandes en attente', value: d.pending_requests, color: 'amber2' },
+    { label: 'Commandes en cours', value: d.orders_in_progress, color: 'blue2' },
+    { label: 'Alertes actives', value: d.alerts.length, color: 'rose2' },
+    { label: 'Articles sous seuil', value: d.low_stock.length, color: 'violet2' },
+  ];
+  document.getElementById('dashKpis').innerHTML = kpis.map(k => `
+    <div class="bg-white border border-line rounded-xl2 shadow-card p-4 fade-up">
+      <p class="text-[11.5px] text-mute">${k.label}</p>
+      <p class="text-[24px] font-display font-bold tracking-tight mt-1 tnum text-${k.color}-600">${k.value}</p>
+    </div>`).join('');
+
+  document.getElementById('dashAlerts').innerHTML = d.alerts.length
+    ? d.alerts.map(a => `<div class="flex items-center gap-2.5 py-2 border-b border-line last:border-0"><span class="w-2 h-2 rounded-full bg-rose2-600 shrink-0"></span><p class="text-[12.5px]">${esc(a.label)}</p></div>`).join('')
+    : '<p class="text-[12.5px] text-mute py-2">Aucune alerte 🎉</p>';
+
+  document.getElementById('dashLowStock').innerHTML = d.low_stock.length
+    ? d.low_stock.map(a => `<div class="flex items-center justify-between py-2 border-b border-line last:border-0"><p class="text-[12.5px]">${esc(a.name)}</p><span class="text-[11px] font-bold text-rose2-600 tnum">${a.total}/${a.alert_threshold}</span></div>`).join('')
+    : '<p class="text-[12.5px] text-mute py-2">Tout est au vert</p>';
+
+  document.getElementById('dashBudgets').innerHTML = d.budgets.length ? d.budgets.map(budgetBar).join('') : '<p class="text-[12.5px] text-mute">Aucun budget défini pour cet exercice</p>';
+
+  document.getElementById('dashOrders').innerHTML = d.recent_orders.length
+    ? d.recent_orders.map(o => `<div class="flex items-center justify-between px-5 py-2.5"><div><p class="text-[12.5px] font-medium">#${o.id} — ${esc(o.supplier_name)}</p></div><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${orderBadge(o.status)}">${ORDER_STATUS_LABEL[o.status]}</span></div>`).join('')
+    : '<p class="text-[12.5px] text-mute px-5 py-4">Aucune commande</p>';
+}
+function budgetBar(b) {
+  const pct = b.amount_allocated > 0 ? Math.min(100, Math.round(b.spent / b.amount_allocated * 100)) : 0;
+  const over = b.amount_allocated > 0 && b.spent > b.amount_allocated;
+  return `<div class="mb-3.5 last:mb-0">
+    <div class="flex items-center justify-between text-[12.5px] mb-1"><span class="font-medium">${esc(b.category_name)}</span><span class="tnum ${over ? 'text-rose2-600 font-bold' : 'text-mute'}">${chf(b.spent)} / ${chf(b.amount_allocated)} CHF</span></div>
+    <div class="h-2 rounded-full bg-canvas overflow-hidden"><div class="h-full progress-anim ${over ? 'bg-rose2-600' : 'bg-brand-600'}" style="width:${pct}%"></div></div>
+  </div>`;
+}
+
+/* ================================================================ MODALE GÉNÉRIQUE */
+function openModal(title, bodyHtml, onSubmit) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  const btn = document.getElementById('modalSubmit');
+  btn.onclick = async () => { try { await onSubmit(); } catch (e) { toast(e.message, true); } };
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+/* ================================================================ DEMANDES */
+async function loadRequests() {
+  const rows = await api('requests');
+  S.requests = rows;
+  document.getElementById('requestsSub').textContent = rows.length + ' demande(s)';
+  document.getElementById('requestRows').innerHTML = rows.map(r => `
+    <tr>
+      <td class="px-4 py-2.5 font-medium">${esc(r.article_name)}${r.variant_label && r.variant_label !== 'Standard' ? ` <span class="text-mute font-normal">— ${esc(r.variant_label)}</span>` : ''}</td>
+      <td class="px-4 py-2.5 tnum">${r.quantity}</td>
+      <td class="px-4 py-2.5">${esc(r.requester_name)}</td>
+      <td class="px-4 py-2.5 text-mute">${esc(r.motive || '—')}</td>
+      <td class="px-4 py-2.5"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${reqBadge(r.status)}">${REQ_STATUS_LABEL[r.status]}</span></td>
+      <td class="px-4 py-2.5 text-mute">${dateCH(r.created_at)}</td>
+      <td class="px-4 py-2.5 text-right space-x-1.5 whitespace-nowrap">
+        ${isStaff() && r.status === 'pending' ? `<button onclick="approveRequest(${r.id},'approved')" class="text-[11.5px] font-semibold text-green2-600 hover:underline">Valider</button><button onclick="rejectRequest(${r.id})" class="text-[11.5px] font-semibold text-rose2-600 hover:underline">Rejeter</button>` : ''}
+        ${isStaff() && r.status === 'approved' ? `<button onclick="quickOrder(${r.id})" class="text-[11.5px] font-semibold text-blue2-600 hover:underline">Commander</button>` : ''}
+        ${(!isStaff() && r.status === 'pending') ? `<button onclick="deleteRequest(${r.id})" class="text-[11.5px] font-semibold text-rose2-600 hover:underline">Retirer</button>` : ''}
+      </td>
+    </tr>`).join('') || '<tr><td colspan="7" class="px-4 py-8 text-center text-mute">Aucune demande</td></tr>';
+}
+async function modalRequest() {
+  const variants = await ensureVariants();
+  openModal('Nouvelle demande', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Article</label><select id="reqVariant" class="field">${variants.map(v => `<option value="${v.id}">${esc(v.display_name)}</option>`).join('')}</select></div>
+      <div><label class="lbl">Quantité</label><input id="reqQty" type="number" min="1" value="1" class="field"></div>
+      <div><label class="lbl">Motif</label><textarea id="reqMotive" class="field" rows="3"></textarea></div>
+    </div>`, async () => {
+    await api('requests', 'POST', { variant_id: +document.getElementById('reqVariant').value, quantity: +document.getElementById('reqQty').value, motive: document.getElementById('reqMotive').value });
+    closeModal(); toast('Demande envoyée'); loadRequests();
+  });
+}
+async function approveRequest(id, status) { await api('requests', 'PUT', { id, status }); toast('Demande validée'); loadRequests(); }
+async function rejectRequest(id) {
+  openModal('Rejeter la demande', `<div><label class="lbl">Motif du rejet</label><textarea id="rejReason" class="field" rows="3"></textarea></div>`, async () => {
+    await api('requests', 'PUT', { id, status: 'rejected', reject_reason: document.getElementById('rejReason').value });
+    closeModal(); toast('Demande rejetée'); loadRequests();
+  });
+}
+async function deleteRequest(id) { await api('requests&id=' + id, 'DELETE'); toast('Demande retirée'); loadRequests(); }
+async function quickOrder(reqId) {
+  try { await api('orders_quick_from_request', 'POST', { request_id: reqId }); toast('Commande créée'); loadRequests(); }
+  catch (e) { toast(e.message, true); }
+}
+
+/* ================================================================ FOURNISSEURS */
+async function loadSuppliers() {
+  const rows = await api('suppliers');
+  S.suppliers = rows;
+  document.getElementById('supplierCards').innerHTML = rows.map(s => `
+    <div class="bg-white border border-line rounded-xl2 shadow-card p-4">
+      <div class="flex items-start justify-between">
+        <div><p class="font-semibold text-[13.5px]">${esc(s.name)}</p><p class="text-[12px] text-mute">${esc(s.contact_name || '—')}</p></div>
+        <button onclick='editSupplier(${JSON.stringify(s).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg></button>
+      </div>
+      <div class="mt-2 text-[12px] text-mute space-y-0.5">
+        <p>${esc(s.email || '—')}</p><p>${esc(s.phone || '—')}</p>
+        <p class="mt-1.5">${s.orders_count} commande(s)${s.avg_delay_days ? ' · délai moyen ' + s.avg_delay_days + 'j' : ''}</p>
+      </div>
+    </div>`).join('') || '<p class="text-mute text-[13px]">Aucun fournisseur</p>';
+}
+function modalSupplier(existing) {
+  const s = existing || {};
+  openModal(existing ? 'Modifier le fournisseur' : 'Nouveau fournisseur', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Nom</label><input id="supName" class="field" value="${esc(s.name||'')}"></div>
+      <div><label class="lbl">Contact</label><input id="supContact" class="field" value="${esc(s.contact_name||'')}"></div>
+      <div><label class="lbl">E-mail</label><input id="supEmail" type="email" class="field" value="${esc(s.email||'')}"></div>
+      <div><label class="lbl">Téléphone</label><input id="supPhone" class="field" value="${esc(s.phone||'')}"></div>
+      <div><label class="lbl">Adresse</label><textarea id="supAddress" class="field" rows="2">${esc(s.address||'')}</textarea></div>
+      <div><label class="lbl">Notes</label><textarea id="supNotes" class="field" rows="2">${esc(s.notes||'')}</textarea></div>
+    </div>`, async () => {
+    const payload = { name: document.getElementById('supName').value, contact_name: document.getElementById('supContact').value, email: document.getElementById('supEmail').value, phone: document.getElementById('supPhone').value, address: document.getElementById('supAddress').value, notes: document.getElementById('supNotes').value };
+    if (existing) await api('suppliers', 'PUT', { id: s.id, ...payload }); else await api('suppliers', 'POST', payload);
+    closeModal(); toast('Fournisseur enregistré'); loadSuppliers(); loadRefData();
+  });
+}
+function editSupplier(s) { modalSupplier(s); }
+
+/* ================================================================ CATALOGUE */
+async function ensureArticles() { if (!S.articles.length) await loadArticles(); return S.articles; }
+function flattenVariants(products) {
+  const out = [];
+  products.forEach(p => (p.variants || []).forEach(v => out.push({
+    ...v,
+    article_id: p.id,
+    article_name: p.name,
+    category_id: p.category_id,
+    category_name: p.category_name,
+    nature: p.nature,
+    unit: p.unit,
+    purchase_price: p.purchase_price,
+    sale_price_ttc: p.sale_price_ttc,
+    display_name: p.name + (v.label && v.label !== 'Standard' ? ' — ' + v.label : ''),
+  })));
+  return out;
+}
+async function ensureVariants() { return flattenVariants(await ensureArticles()); }
+async function loadArticles() {
+  const rows = await api('articles');
+  S.articles = rows;
+  document.getElementById('catalogueSub').textContent = rows.length + ' article(s)';
+  filterArticles();
+  return rows;
+}
+function filterArticles() {
+  const q = (document.getElementById('articleSearch').value || '').toLowerCase();
+  const cat = document.getElementById('articleCat').value;
+  const nat = document.getElementById('articleNature').value;
+  const rows = S.articles.filter(a => (!q || a.name.toLowerCase().includes(q) || (a.variants||[]).some(v => (v.barcode||'').includes(q))) && (!cat || String(a.category_id) === cat) && (!nat || a.nature === nat));
+  document.getElementById('articleCount').textContent = rows.length + ' résultat(s)';
+  document.getElementById('articleRows').innerHTML = rows.map(a => `
+    <tr class="cursor-pointer hover:bg-canvas/50" onclick="openFicheArticle(${a.id})">
+      <td class="px-4 py-2">${a.photo ? `<img src="uploads/${a.photo}" class="w-9 h-9 rounded-lg object-cover border border-line">` : `<div class="w-9 h-9 rounded-lg bg-canvas border border-line grid place-items-center text-mute text-[10px]">—</div>`}</td>
+      <td class="px-4 py-2.5 font-medium">${esc(a.name)}</td>
+      <td class="px-4 py-2.5 text-mute">${esc(a.category_name || '—')}</td>
+      <td class="px-4 py-2.5"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${a.nature==='vendable'?'bg-green2-50 text-green2-600':'bg-slate-100 text-slate-600'}">${NATURE_LABEL[a.nature]}</span></td>
+      <td class="px-4 py-2.5 text-right tnum">${chf(a.purchase_price)}</td>
+      <td class="px-4 py-2.5 text-right tnum">${chf(a.sale_price_ttc)}</td>
+      <td class="px-4 py-2.5 text-right tnum">${a.variant_count}</td>
+      <td class="px-4 py-2.5 text-right tnum ${a.variants.some(v=>v.alert_threshold>0 && v.total_stock<=v.alert_threshold) ? 'text-rose2-600 font-bold':''}">${a.total_stock}</td>
+      <td class="px-4 py-2.5"></td>
+    </tr>`).join('') || '<tr><td colspan="9" class="px-4 py-8 text-center text-mute">Aucun article</td></tr>';
+}
+function modalArticle(existing) {
+  const a = existing || {};
+  openModal(existing ? 'Modifier l\'article' : 'Nouvel article', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Nom</label><input id="artName" class="field" value="${esc(a.name||'')}"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Catégorie</label><select id="artCat" class="field"><option value="">—</option>${S.categories.map(c=>`<option value="${c.id}" ${a.category_id==c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+        <div><label class="lbl">Nature</label><select id="artNature" class="field"><option value="interne" ${a.nature==='interne'?'selected':''}>Interne</option><option value="vendable" ${a.nature==='vendable'?'selected':''}>Vendable (lié Caisse)</option></select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Unité</label><input id="artUnit" class="field" value="${esc(a.unit||'pièce')}"></div>
+        <div><label class="lbl">Fournisseur préféré</label><select id="artSupplier" class="field"><option value="">—</option>${S.suppliers.map(s=>`<option value="${s.id}" ${a.supplier_id==s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Prix d'achat (CHF)</label><input id="artPurchase" type="number" step="0.01" class="field" value="${a.purchase_price||0}"></div>
+        <div><label class="lbl">Prix de vente TTC (CHF)</label><input id="artSale" type="number" step="0.01" class="field" value="${a.sale_price_ttc||0}"></div>
+      </div>
+      <div><label class="lbl">Photo</label><input id="artPhoto" type="file" accept="image/*" class="field"></div>
+      <p class="text-[11.5px] text-mute pt-1">Le code-barres et les attributs (taille, couleur…) se gèrent ensuite par variante, depuis la fiche de l'article. Le prix est commun à toutes les variantes.</p>
+    </div>`, async () => {
+    const payload = { name: document.getElementById('artName').value, category_id: +document.getElementById('artCat').value || null, nature: document.getElementById('artNature').value, unit: document.getElementById('artUnit').value, supplier_id: +document.getElementById('artSupplier').value || null, purchase_price: +document.getElementById('artPurchase').value, sale_price_ttc: +document.getElementById('artSale').value };
+    let id = a.id;
+    if (existing) await api('articles', 'PUT', { id, ...payload }); else { const r = await api('articles', 'POST', payload); id = r.id; }
+    const file = document.getElementById('artPhoto').files[0];
+    if (file) { const fd = new FormData(); fd.append('file', file); fd.append('article_id', id); await api('article_photo', 'POST', fd, true); }
+    closeModal(); toast('Article enregistré'); await loadArticles();
+    if (!existing) openFicheArticle(id);
+  });
+}
+async function openFicheArticle(id) {
+  go('fiche-article');
+  await loadArticles();
+  const a = S.articles.find(x => x.id === id);
+  document.getElementById('ficheArticleContent').innerHTML = `
+    <div class="grid lg:grid-cols-3 gap-3.5">
+      <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-1">
+        ${a.photo ? `<img src="uploads/${a.photo}" class="w-full aspect-square object-cover rounded-xl border border-line mb-3">` : ''}
+        <h1 class="font-display text-[18px] font-bold">${esc(a.name)}</h1>
+        <p class="text-[12.5px] text-mute">${esc(a.category_name || 'Sans catégorie')} · ${NATURE_LABEL[a.nature]}</p>
+        <div class="mt-3 text-[12.5px] space-y-1">
+          <p>Fournisseur préféré : <b>${esc(a.supplier_name || '—')}</b></p>
+          <p>Prix d'achat : <b>${chf(a.purchase_price)} CHF</b></p>
+          <p>Prix de vente TTC : <b>${chf(a.sale_price_ttc)} CHF</b></p>
+          <p>Stock total (tous attributs) : <b>${a.total_stock ?? '—'}</b></p>
+        </div>
+        <div class="flex gap-2 mt-4 staff-only">
+          <button onclick='modalArticle(${JSON.stringify(a).replace(/'/g,"&#39;")})' class="h-8 px-3 rounded-lg border border-line bg-white text-[12px] font-medium hover:bg-canvas">Modifier l'article</button>
+        </div>
+      </div>
+      <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-2">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold text-[14.5px]">Attributs</h2>
+          <button onclick="modalAttributeBatch(${a.id})" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 staff-only">+ Attribut</button>
+        </div>
+        <div class="space-y-4" id="variantList">${renderVariantList(a)}</div>
+      </div>
+    </div>`;
+  applyRoleVisibility();
+}
+function renderVariantRow(a, v) {
+  const low = v.alert_threshold > 0 && v.total_stock <= v.alert_threshold;
+  return `
+    <div class="flex items-center gap-2 px-3 py-1.5 text-[12px]">
+      <span class="font-medium w-28 shrink-0 truncate">${esc(v.label || 'Standard')}${!v.active ? ' <span class="text-mute font-normal">(inactive)</span>' : ''}</span>
+      <span class="text-mute w-28 shrink-0 truncate">${esc(v.barcode || '—')}</span>
+      <span class="tnum font-semibold w-12 text-right shrink-0 ${low ? 'text-rose2-600' : ''}">${v.total_stock}</span>
+      <div class="ml-auto flex gap-2 shrink-0 staff-only">
+        <button onclick='modalVariantEdit(${a.id}, ${JSON.stringify(v).replace(/'/g,"&#39;")})' class="font-semibold text-mute hover:text-ink">Modifier</button>
+        <button onclick="openVariantHistory(${v.id})" class="font-semibold text-mute hover:text-ink">Historique</button>
+        <button onclick="deleteVariant(${a.id}, ${v.id})" class="font-semibold text-mute hover:text-rose2-600">Supprimer</button>
+      </div>
+    </div>`;
+}
+function renderVariantGroup(a, title, variants, open) {
+  const stock = variants.reduce((s, v) => s + v.total_stock, 0);
+  return `
+    <details class="border border-line rounded-xl overflow-hidden" ${open ? 'open' : ''}>
+      <summary class="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3.5 py-2 bg-canvas/60 hover:bg-canvas transition">
+        <span class="text-[11px] font-semibold uppercase tracking-[.06em] text-mute">${esc(title)} <span class="text-ink normal-case font-normal">(${variants.length})</span></span>
+        <span class="text-[12px] font-bold tnum">${stock}</span>
+      </summary>
+      <div class="divide-y divide-line border-t border-line">${variants.map(v => renderVariantRow(a, v)).join('')}</div>
+    </details>`;
+}
+function renderVariantList(a) {
+  if (!a.variants.length) return '<p class="text-mute text-[12.5px]">Aucun attribut</p>';
+  const groups = {}; const ungrouped = [];
+  a.variants.forEach(v => {
+    if (v.attributes.length) {
+      const attrName = v.attributes[0].attribute_name;
+      (groups[attrName] = groups[attrName] || []).push(v);
+    } else ungrouped.push(v);
+  });
+  const entries = Object.entries(groups);
+  let html = '<div class="space-y-2">';
+  if (ungrouped.length) html += renderVariantGroup(a, 'Général', ungrouped, !entries.length);
+  entries.forEach(([attrName, variants], i) => { html += renderVariantGroup(a, attrName, variants, i === 0 && !ungrouped.length); });
+  html += '</div>';
+  return html;
+}
+function modalAttributeBatch(articleId) {
+  if (!S.attributes.length) { toast('Crée d\'abord un attribut dans Paramètres → Produits', true); return; }
+  openModal('Ajouter un attribut', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Attribut</label><select id="batchAttr" class="field" onchange="renderBatchRows()">${S.attributes.map(attr=>`<option value="${attr.id}">${esc(attr.name)}</option>`).join('')}</select></div>
+      <div><label class="lbl">Lieu de stock initial <span class="font-normal text-mute">(si tu saisis une quantité)</span></label><select id="batchLocation" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
+      <div id="batchRows" class="space-y-2"></div>
+      <button type="button" id="batchAddRow" onclick="addBatchFreeRow()" class="text-[12px] font-semibold text-brand-600 hover:underline hidden">+ Ajouter une valeur</button>
+    </div>`, async () => {
+    const attributeId = +document.getElementById('batchAttr').value;
+    const locationId = +document.getElementById('batchLocation').value;
+    const items = [...document.querySelectorAll('.batch-row')]
+      .filter(row => row.querySelector('.batch-check') ? row.querySelector('.batch-check').checked : true)
+      .map(row => ({
+        value: row.querySelector('.batch-value').value || row.querySelector('.batch-value').dataset.value || '',
+        barcode: row.querySelector('.batch-barcode').value,
+        quantity: +row.querySelector('.batch-qty').value || 0,
+      }))
+      .filter(it => it.value);
+    if (!items.length) throw new Error('Sélectionne ou saisis au moins une valeur');
+    await api('variants_batch', 'POST', { article_id: articleId, attribute_id: attributeId, location_id: locationId, items });
+    closeModal(); toast('Attribut ajouté'); openFicheArticle(articleId);
+  });
+  renderBatchRows();
+}
+function renderBatchRows() {
+  const attrId = +document.getElementById('batchAttr').value;
+  const attr = S.attributes.find(a => a.id === attrId);
+  const wrap = document.getElementById('batchRows');
+  const addBtn = document.getElementById('batchAddRow');
+  if (attr && attr.values && attr.values.length) {
+    wrap.innerHTML = attr.values.map(v => `
+      <div class="batch-row flex items-center gap-2">
+        <label class="flex items-center gap-1.5 w-24 shrink-0 text-[12.5px]"><input type="checkbox" class="batch-check" checked><span class="batch-value" data-value="${esc(v.value)}">${esc(v.value)}</span></label>
+        <input class="batch-barcode field" placeholder="Code-barres">
+        <input class="batch-qty field w-24" type="number" min="0" step="1" placeholder="Stock initial">
+      </div>`).join('');
+    addBtn.classList.add('hidden');
+  } else {
+    wrap.innerHTML = '';
+    addBtn.classList.remove('hidden');
+    addBatchFreeRow();
+  }
+}
+function addBatchFreeRow() {
+  const wrap = document.getElementById('batchRows');
+  const row = document.createElement('div');
+  row.className = 'batch-row flex items-center gap-2';
+  row.innerHTML = `<input class="batch-value field w-24" placeholder="Valeur">
+    <input class="batch-barcode field" placeholder="Code-barres">
+    <input class="batch-qty field w-24" type="number" min="0" step="1" placeholder="Stock initial">
+    <button type="button" onclick="this.parentElement.remove()" class="text-mute hover:text-rose2-600 px-1">✕</button>`;
+  wrap.appendChild(row);
+}
+function modalVariantEdit(articleId, v) {
+  openModal('Modifier ' + (v.label || 'Standard'), `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Code-barres</label><input id="varBarcode" class="field" value="${esc(v.barcode||'')}"></div>
+      <div><label class="lbl">Seuil d'alerte</label><input id="varThreshold" type="number" min="0" class="field" value="${v.alert_threshold||0}"></div>
+      <div><label class="lbl">Statut</label><select id="varActive" class="field"><option value="1" ${v.active?'selected':''}>Active</option><option value="0" ${!v.active?'selected':''}>Inactive</option></select></div>
+    </div>`, async () => {
+    await api('variants', 'PUT', { id: v.id, barcode: document.getElementById('varBarcode').value, alert_threshold: +document.getElementById('varThreshold').value, active: +document.getElementById('varActive').value });
+    closeModal(); toast('Modifié'); openFicheArticle(articleId);
+  });
+}
+async function deleteVariant(articleId, variantId) {
+  if (!confirm('Supprimer cette valeur ? Son historique de stock, demandes et commandes liées sera aussi supprimé.')) return;
+  await api('variants&id=' + variantId, 'DELETE');
+  toast('Supprimé'); openFicheArticle(articleId);
+}
+async function openVariantHistory(variantId) {
+  const variant = flattenVariants(S.articles).find(v => v.id === variantId);
+  const label = variant ? variant.display_name : 'Variante';
+  const hist = await api('article_history', 'GET', { id: variantId });
+  openModal('Historique — ' + label, `
+    <div class="space-y-2.5 max-h-[420px] overflow-y-auto">
+      ${hist.length ? hist.map(h => `<div class="flex items-start gap-2.5 pb-2.5 border-b border-line last:border-0"><span class="text-[10.5px] text-mute w-20 shrink-0 tnum">${dateCH(h.date)}</span><p class="text-[12.5px]">${esc(h.label)}</p></div>`).join('') : '<p class="text-mute text-[12.5px]">Aucun historique</p>'}
+    </div>`, () => closeModal());
+  document.getElementById('modalSubmit').textContent = 'Fermer';
+}
+
+const ARTICLE_CSV_HEADERS = ['name','category','nature','barcode','unit','purchase_price','sale_price_ttc','alert_threshold'];
+function csvEscape(v) { v = String(v ?? ''); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; }
+function downloadCSV(filename, rows) {
+  const blob = new Blob(['﻿' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+function downloadBlankTemplate() { downloadCSV('modele-catalogue-vierge.csv', [ARTICLE_CSV_HEADERS]); }
+function articlesToCSVRows(arts) {
+  const rows = [ARTICLE_CSV_HEADERS];
+  arts.forEach(a => (a.variants || []).forEach(v => {
+    rows.push([a.name, a.category_name || '', a.nature, v.barcode || '', a.unit, a.purchase_price, a.sale_price_ttc, v.alert_threshold]);
+  }));
+  return rows;
+}
+async function modalExportArticles() {
+  await ensureArticles();
+  openModal('Exporter le catalogue', `
+    <div class="space-y-3.5">
+      <div>
+        <label class="lbl">Catégories <span class="font-normal text-mute">(optionnel — laisser vide = toutes)</span></label>
+        <select id="expCats" multiple size="6" class="w-full border border-line rounded-lg text-[12.5px] p-2 outline-none focus:border-brand-500">
+          ${S.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label class="lbl">Articles précis <span class="font-normal text-mute">(optionnel — laisser vide = tous ceux des catégories choisies)</span></label>
+        <select id="expArts" multiple size="8" class="w-full border border-line rounded-lg text-[12.5px] p-2 outline-none focus:border-brand-500">
+          ${S.articles.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>`, async () => {
+    const catIds = [...document.getElementById('expCats').selectedOptions].map(o => +o.value);
+    const artIds = [...document.getElementById('expArts').selectedOptions].map(o => +o.value);
+    let arts = S.articles;
+    if (catIds.length) arts = arts.filter(a => catIds.includes(a.category_id));
+    if (artIds.length) arts = arts.filter(a => artIds.includes(a.id));
+    if (!arts.length) throw new Error('Aucun article ne correspond à cette sélection');
+    downloadCSV('catalogue-articles.csv', articlesToCSVRows(arts));
+    closeModal(); toast(arts.length + ' article(s) exporté(s)');
+  });
+}
+async function modalImport() {
+  openModal('Importer un catalogue', `
+    <p class="text-[12.5px] text-mute mb-3">Fichier CSV avec colonnes : name, category, nature (vendable/interne), barcode, unit, purchase_price, sale_price_ttc, alert_threshold.</p>
+    <button type="button" onclick="downloadBlankTemplate()" class="text-[12px] font-semibold text-brand-600 hover:underline mb-3">Télécharger le modèle vierge (CSV)</button>
+    <input id="importFile" type="file" accept=".csv" class="field">
+  `, async () => {
+    const file = document.getElementById('importFile').files[0];
+    if (!file) throw new Error('Choisir un fichier CSV');
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows = lines.slice(1).map(l => {
+      const cells = l.split(',');
+      const o = {}; headers.forEach((h, idx) => o[h] = (cells[idx] || '').trim());
+      return o;
+    });
+    const r = await api('articles_import', 'POST', { articles: rows });
+    closeModal(); toast(`${r.created} article(s) importé(s), ${r.skipped} ignoré(s)`); loadArticles();
+  });
+}
+
+/* ================================================================ STOCK */
+async function loadStock() {
+  const rows = await api('stock');
+  document.getElementById('stockRows').innerHTML = rows.map(r => `
+    <tr>
+      <td class="px-4 py-2.5 font-medium">${esc(r.article_name)}${r.variant_label && r.variant_label !== 'Standard' ? ` <span class="text-mute font-normal">— ${esc(r.variant_label)}</span>` : ''}</td>
+      <td class="px-4 py-2.5">${esc(r.location_name)}</td>
+      <td class="px-4 py-2.5 text-right tnum ${r.alert_threshold>0 && r.quantity<=r.alert_threshold ? 'text-rose2-600 font-bold':''}">${r.quantity}</td>
+      <td class="px-4 py-2.5 text-mute">${r.alert_threshold || '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="px-4 py-8 text-center text-mute">Aucun mouvement de stock</td></tr>';
+}
+async function modalMovement() {
+  const variants = await ensureVariants();
+  openModal('Nouveau mouvement de stock', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Article</label><select id="movVariant" class="field">${variants.map(v=>`<option value="${v.id}">${esc(v.display_name)}</option>`).join('')}</select></div>
+      <div><label class="lbl">Lieu</label><select id="movLocation" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Type</label><select id="movType" class="field"><option value="entry">Entrée</option><option value="exit">Sortie</option><option value="adjustment">Ajustement</option></select></div>
+        <div><label class="lbl">Quantité</label><input id="movQty" type="number" min="0.01" step="0.01" value="1" class="field"></div>
+      </div>
+      <div><label class="lbl">Motif</label><input id="movReason" class="field"></div>
+    </div>`, async () => {
+    await api('stock_movement', 'POST', { variant_id: +document.getElementById('movVariant').value, location_id: +document.getElementById('movLocation').value, type: document.getElementById('movType').value, quantity: +document.getElementById('movQty').value, reason: document.getElementById('movReason').value });
+    closeModal(); toast('Mouvement enregistré'); loadStock(); loadArticles();
+  });
+}
+async function modalTransfer() {
+  const variants = await ensureVariants();
+  openModal('Transfert entre lieux', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Article</label><select id="trfVariant" class="field">${variants.map(v=>`<option value="${v.id}">${esc(v.display_name)}</option>`).join('')}</select></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">De</label><select id="trfFrom" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
+        <div><label class="lbl">Vers</label><select id="trfTo" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
+      </div>
+      <div><label class="lbl">Quantité</label><input id="trfQty" type="number" min="0.01" step="0.01" value="1" class="field"></div>
+    </div>`, async () => {
+    await api('stock_transfer', 'POST', { variant_id: +document.getElementById('trfVariant').value, from_location_id: +document.getElementById('trfFrom').value, to_location_id: +document.getElementById('trfTo').value, quantity: +document.getElementById('trfQty').value });
+    closeModal(); toast('Transfert effectué'); loadStock();
+  });
+}
+
+/* ================================================================ COMMANDES FOURNISSEURS */
+async function loadOrders() {
+  const rows = await api('orders');
+  S.orders = rows;
+  document.getElementById('ordersSub').textContent = rows.length + ' commande(s)';
+  document.getElementById('orderRows').innerHTML = rows.map(o => `
+    <tr class="cursor-pointer hover:bg-canvas/50" onclick="openFicheCommande(${o.id})">
+      <td class="px-4 py-2.5 font-medium">#${o.id}</td>
+      <td class="px-4 py-2.5">${esc(o.supplier_name)}</td>
+      <td class="px-4 py-2.5"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${orderBadge(o.status)}">${ORDER_STATUS_LABEL[o.status]}</span></td>
+      <td class="px-4 py-2.5 text-mute">${dateCH(o.expected_date)}</td>
+      <td class="px-4 py-2.5 text-right tnum">${chf(o.total)}</td>
+      <td class="px-4 py-2.5"></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="px-4 py-8 text-center text-mute">Aucune commande</td></tr>';
+}
+async function modalOrder() {
+  await ensureVariants();
+  openModal('Nouvelle commande fournisseur', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Fournisseur</label><select id="ordSupplier" class="field">${S.suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></div>
+      <div><label class="lbl">Livraison prévue</label><input id="ordExpected" type="date" class="field"></div>
+      <div>
+        <label class="lbl">Lignes</label>
+        <div id="ordLines" class="space-y-2"></div>
+        <button type="button" onclick="addOrderLine()" class="text-[12px] font-semibold text-brand-600 hover:underline mt-1">+ Ajouter une ligne</button>
+      </div>
+      <div><label class="lbl">Notes</label><textarea id="ordNotes" class="field" rows="2"></textarea></div>
+    </div>`, async () => {
+    const lines = [...document.querySelectorAll('#ordLines .ord-line')].map(row => ({ variant_id: +row.querySelector('.ol-art').value, quantity: +row.querySelector('.ol-qty').value, unit_price: +row.querySelector('.ol-price').value })).filter(l => l.variant_id && l.quantity > 0);
+    if (!lines.length) throw new Error('Au moins une ligne requise');
+    await api('orders', 'POST', { supplier_id: +document.getElementById('ordSupplier').value, expected_date: document.getElementById('ordExpected').value, notes: document.getElementById('ordNotes').value, lines });
+    closeModal(); toast('Commande créée'); loadOrders();
+  });
+  addOrderLine();
+}
+function addOrderLine() {
+  const wrap = document.getElementById('ordLines');
+  const variants = flattenVariants(S.articles);
+  const row = document.createElement('div');
+  row.className = 'ord-line flex gap-2';
+  row.innerHTML = `<select class="ol-art field">${variants.map(v=>`<option value="${v.id}" data-price="${v.purchase_price}">${esc(v.display_name)}</option>`).join('')}</select>
+    <input class="ol-qty field w-20" type="number" min="1" value="1">
+    <input class="ol-price field w-24" type="number" step="0.01" placeholder="Prix">
+    <button type="button" onclick="this.parentElement.remove()" class="text-mute hover:text-rose2-600 px-1">✕</button>`;
+  wrap.appendChild(row);
+  const sel = row.querySelector('.ol-art'), price = row.querySelector('.ol-price');
+  const setPrice = () => price.value = sel.selectedOptions[0]?.dataset.price || 0;
+  sel.addEventListener('change', setPrice); setPrice();
+}
+
+async function openFicheCommande(id) {
+  go('fiche-commande');
+  const o = await api('orders', 'GET', { id });
+  document.getElementById('ficheCommandeContent').innerHTML = `
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+      <div><h1 class="font-display text-[20px] font-bold">Commande #${o.id} — ${esc(o.supplier_name)}</h1>
+        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${orderBadge(o.status)}">${ORDER_STATUS_LABEL[o.status]}</span></div>
+      <div class="flex flex-wrap gap-2 staff-only">
+        ${o.status==='draft' ? `<button onclick="setOrderStatus(${o.id},'sent')" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Marquer envoyée</button>` : ''}
+        ${o.status==='sent' ? `<button onclick="setOrderStatus(${o.id},'confirmed')" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Marquer confirmée</button>` : ''}
+        ${['sent','confirmed','received_partial'].includes(o.status) ? `<button onclick="modalReceive(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Réceptionner</button>` : ''}
+        <button onclick="printOrder(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Générer le bon de commande</button>
+        <button onclick="modalInvoice(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">+ Facture</button>
+      </div>
+    </div>
+    <div class="grid lg:grid-cols-3 gap-3.5">
+      <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-2">
+        <h2 class="font-semibold text-[14.5px] mb-3">Lignes</h2>
+        <table class="w-full text-[12.5px]"><thead><tr class="text-left text-[11px] uppercase text-mute border-b border-line"><th class="py-2">Article</th><th class="py-2 text-right">Commandé</th><th class="py-2 text-right">Reçu</th><th class="py-2 text-right">Prix</th><th class="py-2 text-right">Total</th></tr></thead>
+        <tbody>${o.lines.map(l => `<tr class="border-b border-line last:border-0"><td class="py-2">${esc(lineName(l))}</td><td class="py-2 text-right tnum">${l.quantity_ordered}</td><td class="py-2 text-right tnum">${l.quantity_received}</td><td class="py-2 text-right tnum">${chf(l.unit_price)}</td><td class="py-2 text-right tnum">${chf(l.quantity_ordered*l.unit_price)}</td></tr>`).join('')}</tbody></table>
+        <h2 class="font-semibold text-[14.5px] mt-5 mb-2">Factures liées</h2>
+        ${o.invoices.length ? o.invoices.map(f => `<p class="text-[12.5px]"><a href="api.php?action=download&file=${encodeURIComponent(f.filename)}" class="text-brand-600 hover:underline">${dateCH(f.invoice_date)} — ${chf(f.amount)} CHF</a></p>`).join('') : '<p class="text-mute text-[12.5px]">Aucune facture</p>'}
+      </div>
+      <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
+        <h2 class="font-semibold text-[14.5px] mb-2">Détails</h2>
+        <p class="text-[12.5px] text-mute">Livraison prévue : <b class="text-ink">${dateCH(o.expected_date)}</b></p>
+        <p class="text-[12.5px] text-mute mt-1">Fournisseur : <b class="text-ink">${esc(o.supplier_name)}</b></p>
+        <p class="text-[12.5px] text-mute mt-1">${esc(o.supplier_email||'')}</p>
+        <p class="text-[12.5px] text-mute">${esc(o.supplier_phone||'')}</p>
+        <p class="text-[12.5px] text-mute mt-1 whitespace-pre-line">${esc(o.supplier_address||'')}</p>
+        ${o.notes ? `<p class="text-[12.5px] mt-3 pt-3 border-t border-line">${esc(o.notes)}</p>` : ''}
+      </div>
+    </div>`;
+  applyRoleVisibility();
+  window._currentOrder = o;
+}
+function lineName(l) { return l.article_name + (l.variant_label && l.variant_label !== 'Standard' ? ' — ' + l.variant_label : ''); }
+async function setOrderStatus(id, status) { await api('orders', 'PUT', { id, status }); toast('Commande mise à jour'); openFicheCommande(id); }
+function modalReceive(orderId) {
+  const o = window._currentOrder;
+  openModal('Réception de commande', `
+    <div class="space-y-3">
+      <div><label class="lbl">Lieu de réception</label><select id="recLocation" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
+      ${o.lines.map(l => `<div class="flex items-center gap-2"><span class="flex-1 text-[12.5px]">${esc(lineName(l))} (reste ${l.quantity_ordered-l.quantity_received})</span><input class="rec-line field w-24" data-line="${l.id}" type="number" min="0" step="0.01" value="${l.quantity_ordered-l.quantity_received}"></div>`).join('')}
+    </div>`, async () => {
+    const lines = [...document.querySelectorAll('.rec-line')].map(inp => ({ line_id: +inp.dataset.line, quantity_received: +inp.value })).filter(l => l.quantity_received > 0);
+    await api('orders_receive', 'POST', { order_id: orderId, location_id: +document.getElementById('recLocation').value, lines });
+    closeModal(); toast('Réception enregistrée'); openFicheCommande(orderId); loadArticles();
+  });
+}
+function modalInvoice(orderId) {
+  openModal('Ajouter une facture', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Montant (CHF)</label><input id="invAmount" type="number" step="0.01" class="field"></div>
+      <div><label class="lbl">Date de facture</label><input id="invDate" type="date" class="field"></div>
+      <div><label class="lbl">Fichier (PDF/image)</label><input id="invFile" type="file" accept=".pdf,image/*" class="field"></div>
+    </div>`, async () => {
+    const file = document.getElementById('invFile').files[0];
+    if (!file) throw new Error('Fichier requis');
+    const fd = new FormData(); fd.append('file', file); fd.append('order_id', orderId); fd.append('amount', document.getElementById('invAmount').value); fd.append('invoice_date', document.getElementById('invDate').value);
+    await api('invoice_upload', 'POST', fd, true);
+    closeModal(); toast('Facture ajoutée'); openFicheCommande(orderId);
+  });
+}
+function printOrder(id) {
+  const o = window._currentOrder;
+  const rows = o.lines.map(l => `<tr><td>${esc(lineName(l))}</td><td style="text-align:right">${l.quantity_ordered}</td><td style="text-align:right">${chf(l.unit_price)}</td><td style="text-align:right">${chf(l.quantity_ordered*l.unit_price)}</td></tr>`).join('');
+  const total = o.lines.reduce((s,l)=>s+l.quantity_ordered*l.unit_price,0);
+  document.getElementById('printZone').innerHTML = `
+    <div style="font-family:Inter,sans-serif;padding:32px;max-width:720px;margin:0 auto;">
+      <div style="display:flex;justify-content:space-between;border-bottom:2px solid #15140F;padding-bottom:16px;margin-bottom:24px;">
+        <div><h1 style="font-family:Sora,sans-serif;font-size:20px;margin:0;">Bon de commande #${o.id}</h1><p style="color:#6E6C61;font-size:12px;">Meyrin FC</p></div>
+        <div style="text-align:right;font-size:12px;color:#6E6C61;">Édité le ${new Date().toLocaleDateString('fr-CH')}</div>
+      </div>
+      <p style="font-size:13px;"><b>Fournisseur :</b> ${esc(o.supplier_name)}<br>${esc(o.supplier_address||'')}<br>${esc(o.supplier_email||'')} ${esc(o.supplier_phone||'')}</p>
+      <p style="font-size:13px;"><b>Livraison souhaitée :</b> ${dateCH(o.expected_date)}</p>
+      <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;">
+        <thead><tr style="background:#ffdd00;"><th style="padding:6px;text-align:left;">Article</th><th style="padding:6px;text-align:right;">Qté</th><th style="padding:6px;text-align:right;">Prix</th><th style="padding:6px;text-align:right;">Total</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="3" style="padding:6px;text-align:right;font-weight:bold;">Total</td><td style="padding:6px;text-align:right;font-weight:bold;">${chf(total)} CHF</td></tr></tfoot>
+      </table>
+      ${o.notes ? `<p style="font-size:12px;margin-top:16px;">${esc(o.notes)}</p>` : ''}
+    </div>`;
+  setTimeout(() => window.print(), 60);
+}
+
+/* ================================================================ ÉTIQUETTES */
+async function loadLabelSelect() {
+  const variants = await ensureVariants();
+  document.getElementById('labelArticles').innerHTML = variants.filter(v => v.barcode).map(v => `<option value="${v.id}">${esc(v.display_name)} — ${esc(v.barcode)}</option>`).join('') || '<option disabled>Aucune variante avec code-barres</option>';
+}
+const LABEL_SIZES = { '62x29': [62,29], '62x100': [62,100], '29x90': [29,90], '62cont': [62,40] };
+function generateLabels() {
+  const ids = [...document.getElementById('labelArticles').selectedOptions].map(o => +o.value);
+  if (!ids.length) { toast('Sélectionner au moins un article', true); return; }
+  const copies = +document.getElementById('labelCopies').value || 1;
+  const [w, h] = LABEL_SIZES[document.getElementById('labelFormat').value];
+  const variants = flattenVariants(S.articles).filter(v => ids.includes(v.id));
+  const preview = document.getElementById('labelPreview');
+  preview.innerHTML = '';
+  variants.forEach(v => {
+    for (let i = 0; i < copies; i++) {
+      const div = document.createElement('div');
+      div.className = 'label-item border border-line rounded-lg p-2 bg-white';
+      div.style.width = (w * 3) + 'px';
+      div.innerHTML = `<p style="font-size:10px;font-weight:600;margin:0 0 2px;">${esc(v.display_name)}</p><svg class="lbl-svg"></svg><p style="font-size:9px;margin:2px 0 0;">${chf(v.sale_price_ttc)} CHF</p>`;
+      preview.appendChild(div);
+      JsBarcode(div.querySelector('.lbl-svg'), v.barcode, { format: 'CODE128', height: h, displayValue: true, fontSize: 10, margin: 2 });
+    }
+  });
+}
+function printLabels() {
+  const items = document.getElementById('labelPreview').innerHTML;
+  if (!items.trim()) { toast('Générer un aperçu avant d\'imprimer', true); return; }
+  document.getElementById('printZone').innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;">${items}</div>`;
+  setTimeout(() => window.print(), 60);
+}
+
+/* ================================================================ BUDGETS */
+async function loadBudgets() {
+  const d = await api('budgets');
+  S.budgets = d.budgets;
+  document.getElementById('budgetsSub').textContent = 'Exercice ' + d.fiscal_year;
+  document.getElementById('budgetCards').innerHTML = d.budgets.map(b => `
+    <div class="bg-white border border-line rounded-xl2 shadow-card p-4">
+      <div class="flex items-center justify-between mb-2"><p class="font-semibold text-[13.5px]">${esc(b.category_name)}</p>
+        <button onclick='editBudget(${JSON.stringify(b).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Modifier</button></div>
+      ${budgetBar(b)}
+    </div>`).join('') || '<p class="text-mute text-[13px]">Aucun budget pour cet exercice</p>';
+}
+function modalBudget(existing) {
+  const b = existing || {};
+  openModal(existing ? 'Modifier le budget' : 'Nouveau budget', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Catégorie</label><select id="budCat" class="field" ${existing?'disabled':''}>${S.categories.map(c=>`<option value="${c.id}" ${b.category_id==c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+      <div><label class="lbl">Montant alloué (CHF)</label><input id="budAmount" type="number" step="0.01" class="field" value="${b.amount_allocated||0}"></div>
+    </div>`, async () => {
+    if (existing) await api('budgets', 'PUT', { id: b.id, amount_allocated: +document.getElementById('budAmount').value });
+    else await api('budgets', 'POST', { category_id: +document.getElementById('budCat').value, amount_allocated: +document.getElementById('budAmount').value });
+    closeModal(); toast('Budget enregistré'); loadBudgets();
+  });
+}
+function editBudget(b) { modalBudget(b); }
+
+/* ================================================================ RAPPORTS */
+async function loadReportFilters() {
+  document.getElementById('repCat').innerHTML = '<option value="">Toutes</option>' + S.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  document.getElementById('repSupplier').innerHTML = '<option value="">Tous</option>' + S.suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  document.getElementById('repLoc').innerHTML = '<option value="">Tous</option>' + S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  loadReports();
+}
+function reportParams() {
+  return { from: document.getElementById('repFrom').value, to: document.getElementById('repTo').value, category_id: document.getElementById('repCat').value, supplier_id: document.getElementById('repSupplier').value, location_id: document.getElementById('repLoc').value };
+}
+async function loadReports() {
+  const d = await api('reports', 'GET', reportParams());
+  document.getElementById('repByCategory').innerHTML = Object.entries(d.by_category).map(([k,v]) => `<div class="flex items-center justify-between py-1.5 border-b border-line last:border-0"><span class="text-[12.5px]">${esc(k)}</span><span class="text-[12.5px] font-semibold tnum">${chf(v)} CHF</span></div>`).join('') || '<p class="text-mute text-[12.5px]">Aucune donnée</p>';
+  document.getElementById('repRows').innerHTML = d.rows.map(r => `<tr><td class="px-4 py-2">${dateCH(r.created_at)}</td><td class="px-4 py-2">${esc(lineName(r))}</td><td class="px-4 py-2">${esc(r.supplier_name)}</td><td class="px-4 py-2 text-right tnum">${r.quantity_ordered}</td><td class="px-4 py-2 text-right tnum">${chf(r.total)}</td></tr>`).join('') || '<tr><td colspan="5" class="px-4 py-8 text-center text-mute">Aucune donnée</td></tr>';
+}
+function exportOdoo() {
+  const p = new URLSearchParams({ ...reportParams(), format: 'odoo' });
+  window.open('api.php?action=reports&' + p.toString(), '_blank');
+}
+
+/* ================================================================ PARAMÈTRES */
+let paramTab = 'produits';
+function setParamTab(tab) {
+  paramTab = tab;
+  document.querySelectorAll('.ptab-btn').forEach(b => b.classList.toggle('active', b.dataset.ptab === tab));
+  document.querySelectorAll('.ptab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.ptabPanel !== tab));
+}
+async function loadSettingsView() {
+  setParamTab(paramTab);
+  document.getElementById('locationList').innerHTML = S.locations.map(l => `<div class="flex items-center justify-between text-[12.5px]"><span>${esc(l.name)} ${!l.active?'<span class=\"text-mute\">(inactif)</span>':''}</span><button onclick='editLocation(${JSON.stringify(l).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Modifier</button></div>`).join('') || '<p class="text-mute text-[12.5px]">Aucun lieu</p>';
+  document.getElementById('categoryList').innerHTML = S.categories.map(c => `<div class="flex items-center justify-between text-[12.5px]"><span>${esc(c.name)}</span><button onclick='editCategory(${JSON.stringify(c).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Modifier</button></div>`).join('') || '<p class="text-mute text-[12.5px]">Aucune catégorie</p>';
+  document.getElementById('attributeList').innerHTML = S.attributes.map(a => `<div class="flex items-center justify-between text-[12.5px]"><div><span>${esc(a.name)}</span>${a.values.length ? `<span class="text-mute"> — ${a.values.map(v=>esc(v.value)).join(', ')}</span>` : ''}</div><div class="space-x-2 shrink-0"><button onclick='modalAttributeValues(${JSON.stringify(a).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Valeurs</button><button onclick='editAttribute(${JSON.stringify(a).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Modifier</button><button onclick="deleteAttribute(${a.id})" class="text-mute hover:text-rose2-600 text-[11px]">Supprimer</button></div></div>`).join('') || '<p class="text-mute text-[12.5px]">Aucun attribut</p>';
+  if (isAdmin()) {
+    const users = await api('users');
+    document.getElementById('userList').innerHTML = users.map(u => `
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-full grid place-items-center text-[11px] font-semibold ${avatarC(u.id)}">${initials(u.name)}</div>
+        <div class="flex-1"><p class="text-[12.5px] font-medium">${esc(u.name)}</p><p class="text-[11px] text-mute">${esc(u.email)}</p></div>
+        <select onchange="updateUserRole(${u.id}, this.value)" class="h-7 px-2 rounded-lg border border-line text-[11.5px]">
+          <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
+          <option value="responsable" ${u.role==='responsable'?'selected':''}>Responsable</option>
+          <option value="demandeur" ${u.role==='demandeur'?'selected':''}>Demandeur</option>
+        </select>
+      </div>`).join('');
+    const set = await api('settings');
+    document.getElementById('setFyMonth').value = set.fiscal_year_start_month;
+    document.getElementById('setReqDays').value = set.request_stale_days;
+    document.getElementById('setOrdDays').value = set.order_forgotten_days;
+    document.getElementById('caisseKey').textContent = set.caisse_api_key;
+  }
+}
+function modalLocation(existing) {
+  const l = existing || {};
+  openModal(existing ? 'Modifier le lieu' : 'Nouveau lieu', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Nom</label><input id="locName" class="field" value="${esc(l.name||'')}"></div>
+      ${existing ? `<div><label class="lbl">Statut</label><select id="locActive" class="field"><option value="1" ${l.active?'selected':''}>Actif</option><option value="0" ${!l.active?'selected':''}>Inactif</option></select></div>` : ''}
+    </div>`, async () => {
+    if (existing) await api('locations', 'PUT', { id: l.id, name: document.getElementById('locName').value, active: +document.getElementById('locActive').value });
+    else await api('locations', 'POST', { name: document.getElementById('locName').value });
+    closeModal(); toast('Lieu enregistré'); await loadRefData(); loadSettingsView();
+  });
+}
+function editLocation(l) { modalLocation(l); }
+function modalCategory(existing) {
+  const c = existing || {};
+  openModal(existing ? 'Modifier la catégorie' : 'Nouvelle catégorie', `<div><label class="lbl">Nom</label><input id="catName" class="field" value="${esc(c.name||'')}"></div>`, async () => {
+    if (existing) await api('categories', 'PUT', { id: c.id, name: document.getElementById('catName').value });
+    else await api('categories', 'POST', { name: document.getElementById('catName').value });
+    closeModal(); toast('Catégorie enregistrée'); await loadRefData(); loadSettingsView();
+  });
+}
+function editCategory(c) { modalCategory(c); }
+function modalAttribute(existing) {
+  const a = existing || {};
+  openModal(existing ? 'Modifier l\'attribut' : 'Nouvel attribut', `<div><label class="lbl">Nom</label><input id="attrName" class="field" placeholder="Ex. Taille, Couleur…" value="${esc(a.name||'')}"></div>`, async () => {
+    if (existing) await api('attributes', 'PUT', { id: a.id, name: document.getElementById('attrName').value });
+    else await api('attributes', 'POST', { name: document.getElementById('attrName').value });
+    closeModal(); toast('Attribut enregistré'); await loadRefData(); loadSettingsView();
+  });
+}
+function editAttribute(a) { modalAttribute(a); }
+async function deleteAttribute(id) {
+  const attr = S.attributes.find(a => a.id === id);
+  const name = attr ? attr.name : 'cet attribut';
+  if (!confirm(`Supprimer l'attribut « ${name} » ? Les articles qui l'utilisent perdront ce regroupement (leurs variantes existantes ne sont pas supprimées).`)) return;
+  await api('attributes&id=' + id, 'DELETE');
+  toast('Attribut supprimé'); await loadRefData(); loadSettingsView();
+}
+function renderAttributeValuesBody(attr) {
+  return `
+    <p class="text-[12px] text-mute mb-3">Valeurs possibles pour <b class="text-ink">${esc(attr.name)}</b> (ex. XS, S, M, L…), proposées ensuite en liste déroulante sur chaque article.</p>
+    <div class="space-y-1.5 mb-3" id="attrValuesList">
+      ${attr.values.length ? attr.values.map(v => `<div class="flex items-center justify-between text-[12.5px] bg-canvas rounded-lg px-3 py-1.5"><span>${esc(v.value)}</span><button onclick="deleteAttributeValue(${attr.id}, ${v.id})" class="text-mute hover:text-rose2-600">✕</button></div>`).join('') : '<p class="text-mute text-[12.5px]">Aucune valeur pour l\'instant</p>'}
+    </div>
+    <div class="flex gap-2">
+      <input id="newAttrValue" class="field" placeholder="Nouvelle valeur…" onkeydown="if(event.key==='Enter'){event.preventDefault();addAttributeValue(${attr.id})}">
+      <button type="button" onclick="addAttributeValue(${attr.id})" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shrink-0">Ajouter</button>
+    </div>`;
+}
+function modalAttributeValues(attr) {
+  openModal('Valeurs — ' + attr.name, renderAttributeValuesBody(attr), () => closeModal());
+  document.getElementById('modalSubmit').textContent = 'Fermer';
+}
+async function refreshAttributeValuesModal(attrId) {
+  await loadRefData();
+  const attr = S.attributes.find(a => a.id === attrId);
+  document.getElementById('modalBody').innerHTML = renderAttributeValuesBody(attr);
+  loadSettingsView();
+}
+async function addAttributeValue(attrId) {
+  const input = document.getElementById('newAttrValue');
+  const value = input.value.trim();
+  if (!value) return;
+  try { await api('attribute_values', 'POST', { attribute_id: attrId, value }); await refreshAttributeValuesModal(attrId); }
+  catch (e) { toast(e.message, true); }
+}
+async function deleteAttributeValue(attrId, valueId) {
+  await api('attribute_values&id=' + valueId, 'DELETE');
+  await refreshAttributeValuesModal(attrId);
+}
+function modalUser() {
+  openModal('Inviter un membre', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Nom</label><input id="usrName" class="field"></div>
+      <div><label class="lbl">E-mail</label><input id="usrEmail" type="email" class="field"></div>
+      <div><label class="lbl">Rôle</label><select id="usrRole" class="field"><option value="demandeur">Demandeur</option><option value="responsable">Responsable achats</option><option value="admin">Admin</option></select></div>
+      <div><label class="lbl">Mot de passe provisoire</label><input id="usrPass" type="password" class="field"></div>
+    </div>`, async () => {
+    await api('users', 'POST', { name: document.getElementById('usrName').value, email: document.getElementById('usrEmail').value, role: document.getElementById('usrRole').value, password: document.getElementById('usrPass').value });
+    closeModal(); toast('Membre invité'); loadSettingsView();
+  });
+}
+async function updateUserRole(id, role) { await api('users', 'PUT', { id, role }); toast('Rôle mis à jour'); }
+async function saveSettings() {
+  await api('settings', 'PUT', { fiscal_year_start_month: document.getElementById('setFyMonth').value, request_stale_days: document.getElementById('setReqDays').value, order_forgotten_days: document.getElementById('setOrdDays').value });
+  toast('Paramètres enregistrés'); loadDashboard();
+}
+async function changePassword() {
+  try {
+    await api('change_password', 'POST', { old: document.getElementById('pwOld').value, new: document.getElementById('pwNew').value });
+    toast('Mot de passe changé'); document.getElementById('pwOld').value=''; document.getElementById('pwNew').value='';
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ================================================================ DÉMARRAGE */
+boot();
+</script>
+</body>
+</html>

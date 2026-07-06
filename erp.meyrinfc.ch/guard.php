@@ -11,7 +11,7 @@
  */
 
 // ── Config (doit correspondre à l'ERP) ─────────────────────────────────────
-const GUARD_JWT_SECRET    = 'YPeBEiu4XgHx6,c/s@<GiwPp6*iNF9z0&/gGuOg|COs|j.St';
+const GUARD_JWT_SECRET    = 'w`ct^\'3:O[Y1Su?Xp+V,P{Mo54B.ab]9HRE~>JDn;_=}g!"L';
 const GUARD_COOKIE_NAME   = 'mfc_session';
 const GUARD_ERP_URL       = 'https://erp.meyrinfc.ch';
 

@@ -1,0 +1,10 @@
+# Serveur
+.user.ini
+.infomaniak-maintenance.html
+
+# Base de données
+data/*.sqlite
+
+# Uploads (fichiers binaires)
+uploads/*
+!uploads/.gitkeep

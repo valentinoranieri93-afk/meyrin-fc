@@ -3,14 +3,14 @@
     "label": "Administrateur",
     "color": "#7B59D8",
     "color_bg": "#EEE8FB",
-    "apps": ["events", "sponsors", "caisse", "arbitrage"],
+    "apps": ["events", "sponsors", "caisse", "arbitrage", "commandes"],
     "can_access_settings": true
   },
   "staff": {
     "label": "Staff",
     "color": "#3B6FE0",
     "color_bg": "#E6EDFB",
-    "apps": ["events", "sponsors", "arbitrage"],
+    "apps": ["events", "sponsors", "arbitrage", "commandes"],
     "can_access_settings": false
   },
   "stagiaire": {
@@ -18,6 +18,13 @@
     "color": "#E8902A",
     "color_bg": "#FCEEDB",
     "apps": ["events"],
+    "can_access_settings": false
+  },
+  "coach": {
+    "label": "Coach",
+    "color": "#D8463A",
+    "color_bg": "#FBE7E4",
+    "apps": ["commandes"],
     "can_access_settings": false
   }
 }

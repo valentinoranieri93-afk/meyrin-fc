@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * guard.php — Copié depuis erp.meyrinfc.ch/guard.php
  * La clé JWT_SECRET DOIT correspondre à celle de config.php dans l'ERP.
