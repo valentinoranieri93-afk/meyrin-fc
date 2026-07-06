@@ -46,6 +46,9 @@ tailwind.config = {
   .ptab-btn { background:#fff; border:1px solid #E9E6DC; color:#6E6C61; }
   .ptab-btn.active { background:#ffdd00; border-color:#ffdd00; color:#15140F; }
 
+  .stocktab-btn { background:#fff; border:1px solid #E9E6DC; color:#6E6C61; }
+  .stocktab-btn.active { background:#ffdd00; border-color:#ffdd00; color:#15140F; }
+
   summary::-webkit-details-marker { display:none; }
   summary { list-style:none; }
 
@@ -138,7 +141,7 @@ tailwind.config = {
 
     <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-0.5" id="sideNav">
       <p class="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Pilotage</p>
-      <a href="#" data-view="dashboard" class="nav-item active flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+      <a href="#" data-view="dashboard" class="nav-item demandeur-hide active flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
         <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
         Dashboard
       </a>
@@ -157,17 +160,13 @@ tailwind.config = {
         Fournisseurs
       </a>
       <p class="px-3 pt-4 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Stock</p>
-      <a href="#" data-view="catalogue" class="nav-item flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+      <a href="#" data-view="catalogue" class="nav-item demandeur-hide flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
         <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.9 19.8 17 15.9C18.9 13.7 19 10.4 17 8.2c-2.2-2.2-5.7-2.2-7.9 0-2.2 2.2-2.2 5.7 0 7.9 2.1 2 5.4 2.1 7.6.2l3.9 3.9z"/></svg>
         Catalogue articles
       </a>
       <a href="#" data-view="stock" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
         <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
         Stock & Lieux
-      </a>
-      <a href="#" data-view="etiquettes" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
-        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="2"/><line x1="7" y1="7" x2="7" y2="17"/><line x1="11" y1="7" x2="11" y2="17"/><line x1="15" y1="7" x2="15" y2="17"/></svg>
-        Étiquettes
       </a>
       <p class="px-3 pt-4 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Finance</p>
       <a href="#" data-view="budgets" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
@@ -178,7 +177,7 @@ tailwind.config = {
         <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
         Rapports
       </a>
-      <a href="#" data-view="parametres" class="nav-item flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+      <a href="#" data-view="parametres" class="nav-item demandeur-hide flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
         <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Paramètres
       </a>
@@ -254,7 +253,7 @@ tailwind.config = {
         </div>
         <div class="grid lg:grid-cols-2 gap-3.5 mt-3.5">
           <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
-            <h2 class="font-semibold text-[14.5px] mb-3">Budgets par catégorie</h2>
+            <h2 class="font-semibold text-[14.5px] mb-3">Budgets par département</h2>
             <div id="dashBudgets"></div>
           </div>
           <div class="bg-white border border-line rounded-xl2 shadow-card">
@@ -274,22 +273,31 @@ tailwind.config = {
             <h1 class="font-display text-[22px] font-bold tracking-tight">Demandes</h1>
             <p class="text-mute text-[13px] mt-0.5" id="requestsSub"></p>
           </div>
-          <button onclick="modalRequest()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Nouvelle demande</button>
         </div>
-        <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-[12.5px] min-w-[760px]">
-              <thead>
-                <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
-                  <th class="px-4 py-2.5 font-semibold">Article</th><th class="px-4 py-2.5 font-semibold">Qté</th>
-                  <th class="px-4 py-2.5 font-semibold">Demandeur</th><th class="px-4 py-2.5 font-semibold">Motif</th>
-                  <th class="px-4 py-2.5 font-semibold">Statut</th><th class="px-4 py-2.5 font-semibold">Date</th><th class="px-4 py-2.5"></th>
-                </tr>
-              </thead>
-              <tbody id="requestRows" class="divide-y divide-line"></tbody>
-            </table>
+
+        <!-- Demandeur : expérience "boutique" + panier -->
+        <div id="reqShopArea" class="hidden">
+          <div class="grid lg:grid-cols-3 gap-3.5 mb-6">
+            <div class="lg:col-span-2 bg-white border border-line rounded-xl2 shadow-card p-4">
+              <input id="reqShopSearch" type="text" placeholder="Rechercher un article…" class="field mb-3" oninput="renderReqShop()">
+              <div id="reqShopGrid" class="grid sm:grid-cols-2 gap-3 max-h-[560px] overflow-y-auto pr-1"></div>
+            </div>
+            <div class="bg-white border border-line rounded-xl2 shadow-card p-4 h-fit">
+              <h2 class="font-semibold text-[14.5px] mb-2">Mon panier</h2>
+              <p class="text-mute text-[12px] mb-2" id="reqCartEmpty">Aucun article ajouté</p>
+              <div id="reqCartLines" class="space-y-2 mb-3 max-h-[320px] overflow-y-auto"></div>
+              <div class="flex items-center justify-between text-[13px] font-semibold border-t border-line pt-2 mb-3">
+                <span>Total</span><span id="reqCartTotal" class="tnum">0.00 CHF</span>
+              </div>
+              <div class="mb-3"><label class="lbl">Motif (optionnel)</label><textarea id="reqCartMotive" class="field" rows="2"></textarea></div>
+              <button onclick="submitRequestCart()" id="reqCartSubmitBtn" disabled
+                      class="w-full h-9 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition disabled:opacity-40 disabled:cursor-not-allowed">Envoyer la demande</button>
+            </div>
           </div>
+          <h2 class="font-semibold text-[15px] mb-2.5">Historique de mes demandes</h2>
         </div>
+
+        <div id="reqGroups" class="space-y-3"></div>
       </section>
 
       <!-- ============ COMMANDES FOURNISSEURS ============ -->
@@ -308,7 +316,7 @@ tailwind.config = {
                 <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
                   <th class="px-4 py-2.5 font-semibold">#</th><th class="px-4 py-2.5 font-semibold">Fournisseur</th>
                   <th class="px-4 py-2.5 font-semibold">Statut</th><th class="px-4 py-2.5 font-semibold">Livraison prévue</th>
-                  <th class="px-4 py-2.5 font-semibold text-right">Total</th><th class="px-4 py-2.5"></th>
+                  <th class="px-4 py-2.5 font-semibold text-right">Total (CHF)</th><th class="px-4 py-2.5"></th>
                 </tr>
               </thead>
               <tbody id="orderRows" class="divide-y divide-line"></tbody>
@@ -352,19 +360,16 @@ tailwind.config = {
           <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
             <input id="articleSearch" oninput="filterArticles()" type="text" placeholder="Rechercher…" class="h-8 w-52 px-3 rounded-lg border border-line bg-canvas/60 text-[12.5px] outline-none focus:bg-white focus:border-brand-500 transition">
             <select id="articleCat" onchange="filterArticles()" class="h-8 px-2.5 rounded-lg border border-line bg-white text-[12.5px] text-ink-soft outline-none"><option value="">Toutes catégories</option></select>
-            <select id="articleNature" onchange="filterArticles()" class="h-8 px-2.5 rounded-lg border border-line bg-white text-[12.5px] text-ink-soft outline-none">
-              <option value="">Toute nature</option><option value="vendable">Vendable</option><option value="interne">Interne</option>
-            </select>
             <span class="ml-auto text-[12px] text-mute tnum" id="articleCount"></span>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full text-[12.5px] min-w-[820px]">
               <thead>
                 <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
-                  <th class="px-4 py-2.5 font-semibold"></th><th class="px-4 py-2.5 font-semibold">Article</th>
-                  <th class="px-4 py-2.5 font-semibold">Catégorie</th><th class="px-4 py-2.5 font-semibold">Nature</th>
+                  <th class="px-4 py-2.5 font-semibold"></th><th class="px-4 py-2.5 font-semibold">N°</th><th class="px-4 py-2.5 font-semibold">Article</th>
+                  <th class="px-4 py-2.5 font-semibold">Catégorie</th>
                   <th class="px-4 py-2.5 font-semibold text-right">Prix achat</th><th class="px-4 py-2.5 font-semibold text-right">Prix vente TTC</th>
-                  <th class="px-4 py-2.5 font-semibold text-right">Attributs</th>
+                  <th class="px-4 py-2.5 font-semibold text-right">Marge %</th>
                   <th class="px-4 py-2.5 font-semibold text-right">Stock total</th><th class="px-4 py-2.5"></th>
                 </tr>
               </thead>
@@ -392,43 +397,93 @@ tailwind.config = {
             <button onclick="modalMovement()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Mouvement</button>
           </div>
         </div>
-        <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-[12.5px] min-w-[600px]">
-              <thead>
-                <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
-                  <th class="px-4 py-2.5 font-semibold">Article</th><th class="px-4 py-2.5 font-semibold">Lieu</th>
-                  <th class="px-4 py-2.5 font-semibold text-right">Quantité</th><th class="px-4 py-2.5 font-semibold">Seuil alerte</th>
-                </tr>
-              </thead>
-              <tbody id="stockRows" class="divide-y divide-line"></tbody>
-            </table>
+
+        <div class="flex gap-2 mb-4" id="stockTabs">
+          <button data-stab="stock" onclick="setStockTab('stock')" class="stocktab-btn h-9 px-3.5 rounded-lg text-[12.5px] font-semibold transition">Stock</button>
+          <button data-stab="dispatch" onclick="setStockTab('dispatch')" class="stocktab-btn h-9 px-3.5 rounded-lg text-[12.5px] font-semibold transition">Dispatcher</button>
+          <button data-stab="equipement" onclick="setStockTab('equipement')" class="stocktab-btn h-9 px-3.5 rounded-lg text-[12.5px] font-semibold transition">Équipement</button>
+          <button data-stab="historique" onclick="setStockTab('historique')" class="stocktab-btn h-9 px-3.5 rounded-lg text-[12.5px] font-semibold transition">Historique</button>
+        </div>
+
+        <div class="stocktab-panel" data-stab-panel="stock">
+          <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-[12.5px] min-w-[700px]">
+                <thead>
+                  <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                    <th class="px-4 py-2.5 font-semibold">Article</th><th class="px-4 py-2.5 font-semibold">Lieu</th>
+                    <th class="px-4 py-2.5 font-semibold">Usage</th>
+                    <th class="px-4 py-2.5 font-semibold text-right">Quantité</th>
+                    <th class="px-4 py-2.5 font-semibold text-right">Disponible</th>
+                    <th class="px-4 py-2.5 font-semibold">Seuil alerte</th>
+                  </tr>
+                </thead>
+                <tbody id="stockRows" class="divide-y divide-line"></tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </section>
 
-      <!-- ============ ÉTIQUETTES ============ -->
-      <section id="view-etiquettes" class="view px-4 lg:px-6 py-6">
-        <div class="mb-5"><h1 class="font-display text-[22px] font-bold tracking-tight">Étiquettes</h1><p class="text-mute text-[13px] mt-0.5">Génération de codes-barres, impression au format Brother QL</p></div>
-        <div class="grid lg:grid-cols-3 gap-3.5">
-          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-1">
-            <label class="lbl">Articles à imprimer</label>
-            <select id="labelArticles" multiple size="10" class="w-full border border-line rounded-lg text-[12.5px] p-2 outline-none focus:border-brand-500"></select>
-            <label class="lbl mt-3">Format d'étiquette (Brother QL)</label>
-            <select id="labelFormat" class="field">
-              <option value="62x29">DK-11209 — 62 × 29 mm</option>
-              <option value="62x100">DK-11202 — 62 × 100 mm</option>
-              <option value="29x90">DK-11201 — 29 × 90 mm</option>
-              <option value="62cont">Ruban continu 62 mm</option>
-            </select>
-            <label class="lbl mt-3">Nombre de copies par article</label>
-            <input id="labelCopies" type="number" min="1" value="1" class="field">
-            <button onclick="generateLabels()" class="w-full mt-4 h-9 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 transition">Générer l'aperçu</button>
-            <button onclick="printLabels()" class="w-full mt-2 h-9 rounded-lg bg-ink text-white text-[12.5px] font-semibold hover:bg-slate-800 transition">Imprimer</button>
+        <div class="stocktab-panel hidden" data-stab-panel="dispatch">
+          <p class="text-mute text-[12.5px] mb-3">Stock reçu mais pas encore réparti entre boutique et équipement. Le dispatch peut se faire en plusieurs fois.</p>
+          <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-[12.5px] min-w-[760px]">
+                <thead>
+                  <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                    <th class="px-4 py-2.5 font-semibold">Article</th><th class="px-4 py-2.5 font-semibold">Lieu</th>
+                    <th class="px-4 py-2.5 font-semibold text-right">Non affecté</th>
+                    <th class="px-4 py-2.5 font-semibold text-right">→ Boutique</th>
+                    <th class="px-4 py-2.5 font-semibold text-right">→ Équipement</th>
+                    <th class="px-4 py-2.5 font-semibold"></th>
+                  </tr>
+                </thead>
+                <tbody id="dispatchRows" class="divide-y divide-line"></tbody>
+              </table>
+            </div>
           </div>
-          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-2">
-            <p class="text-[12px] text-mute mb-3">Aperçu</p>
-            <div id="labelPreview" class="flex flex-wrap gap-3"></div>
+        </div>
+
+        <div class="stocktab-panel hidden" data-stab-panel="equipement">
+          <div class="flex justify-end gap-2 mb-3">
+            <button onclick="modalEquipmentDon()" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Don</button>
+            <button onclick="modalEquipmentLoan()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Prêter</button>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-[12.5px] min-w-[700px]">
+                <thead>
+                  <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                    <th class="px-4 py-2.5 font-semibold">Article</th><th class="px-4 py-2.5 font-semibold">Lieu</th>
+                    <th class="px-4 py-2.5 font-semibold">Joueur</th>
+                    <th class="px-4 py-2.5 font-semibold text-right">Quantité</th>
+                    <th class="px-4 py-2.5 font-semibold">Date de prêt</th>
+                    <th class="px-4 py-2.5 font-semibold">Statut</th>
+                    <th class="px-4 py-2.5 font-semibold"></th>
+                  </tr>
+                </thead>
+                <tbody id="loanRows" class="divide-y divide-line"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="stocktab-panel hidden" data-stab-panel="historique">
+          <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-[12.5px] min-w-[820px]">
+                <thead>
+                  <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                    <th class="px-4 py-2.5 font-semibold">Date</th><th class="px-4 py-2.5 font-semibold">Article</th>
+                    <th class="px-4 py-2.5 font-semibold">Lieu</th><th class="px-4 py-2.5 font-semibold">Usage</th>
+                    <th class="px-4 py-2.5 font-semibold">Type</th><th class="px-4 py-2.5 font-semibold text-right">Quantité</th>
+                    <th class="px-4 py-2.5 font-semibold">Motif / origine</th><th class="px-4 py-2.5 font-semibold">Par</th>
+                    <th class="px-4 py-2.5 font-semibold"></th>
+                  </tr>
+                </thead>
+                <tbody id="movementRows" class="divide-y divide-line"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -452,14 +507,21 @@ tailwind.config = {
           <div class="flex flex-wrap items-end gap-3">
             <div><label class="lbl">Du</label><input id="repFrom" type="date" class="field w-40"></div>
             <div><label class="lbl">Au</label><input id="repTo" type="date" class="field w-40"></div>
-            <div><label class="lbl">Catégorie</label><select id="repCat" class="field w-44"><option value="">Toutes</option></select></div>
+            <div><label class="lbl">Catégorie</label><select id="repCatRoot" onchange="refreshRepSubcategory()" class="field w-40"><option value="">Toutes</option></select></div>
+            <div><label class="lbl">Sous-catégorie</label><select id="repCatSub" class="field w-40"><option value="">Toutes</option></select></div>
+            <div><label class="lbl">Département</label><select id="repDept" class="field w-40"><option value="">Tous</option></select></div>
             <div><label class="lbl">Fournisseur</label><select id="repSupplier" class="field w-44"><option value="">Tous</option></select></div>
             <div><label class="lbl">Lieu</label><select id="repLoc" class="field w-44"><option value="">Tous</option></select></div>
             <button onclick="loadReports()" class="h-9 px-4 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 transition">Filtrer</button>
             <button onclick="exportOdoo()" class="h-9 px-4 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Export Odoo (CSV)</button>
           </div>
         </div>
-        <div class="grid lg:grid-cols-3 gap-3.5 mb-3.5">
+        <div class="grid lg:grid-cols-4 gap-3.5 mb-3.5">
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-1">
+            <p class="text-[11px] uppercase tracking-[.06em] text-mute font-semibold mb-1">Valeur de stock actuelle</p>
+            <p class="font-display text-[24px] font-bold tracking-tight tnum" id="stockValueTotal">—</p>
+            <div class="mt-3 space-y-1" id="stockValueByUsage"></div>
+          </div>
           <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-1">
             <h2 class="font-semibold text-[14.5px] mb-3">Par catégorie</h2>
             <div id="repByCategory"></div>
@@ -492,8 +554,17 @@ tailwind.config = {
             <div class="space-y-2" id="locationList"></div>
           </div>
           <div class="bg-white border border-line rounded-xl2 shadow-card p-5 staff-only">
-            <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-[14.5px]">Catégories</h2><button onclick="modalCategory()" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">+ Catégorie</button></div>
-            <div class="space-y-2" id="categoryList"></div>
+            <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-[14.5px]">Catégories d'articles</h2><button onclick="modalCategory()" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">+ Catégorie</button></div>
+            <p class="text-[11.5px] text-mute mb-3">Catégorie racine (ex. Vêtements) et sous-catégories (ex. Polo, Short) rattachées à une catégorie.</p>
+            <div class="space-y-1" id="categoryList"></div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 staff-only">
+            <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-[14.5px]">Départements <span class="font-normal text-mute text-[11.5px]">(axe budgétaire)</span></h2><button onclick="modalDepartment()" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">+ Département</button></div>
+            <div class="space-y-2" id="departmentList"></div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5 staff-only">
+            <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-[14.5px]">Formes</h2><button onclick="modalForme()" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">+ Forme</button></div>
+            <div class="space-y-2" id="formeList"></div>
           </div>
           <div class="bg-white border border-line rounded-xl2 shadow-card p-5 staff-only lg:col-span-2">
             <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-[14.5px]">Attributs personnalisés</h2><button onclick="modalAttribute()" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">+ Attribut</button></div>
@@ -570,10 +641,13 @@ tailwind.config = {
 
 <script>
 /* ================================================================ ÉTAT */
-const S = { user:null, categories:[], locations:[], suppliers:[], attributes:[], articles:[], requests:[], orders:[], budgets:[], dashboard:null };
-const NATURE_LABEL = { vendable:'Vendable', interne:'Interne' };
+const S = { user:null, categories:[], departments:[], formes:[], locations:[], suppliers:[], attributes:[], articles:[], requests:[], cart:[], orders:[], budgets:[], dashboard:null, stockLevels:[], loans:[], movements:[] };
 const REQ_STATUS_LABEL = { pending:'En attente', approved:'Validée', rejected:'Rejetée', ordered:'Commandée', received:'Reçue' };
 const ORDER_STATUS_LABEL = { draft:'Brouillon', sent:'Envoyée', confirmed:'Confirmée', received_partial:'Reçue partiellement', received_total:'Reçue totalement' };
+const ICON_EDIT = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>';
+const ICON_DELETE = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+function btnEdit(onclick, extraClass) { return `<button type="button" onclick='${onclick}' class="text-mute hover:text-ink ${extraClass||''}" title="Modifier" aria-label="Modifier">${ICON_EDIT}</button>`; }
+function btnDelete(onclick, extraClass) { return `<button type="button" onclick='${onclick}' class="text-mute hover:text-rose2-600 ${extraClass||''}" title="Supprimer" aria-label="Supprimer">${ICON_DELETE}</button>`; }
 
 /* ================================================================ API */
 async function api(action, method = 'GET', body = null, isForm = false) {
@@ -595,7 +669,7 @@ async function api(action, method = 'GET', body = null, isForm = false) {
 
 /* ================================================================ HELPERS */
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const chf = v => new Intl.NumberFormat('fr-CH', { maximumFractionDigits: 2 }).format(+v || 0).replace(/ /g, "'");
+const chf = v => new Intl.NumberFormat('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(+v || 0).replace(/ /g, "'");
 const dateCH = d => d ? String(d).slice(0,10).split('-').reverse().join('.') : '—';
 const initials = n => (n || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 const avatarColors = ['bg-blue2-50 text-blue2-600','bg-violet2-50 text-violet2-600','bg-amber2-50 text-amber2-600','bg-brand-50 text-brand-700','bg-rose2-50 text-rose2-600'];
@@ -612,19 +686,25 @@ function toast(msg, isErr = false) {
 }
 function isStaff() { return S.user && ['responsable','admin'].includes(S.user.role); }
 function isAdmin() { return S.user && S.user.role === 'admin'; }
+function isDemandeur() { return S.user && S.user.role === 'demandeur'; }
 function applyRoleVisibility() {
   document.querySelectorAll('.staff-only').forEach(el => el.classList.toggle('hidden', !isStaff()));
   document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin()));
+  document.querySelectorAll('.demandeur-hide').forEach(el => el.classList.toggle('hidden', isDemandeur()));
 }
 
 /* ================================================================ NAVIGATION */
+// Un demandeur n'a accès qu'à l'onglet Demandes (voir CLAUDE.md, point 3) : toute autre vue,
+// atteinte via nav masquée, state JS ou manipulation d'URL, redirige vers Demandes plutôt que
+// d'afficher une page cassée. La vraie protection reste côté API (require_role).
 function go(view) {
+  if (isDemandeur() && view !== 'demandes') view = 'demandes';
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + view)?.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === view));
   document.getElementById('mainScroll').scrollTop = 0;
   const loaders = { dashboard: loadDashboard, demandes: loadRequests, commandes: loadOrders, fournisseurs: loadSuppliers,
-                     catalogue: loadArticles, stock: loadStock, etiquettes: loadLabelSelect, budgets: loadBudgets,
+                     catalogue: loadArticles, stock: loadStockView, budgets: loadBudgets,
                      rapports: loadReportFilters, parametres: loadSettingsView };
   loaders[view]?.();
 }
@@ -692,15 +772,26 @@ async function startApp(user) {
   document.getElementById('meRole').textContent = { admin: 'Administrateur', responsable: 'Responsable achats', demandeur: 'Demandeur' }[user.role] || user.role;
   applyRoleVisibility();
   await Promise.all([loadRefData()]);
-  go('dashboard');
+  go(isDemandeur() ? 'demandes' : 'dashboard');
 }
 
 /* ================================================================ RÉFÉRENTIELS */
 async function loadRefData() {
-  const [cats, locs, sups, attrs] = await Promise.all([api('categories'), api('locations'), api('suppliers'), api('attributes')]);
-  S.categories = cats; S.locations = locs; S.suppliers = sups; S.attributes = attrs;
+  const [cats, deps, formes, locs, sups, attrs] = await Promise.all([api('categories'), api('departments'), api('formes'), api('locations'), api('suppliers'), api('attributes')]);
+  S.categories = cats; S.departments = deps; S.formes = formes; S.locations = locs; S.suppliers = sups; S.attributes = attrs;
   const catSel = document.getElementById('articleCat');
-  catSel.innerHTML = '<option value="">Toutes catégories</option>' + cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  catSel.innerHTML = '<option value="">Toutes catégories</option>' + cats.map(c => `<option value="${c.id}">${c.parent_id ? '— ' : ''}${esc(c.name)}</option>`).join('');
+}
+function categoryTree() {
+  const roots = S.categories.filter(c => !c.parent_id);
+  return roots.map(r => ({ ...r, children: S.categories.filter(c => c.parent_id === r.id) }));
+}
+function categoryLabel(id) {
+  const c = S.categories.find(x => x.id === id);
+  if (!c) return '—';
+  if (!c.parent_id) return c.name;
+  const parent = S.categories.find(x => x.id === c.parent_id);
+  return (parent ? parent.name + ' > ' : '') + c.name;
 }
 
 /* ================================================================ DASHBOARD */
@@ -743,7 +834,7 @@ function budgetBar(b) {
   const pct = b.amount_allocated > 0 ? Math.min(100, Math.round(b.spent / b.amount_allocated * 100)) : 0;
   const over = b.amount_allocated > 0 && b.spent > b.amount_allocated;
   return `<div class="mb-3.5 last:mb-0">
-    <div class="flex items-center justify-between text-[12.5px] mb-1"><span class="font-medium">${esc(b.category_name)}</span><span class="tnum ${over ? 'text-rose2-600 font-bold' : 'text-mute'}">${chf(b.spent)} / ${chf(b.amount_allocated)} CHF</span></div>
+    <div class="flex items-center justify-between text-[12.5px] mb-1"><span class="font-medium">${esc(b.department_name)}</span><span class="tnum ${over ? 'text-rose2-600 font-bold' : 'text-mute'}">${chf(b.spent)} / ${chf(b.amount_allocated)} CHF</span></div>
     <div class="h-2 rounded-full bg-canvas overflow-hidden"><div class="h-full progress-anim ${over ? 'bg-rose2-600' : 'bg-brand-600'}" style="width:${pct}%"></div></div>
   </div>`;
 }
@@ -759,38 +850,274 @@ function openModal(title, bodyHtml, onSubmit) {
 function closeModal() { document.getElementById('modal').classList.add('hidden'); }
 
 /* ================================================================ DEMANDES */
+// Regroupe les lignes 'requests' plates renvoyées par l'API en "paniers" (1 panier = 1 groupe affiché).
+// Une ligne sans cart_id (demande créée avant cette fonctionnalité) devient un groupe d'une seule ligne (clé 'r'+id).
+function groupRequests(rows) {
+  const map = new Map();
+  rows.forEach(r => {
+    const key = r.cart_id ? 'c' + r.cart_id : 'r' + r.id;
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        number: reqGroupNumber(r),
+        requester_name: r.requester_name,
+        requester_email: r.requester_email,
+        motive: r.cart_id ? (r.cart_motive || '') : (r.motive || ''),
+        created_at: r.cart_id ? (r.cart_created_at || r.created_at) : r.created_at,
+        lines: [],
+      });
+    }
+    map.get(key).lines.push(r);
+  });
+  const groups = [...map.values()];
+  groups.forEach(g => { g.total = reqGroupTotal(g); });
+  return groups;
+}
+function variantLabel(v) {
+  const attrs = (v.attributes || []).map(x => x.value).join(' / ');
+  return attrs || (v.label && v.label !== 'Standard' ? v.label : 'Standard');
+}
 async function loadRequests() {
   const rows = await api('requests');
   S.requests = rows;
   document.getElementById('requestsSub').textContent = rows.length + ' demande(s)';
-  document.getElementById('requestRows').innerHTML = rows.map(r => `
-    <tr>
-      <td class="px-4 py-2.5 font-medium">${esc(r.article_name)}${r.variant_label && r.variant_label !== 'Standard' ? ` <span class="text-mute font-normal">— ${esc(r.variant_label)}</span>` : ''}</td>
-      <td class="px-4 py-2.5 tnum">${r.quantity}</td>
-      <td class="px-4 py-2.5">${esc(r.requester_name)}</td>
-      <td class="px-4 py-2.5 text-mute">${esc(r.motive || '—')}</td>
-      <td class="px-4 py-2.5"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${reqBadge(r.status)}">${REQ_STATUS_LABEL[r.status]}</span></td>
-      <td class="px-4 py-2.5 text-mute">${dateCH(r.created_at)}</td>
-      <td class="px-4 py-2.5 text-right space-x-1.5 whitespace-nowrap">
-        ${isStaff() && r.status === 'pending' ? `<button onclick="approveRequest(${r.id},'approved')" class="text-[11.5px] font-semibold text-green2-600 hover:underline">Valider</button><button onclick="rejectRequest(${r.id})" class="text-[11.5px] font-semibold text-rose2-600 hover:underline">Rejeter</button>` : ''}
-        ${isStaff() && r.status === 'approved' ? `<button onclick="quickOrder(${r.id})" class="text-[11.5px] font-semibold text-blue2-600 hover:underline">Commander</button>` : ''}
-        ${(!isStaff() && r.status === 'pending') ? `<button onclick="deleteRequest(${r.id})" class="text-[11.5px] font-semibold text-rose2-600 hover:underline">Retirer</button>` : ''}
-      </td>
-    </tr>`).join('') || '<tr><td colspan="7" class="px-4 py-8 text-center text-mute">Aucune demande</td></tr>';
+  document.getElementById('reqShopArea').classList.toggle('hidden', isStaff());
+  if (!isStaff()) {
+    await ensureArticles();
+    renderReqShop();
+    renderCartPanel();
+  }
+  const groups = groupRequests(rows);
+  // Les paniers/demandes contenant au moins une ligne en attente remontent en premier.
+  groups.sort((a, b) => (b.lines.some(l => l.status === 'pending') ? 1 : 0) - (a.lines.some(l => l.status === 'pending') ? 1 : 0));
+  renderReqGroups(groups);
 }
-async function modalRequest() {
-  const variants = await ensureVariants();
-  openModal('Nouvelle demande', `
-    <div class="space-y-3.5">
-      <div><label class="lbl">Article</label><select id="reqVariant" class="field">${variants.map(v => `<option value="${v.id}">${esc(v.display_name)}</option>`).join('')}</select></div>
-      <div><label class="lbl">Quantité</label><input id="reqQty" type="number" min="1" value="1" class="field"></div>
-      <div><label class="lbl">Motif</label><textarea id="reqMotive" class="field" rows="3"></textarea></div>
-    </div>`, async () => {
-    await api('requests', 'POST', { variant_id: +document.getElementById('reqVariant').value, quantity: +document.getElementById('reqQty').value, motive: document.getElementById('reqMotive').value });
-    closeModal(); toast('Demande envoyée'); loadRequests();
+function groupStatusBadges(g) {
+  const counts = {};
+  g.lines.forEach(l => counts[l.status] = (counts[l.status] || 0) + 1);
+  return Object.entries(counts).map(([st, n]) => `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${reqBadge(st)}">${n} ${REQ_STATUS_LABEL[st]}</span>`).join(' ');
+}
+function reqLineTotal(r) { return (+r.quantity || 0) * (+r.sale_price_ttc || 0); }
+function reqGroupTotal(g) { return g.lines.reduce((s, r) => s + reqLineTotal(r), 0); }
+/* Numéro lisible d'une demande groupée : DEM-000123 basé sur cart_id (paniers) ou sur l'id de la ligne (demandes
+   isolées créées avant l'introduction des paniers, cart_id NULL). Ces deux espaces de numérotation partagent le
+   même format d'affichage mais restent des identifiants distincts en base (cart_id vs id) : une collision visuelle
+   entre un panier et une ancienne demande isolée portant le même numéro est possible en théorie mais sans
+   conséquence fonctionnelle (l'action associée cible toujours request.id, jamais ce numéro affiché). */
+function reqGroupNumber(firstRow) {
+  return 'DEM-' + String(firstRow.cart_id || firstRow.id).padStart(6, '0');
+}
+function renderReqGroups(groups) {
+  document.getElementById('reqGroups').innerHTML = groups.map(g => `
+    <details class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+      <summary class="cursor-pointer select-none list-none flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-canvas/50 hover:bg-canvas transition">
+        <div class="min-w-0 flex items-start gap-3">
+          <span class="text-[11px] font-semibold text-mute tnum shrink-0 mt-0.5">${esc(g.number)}</span>
+          <div class="min-w-0">
+            <p class="font-semibold text-[13px] truncate">${esc(g.requester_name)}${g.requester_email ? ` <span class="text-mute font-normal">— ${esc(g.requester_email)}</span>` : ''}</p>
+            <p class="text-[11.5px] text-mute truncate">${dateCH(g.created_at)}${g.motive ? ' · Motif : ' + esc(g.motive) : ''}</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+          <span class="text-[13px] font-bold tnum">${chf(g.total)} CHF</span>
+          <span class="flex flex-wrap gap-1.5">${groupStatusBadges(g)}</span>
+        </div>
+      </summary>
+      <div class="overflow-x-auto border-t border-line">
+        <table class="w-full text-[12.5px] min-w-[680px]">
+          <thead>
+            <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute bg-canvas/30">
+              <th class="px-4 py-2 font-semibold">Article</th><th class="px-4 py-2 font-semibold">Qté</th>
+              <th class="px-4 py-2 font-semibold text-right">PU TTC</th><th class="px-4 py-2 font-semibold text-right">Total</th>
+              <th class="px-4 py-2 font-semibold">Statut</th><th class="px-4 py-2 font-semibold"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            ${g.lines.map(r => renderReqLineRow(r)).join('')}
+          </tbody>
+        </table>
+      </div>
+    </details>`).join('') || '<p class="text-mute text-[13px] py-10 text-center bg-white border border-line rounded-xl2 shadow-card">Aucune demande</p>';
+}
+function renderReqLineRow(r) {
+  const canFulfillFromStock = (+r.available_boutique || 0) >= (+r.quantity || 0);
+  let actions = '';
+  if (isStaff() && r.status === 'pending') {
+    actions = canFulfillFromStock
+      ? `<button onclick="fulfillFromStock(${r.id})" class="text-[11.5px] font-semibold text-green2-600 hover:underline">Ajouter</button>`
+      : `<button onclick="requestToOrder(${r.id})" class="text-[11.5px] font-semibold text-blue2-600 hover:underline">À commander</button>`;
+    actions += ` <button onclick="rejectRequest(${r.id})" class="text-[11.5px] font-semibold text-rose2-600 hover:underline">Rejeter</button>`;
+  } else if (isStaff() && r.status === 'approved') {
+    // Compat : demandes déjà validées avant l'introduction du flux Ajouter/À commander (voir commentaire sur requests PUT).
+    actions = `<button onclick="quickOrder(${r.id})" class="text-[11.5px] font-semibold text-blue2-600 hover:underline">Commander</button>`;
+  } else if (!isStaff() && r.status === 'pending') {
+    actions = `<button onclick="deleteRequest(${r.id})" class="text-[11.5px] font-semibold text-rose2-600 hover:underline">Retirer</button>`;
+  }
+  return `<tr>
+    <td class="px-4 py-2.5 font-medium">${esc(r.article_name)}${r.variant_attrs ? ` <span class="text-mute font-normal">— ${esc(r.variant_attrs)}</span>` : (r.variant_label && r.variant_label !== 'Standard' ? ` <span class="text-mute font-normal">— ${esc(r.variant_label)}</span>` : '')}</td>
+    <td class="px-4 py-2.5 tnum w-14">x${r.quantity}</td>
+    <td class="px-4 py-2.5 tnum w-24 text-right">${chf(r.sale_price_ttc || 0)}</td>
+    <td class="px-4 py-2.5 tnum w-24 text-right font-semibold">${chf(reqLineTotal(r))}</td>
+    <td class="px-4 py-2.5 w-32"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${reqBadge(r.status)}">${REQ_STATUS_LABEL[r.status]}</span></td>
+    <td class="px-4 py-2.5 text-right space-x-1.5 whitespace-nowrap">${actions}</td>
+  </tr>`;
+}
+
+/* ---- Demandeur : boutique + panier ---- */
+function renderReqShop() {
+  const q = (document.getElementById('reqShopSearch')?.value || '').toLowerCase();
+  const arts = (S.articles || []).filter(a => a.active !== 0 && (a.variants || []).length
+    && (!q || a.name.toLowerCase().includes(q) || (a.article_number || '').toLowerCase().includes(q)));
+  document.getElementById('reqShopGrid').innerHTML = arts.map(a => `
+    <div class="border border-line rounded-xl p-3 flex gap-3">
+      ${a.photo ? `<img src="uploads/${a.photo}" class="w-16 h-16 rounded-lg object-cover border border-line shrink-0">` : `<div class="w-16 h-16 rounded-lg bg-canvas border border-line grid place-items-center text-mute text-[10px] shrink-0">—</div>`}
+      <div class="flex-1 min-w-0 flex flex-col">
+        <p class="font-medium text-[13px] truncate" title="${esc(a.name)}">${esc(a.name)}</p>
+        <p class="text-[12px] text-mute mb-1.5">${chf(a.sale_price_ttc)} CHF</p>
+        <button onclick="openArticlePicker(${a.id})" class="h-8 px-2.5 rounded-lg bg-brand-600 text-[#15140F] text-[11.5px] font-semibold hover:bg-brand-700 mt-auto">Choisir</button>
+      </div>
+    </div>`).join('') || '<p class="text-mute text-[12.5px] py-8 col-span-2 text-center">Aucun article disponible</p>';
+}
+
+/* Sélecteur en 2 étapes : attribut principal (tuiles, ex. Couleur) puis attribut secondaire (select, ex. Taille),
+   filtré aux seules combinaisons réellement présentes parmi les variantes de l'article. Simplifié automatiquement
+   si l'article n'a qu'un seul attribut (pas d'étape secondaire) ou aucun (variante "Standard" unique). */
+let pickerState = null;
+function pickerPrimaryAttrName(a) {
+  for (const v of (a.variants || [])) { const x = (v.attributes || []).find(y => y.is_primary); if (x) return x.attribute_name; }
+  return '';
+}
+function pickerSecondaryAttrName(a) {
+  for (const v of (a.variants || [])) { const x = (v.attributes || []).find(y => !y.is_primary); if (x) return x.attribute_name; }
+  return '';
+}
+function pickerPrimaryValues(a) {
+  return [...new Set((a.variants || []).flatMap(v => (v.attributes || []).filter(x => x.is_primary).map(x => x.value)))];
+}
+function pickerSecondaryValues(a, primaryValue) {
+  return [...new Set((a.variants || [])
+    .filter(v => (v.attributes || []).some(x => x.is_primary && x.value === primaryValue))
+    .flatMap(v => (v.attributes || []).filter(x => !x.is_primary).map(x => x.value)))];
+}
+function pickerFindVariant() {
+  const { article: a, primaryValue, secondaryValue, hasPrimary, hasSecondary } = pickerState;
+  return (a.variants || []).find(v => {
+    const attrs = v.attributes || [];
+    if (hasPrimary) { const p = attrs.find(x => x.is_primary); if (!p || p.value !== primaryValue) return false; }
+    if (hasSecondary) { const sc = attrs.find(x => !x.is_primary); if (!sc || sc.value !== secondaryValue) return false; }
+    return true;
   });
 }
-async function approveRequest(id, status) { await api('requests', 'PUT', { id, status }); toast('Demande validée'); loadRequests(); }
+function openArticlePicker(articleId) {
+  const a = S.articles.find(x => x.id === articleId);
+  if (!a) return;
+  const variants = a.variants || [];
+  const hasPrimary = variants.some(v => (v.attributes || []).some(x => x.is_primary));
+  const hasSecondary = variants.some(v => (v.attributes || []).some(x => !x.is_primary));
+  pickerState = { article: a, primaryValue: null, secondaryValue: null, qty: 1, hasPrimary, hasSecondary };
+  if (hasPrimary) {
+    const values = pickerPrimaryValues(a);
+    if (values.length === 1) pickerState.primaryValue = values[0];
+  }
+  if (!hasSecondary) {
+    // Un seul attribut (ou aucun) : la variante est déjà déterminée dès que le principal est choisi (ou d'emblée).
+  }
+  openModal(a.name, renderPickerBody(), submitPickerAdd);
+  document.getElementById('modalSubmit').textContent = 'Ajouter au panier';
+}
+function renderPickerBody() {
+  const { article: a, primaryValue, secondaryValue, hasPrimary, hasSecondary, qty } = pickerState;
+  let html = '';
+  if (hasPrimary) {
+    const values = pickerPrimaryValues(a);
+    html += `<div class="mb-3"><label class="lbl">${esc(pickerPrimaryAttrName(a) || 'Couleur')}</label><div class="flex flex-wrap gap-2 mt-1">${values.map(v => {
+      const cp = (a.color_photos || []).find(p => p.color_value === v);
+      const variantWithAttr = (a.variants || []).find(x => (x.attributes || []).some(y => y.is_primary && y.value === v));
+      const attr = variantWithAttr ? (variantWithAttr.attributes || []).find(y => y.is_primary && y.value === v) : null;
+      const code = attr && attr.color_code ? attr.color_code : '';
+      const active = primaryValue === v;
+      const ring = active ? 'border-brand-600 border-2' : 'border-line';
+      let visual;
+      if (cp) visual = `<img src="uploads/${cp.photo}" class="w-9 h-9 rounded-lg object-cover border ${ring}">`;
+      else if (code) visual = `<span class="w-9 h-9 rounded-lg border ${ring} block" style="background:${esc(code)}"></span>`;
+      else visual = `<span class="w-9 h-9 rounded-lg border ${ring} bg-canvas grid place-items-center text-[9px] text-mute">${esc(v).slice(0, 3)}</span>`;
+      return `<button type="button" onclick="pickerSelectPrimary('${esc(v).replace(/'/g, "\\'")}')" class="flex flex-col items-center gap-1" title="${esc(v)}">${visual}<span class="text-[10.5px] ${active ? 'font-semibold text-brand-700' : 'text-mute'}">${esc(v)}</span></button>`;
+    }).join('')}</div></div>`;
+  }
+  if (hasSecondary) {
+    if (hasPrimary && !primaryValue) {
+      html += `<p class="text-mute text-[12px] mb-3">Choisis d'abord ${esc(pickerPrimaryAttrName(a) || 'un attribut')}</p>`;
+    } else {
+      const values = pickerSecondaryValues(a, primaryValue);
+      html += `<div class="mb-3"><label class="lbl">${esc(pickerSecondaryAttrName(a) || 'Taille')}</label>
+        <select class="field" onchange="pickerSelectSecondary(this.value)">
+          <option value="">Choisir…</option>
+          ${values.map(v => `<option value="${esc(v)}" ${secondaryValue === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}
+        </select></div>`;
+    }
+  }
+  const variant = pickerFindVariant();
+  html += `<p class="text-[13px] font-semibold mb-3">Prix : ${chf(a.sale_price_ttc)} CHF${variant ? ` <span class="text-mute font-normal">— stock dispo : ${variant.total_stock}</span>` : ''}</p>`;
+  html += `<div><label class="lbl">Quantité</label><input type="number" min="1" value="${qty}" id="pickerQty" class="field w-24" onchange="pickerState.qty = (+this.value || 1)"></div>`;
+  return html;
+}
+function pickerSelectPrimary(v) {
+  pickerState.primaryValue = v;
+  pickerState.secondaryValue = null;
+  document.getElementById('modalBody').innerHTML = renderPickerBody();
+}
+function pickerSelectSecondary(v) {
+  pickerState.secondaryValue = v;
+  document.getElementById('modalBody').innerHTML = renderPickerBody();
+}
+async function submitPickerAdd() {
+  const qtyInput = document.getElementById('pickerQty');
+  const qty = qtyInput ? (+qtyInput.value || 1) : (pickerState.qty || 1);
+  if (qty <= 0) throw new Error('Quantité invalide');
+  if (pickerState.hasPrimary && !pickerState.primaryValue) throw new Error('Choisis ' + (pickerPrimaryAttrName(pickerState.article) || 'un attribut'));
+  if (pickerState.hasSecondary && !pickerState.secondaryValue) throw new Error('Choisis ' + (pickerSecondaryAttrName(pickerState.article) || 'un attribut'));
+  const variant = pickerFindVariant();
+  if (!variant) throw new Error('Cette combinaison n\'existe pas pour cet article');
+  const a = pickerState.article;
+  const existing = S.cart.find(l => l.variant_id === variant.id);
+  if (existing) existing.quantity += qty;
+  else S.cart.push({ variant_id: variant.id, quantity: qty, article_name: a.name, variant_label: variantLabel(variant), sale_price_ttc: a.sale_price_ttc });
+  renderCartPanel();
+  closeModal();
+  toast('Ajouté au panier');
+}
+
+function removeFromCart(idx) { S.cart.splice(idx, 1); renderCartPanel(); }
+function updateCartQty(idx, val) { const q = +val; if (q > 0) S.cart[idx].quantity = q; renderCartPanel(); }
+function renderCartPanel() {
+  document.getElementById('reqCartEmpty').classList.toggle('hidden', S.cart.length > 0);
+  document.getElementById('reqCartLines').innerHTML = S.cart.map((l, idx) => {
+    const sub = l.quantity * (+l.sale_price_ttc || 0);
+    return `<div class="flex items-center gap-2 text-[12px]">
+      <div class="flex-1 min-w-0"><p class="font-medium truncate">${esc(l.article_name)}</p><p class="text-mute truncate">${esc(l.variant_label)} · ${chf(l.sale_price_ttc || 0)} CHF</p></div>
+      <input type="number" min="1" value="${l.quantity}" class="field !h-7 w-14 text-[11.5px]" onchange="updateCartQty(${idx}, this.value)">
+      <span class="tnum w-16 text-right shrink-0 font-semibold">${chf(sub)}</span>
+      <button onclick="removeFromCart(${idx})" class="text-mute hover:text-rose2-600 shrink-0">${ICON_DELETE}</button>
+    </div>`;
+  }).join('');
+  const total = S.cart.reduce((s, l) => s + l.quantity * (+l.sale_price_ttc || 0), 0);
+  document.getElementById('reqCartTotal').textContent = chf(total) + ' CHF';
+  document.getElementById('reqCartSubmitBtn').disabled = S.cart.length === 0;
+}
+async function submitRequestCart() {
+  if (!S.cart.length) return;
+  try {
+    await api('request_cart', 'POST', {
+      items: S.cart.map(l => ({ variant_id: l.variant_id, quantity: l.quantity })),
+      motive: document.getElementById('reqCartMotive').value,
+    });
+    S.cart = [];
+    document.getElementById('reqCartMotive').value = '';
+    toast('Demande envoyée');
+    loadRequests();
+  } catch (e) { toast(e.message, true); }
+}
+
 async function rejectRequest(id) {
   openModal('Rejeter la demande', `<div><label class="lbl">Motif du rejet</label><textarea id="rejReason" class="field" rows="3"></textarea></div>`, async () => {
     await api('requests', 'PUT', { id, status: 'rejected', reject_reason: document.getElementById('rejReason').value });
@@ -798,6 +1125,14 @@ async function rejectRequest(id) {
   });
 }
 async function deleteRequest(id) { await api('requests&id=' + id, 'DELETE'); toast('Demande retirée'); loadRequests(); }
+async function fulfillFromStock(id) {
+  try { await api('request_fulfill_stock', 'POST', { request_id: id }); toast('Article remis depuis le stock'); loadRequests(); }
+  catch (e) { toast(e.message, true); }
+}
+async function requestToOrder(id) {
+  try { await api('request_to_order', 'POST', { request_id: id }); toast('Ligne ajoutée à une commande fournisseur'); loadRequests(); }
+  catch (e) { toast(e.message, true); }
+}
 async function quickOrder(reqId) {
   try { await api('orders_quick_from_request', 'POST', { request_id: reqId }); toast('Commande créée'); loadRequests(); }
   catch (e) { toast(e.message, true); }
@@ -807,35 +1142,121 @@ async function quickOrder(reqId) {
 async function loadSuppliers() {
   const rows = await api('suppliers');
   S.suppliers = rows;
-  document.getElementById('supplierCards').innerHTML = rows.map(s => `
+  document.getElementById('supplierCards').innerHTML = rows.map(s => {
+    const primaryContact = (s.contacts || [])[0];
+    return `
     <div class="bg-white border border-line rounded-xl2 shadow-card p-4">
       <div class="flex items-start justify-between">
-        <div><p class="font-semibold text-[13.5px]">${esc(s.name)}</p><p class="text-[12px] text-mute">${esc(s.contact_name || '—')}</p></div>
-        <button onclick='editSupplier(${JSON.stringify(s).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg></button>
+        <div><p class="font-semibold text-[13.5px]">${esc(s.name)}</p><p class="text-[12px] text-mute">${primaryContact ? esc(primaryContact.name) + (primaryContact.role ? ' — ' + esc(primaryContact.role) : '') : '—'}</p></div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          ${btnEdit(`editSupplier(${s.id})`)}
+          ${btnDelete(`deleteSupplier(${s.id})`)}
+        </div>
       </div>
       <div class="mt-2 text-[12px] text-mute space-y-0.5">
-        <p>${esc(s.email || '—')}</p><p>${esc(s.phone || '—')}</p>
-        <p class="mt-1.5">${s.orders_count} commande(s)${s.avg_delay_days ? ' · délai moyen ' + s.avg_delay_days + 'j' : ''}</p>
+        <p>${primaryContact ? esc(primaryContact.email || '—') : '—'}</p><p>${primaryContact ? esc(primaryContact.phone || '—') : '—'}</p>
+        <p class="mt-1.5">${(s.addresses || []).length} adresse(s) · ${(s.contacts || []).length} contact(s)</p>
+        <p>${s.orders_count} commande(s)${s.avg_delay_days ? ' · délai moyen ' + s.avg_delay_days + 'j' : ''}</p>
       </div>
-    </div>`).join('') || '<p class="text-mute text-[13px]">Aucun fournisseur</p>';
+    </div>`;
+  }).join('') || '<p class="text-mute text-[13px]">Aucun fournisseur</p>';
 }
 function modalSupplier(existing) {
   const s = existing || {};
+  const addresses = s.addresses || [];
+  const contacts = s.contacts || [];
   openModal(existing ? 'Modifier le fournisseur' : 'Nouveau fournisseur', `
     <div class="space-y-3.5">
       <div><label class="lbl">Nom</label><input id="supName" class="field" value="${esc(s.name||'')}"></div>
-      <div><label class="lbl">Contact</label><input id="supContact" class="field" value="${esc(s.contact_name||'')}"></div>
-      <div><label class="lbl">E-mail</label><input id="supEmail" type="email" class="field" value="${esc(s.email||'')}"></div>
-      <div><label class="lbl">Téléphone</label><input id="supPhone" class="field" value="${esc(s.phone||'')}"></div>
-      <div><label class="lbl">Adresse</label><textarea id="supAddress" class="field" rows="2">${esc(s.address||'')}</textarea></div>
       <div><label class="lbl">Notes</label><textarea id="supNotes" class="field" rows="2">${esc(s.notes||'')}</textarea></div>
+      ${existing ? `
+      <div class="pt-3.5 border-t border-line">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold text-[12.5px]">Adresses</h3>
+          <button type="button" onclick="modalSupplierAddress(${s.id})" class="text-[11.5px] font-semibold text-brand-600 hover:underline">+ Adresse</button>
+        </div>
+        <div class="space-y-2">${addresses.length ? addresses.map(ad => `
+          <div class="flex items-start gap-2 bg-canvas/50 border border-line rounded-lg p-2.5">
+            <div class="flex-1 min-w-0"><p class="text-[12px] font-semibold">${esc(ad.label)}</p><p class="text-[11.5px] text-mute whitespace-pre-line">${esc(ad.address || '—')}</p></div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              ${btnEdit(`modalSupplierAddress(${s.id}, ${JSON.stringify(ad).replace(/'/g,"&#39;")})`)}
+              ${btnDelete(`deleteSupplierAddress(${s.id}, ${ad.id})`)}
+            </div>
+          </div>`).join('') : '<p class="text-mute text-[11.5px]">Aucune adresse</p>'}</div>
+      </div>
+      <div class="pt-3.5 border-t border-line">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold text-[12.5px]">Contacts</h3>
+          <button type="button" onclick="modalSupplierContact(${s.id})" class="text-[11.5px] font-semibold text-brand-600 hover:underline">+ Contact</button>
+        </div>
+        <div class="space-y-2">${contacts.length ? contacts.map(c => `
+          <div class="flex items-start gap-2 bg-canvas/50 border border-line rounded-lg p-2.5">
+            <div class="flex-1 min-w-0">
+              <p class="text-[12px] font-semibold">${esc(c.name)}${c.role ? ` <span class="font-normal text-mute">— ${esc(c.role)}</span>` : ''}</p>
+              <p class="text-[11.5px] text-mute">${esc(c.email || '—')} · ${esc(c.phone || '—')}</p>
+              ${c.notes ? `<p class="text-[11px] text-mute mt-0.5">${esc(c.notes)}</p>` : ''}
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              ${btnEdit(`modalSupplierContact(${s.id}, ${JSON.stringify(c).replace(/'/g,"&#39;")})`)}
+              ${btnDelete(`deleteSupplierContact(${s.id}, ${c.id})`)}
+            </div>
+          </div>`).join('') : '<p class="text-mute text-[11.5px]">Aucun contact</p>'}</div>
+      </div>` : `<p class="text-[11.5px] text-mute pt-3.5 border-t border-line">Enregistre le fournisseur pour pouvoir ajouter des adresses et des contacts.</p>`}
     </div>`, async () => {
-    const payload = { name: document.getElementById('supName').value, contact_name: document.getElementById('supContact').value, email: document.getElementById('supEmail').value, phone: document.getElementById('supPhone').value, address: document.getElementById('supAddress').value, notes: document.getElementById('supNotes').value };
+    const payload = { name: document.getElementById('supName').value, notes: document.getElementById('supNotes').value };
     if (existing) await api('suppliers', 'PUT', { id: s.id, ...payload }); else await api('suppliers', 'POST', payload);
     closeModal(); toast('Fournisseur enregistré'); loadSuppliers(); loadRefData();
   });
 }
-function editSupplier(s) { modalSupplier(s); }
+function editSupplier(id) { modalSupplier(S.suppliers.find(x => x.id === id)); }
+async function deleteSupplier(id) {
+  if (!confirm('Supprimer ce fournisseur ?')) return;
+  try { await api('suppliers&id=' + id, 'DELETE'); toast('Fournisseur supprimé'); loadSuppliers(); loadRefData(); }
+  catch (e) { toast(e.message, true); }
+}
+async function reopenSupplierModal(supplierId) {
+  await loadSuppliers();
+  modalSupplier(S.suppliers.find(x => x.id === supplierId));
+}
+function modalSupplierAddress(supplierId, existing) {
+  const a = existing || {};
+  openModal(existing ? "Modifier l'adresse" : 'Nouvelle adresse', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Intitulé</label><input id="addrLabel" class="field" placeholder="Ex. Facturation, Entrepôt" value="${esc(a.label||'')}"></div>
+      <div><label class="lbl">Adresse</label><textarea id="addrText" class="field" rows="3">${esc(a.address||'')}</textarea></div>
+    </div>`, async () => {
+    const payload = { supplier_id: supplierId, label: document.getElementById('addrLabel').value, address: document.getElementById('addrText').value };
+    if (existing) await api('supplier_address', 'PUT', { id: a.id, ...payload }); else await api('supplier_address', 'POST', payload);
+    toast('Adresse enregistrée');
+    await reopenSupplierModal(supplierId);
+  });
+}
+async function deleteSupplierAddress(supplierId, id) {
+  if (!confirm('Supprimer cette adresse ?')) return;
+  try { await api('supplier_address&id=' + id, 'DELETE'); toast('Adresse supprimée'); await reopenSupplierModal(supplierId); }
+  catch (e) { toast(e.message, true); }
+}
+function modalSupplierContact(supplierId, existing) {
+  const c = existing || {};
+  openModal(existing ? 'Modifier le contact' : 'Nouveau contact', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Nom</label><input id="contName" class="field" value="${esc(c.name||'')}"></div>
+      <div><label class="lbl">Rôle</label><input id="contRole" class="field" placeholder="Ex. Commercial, Comptabilité" value="${esc(c.role||'')}"></div>
+      <div><label class="lbl">E-mail</label><input id="contEmail" type="email" class="field" value="${esc(c.email||'')}"></div>
+      <div><label class="lbl">Téléphone</label><input id="contPhone" class="field" value="${esc(c.phone||'')}"></div>
+      <div><label class="lbl">Notes</label><textarea id="contNotes" class="field" rows="2">${esc(c.notes||'')}</textarea></div>
+    </div>`, async () => {
+    const payload = { supplier_id: supplierId, name: document.getElementById('contName').value, role: document.getElementById('contRole').value, email: document.getElementById('contEmail').value, phone: document.getElementById('contPhone').value, notes: document.getElementById('contNotes').value };
+    if (existing) await api('supplier_contact', 'PUT', { id: c.id, ...payload }); else await api('supplier_contact', 'POST', payload);
+    toast('Contact enregistré');
+    await reopenSupplierModal(supplierId);
+  });
+}
+async function deleteSupplierContact(supplierId, id) {
+  if (!confirm('Supprimer ce contact ?')) return;
+  try { await api('supplier_contact&id=' + id, 'DELETE'); toast('Contact supprimé'); await reopenSupplierModal(supplierId); }
+  catch (e) { toast(e.message, true); }
+}
 
 /* ================================================================ CATALOGUE */
 async function ensureArticles() { if (!S.articles.length) await loadArticles(); return S.articles; }
@@ -845,9 +1266,9 @@ function flattenVariants(products) {
     ...v,
     article_id: p.id,
     article_name: p.name,
+    article_number: p.article_number,
     category_id: p.category_id,
     category_name: p.category_name,
-    nature: p.nature,
     unit: p.unit,
     purchase_price: p.purchase_price,
     sale_price_ttc: p.sale_price_ttc,
@@ -866,30 +1287,53 @@ async function loadArticles() {
 function filterArticles() {
   const q = (document.getElementById('articleSearch').value || '').toLowerCase();
   const cat = document.getElementById('articleCat').value;
-  const nat = document.getElementById('articleNature').value;
-  const rows = S.articles.filter(a => (!q || a.name.toLowerCase().includes(q) || (a.variants||[]).some(v => (v.barcode||'').includes(q))) && (!cat || String(a.category_id) === cat) && (!nat || a.nature === nat));
+  const rows = S.articles.filter(a => (!q || a.name.toLowerCase().includes(q) || (a.article_number||'').toLowerCase().includes(q) || (a.variants||[]).some(v => (v.barcode||'').includes(q))) && (!cat || String(a.category_id) === cat));
   document.getElementById('articleCount').textContent = rows.length + ' résultat(s)';
   document.getElementById('articleRows').innerHTML = rows.map(a => `
     <tr class="cursor-pointer hover:bg-canvas/50" onclick="openFicheArticle(${a.id})">
       <td class="px-4 py-2">${a.photo ? `<img src="uploads/${a.photo}" class="w-9 h-9 rounded-lg object-cover border border-line">` : `<div class="w-9 h-9 rounded-lg bg-canvas border border-line grid place-items-center text-mute text-[10px]">—</div>`}</td>
+      <td class="px-4 py-2.5 text-mute font-mono text-[11px]">${esc(a.article_number || '—')}</td>
       <td class="px-4 py-2.5 font-medium">${esc(a.name)}</td>
-      <td class="px-4 py-2.5 text-mute">${esc(a.category_name || '—')}</td>
-      <td class="px-4 py-2.5"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${a.nature==='vendable'?'bg-green2-50 text-green2-600':'bg-slate-100 text-slate-600'}">${NATURE_LABEL[a.nature]}</span></td>
+      <td class="px-4 py-2.5 text-mute">${esc(categoryLabel(a.category_id))}</td>
       <td class="px-4 py-2.5 text-right tnum">${chf(a.purchase_price)}</td>
       <td class="px-4 py-2.5 text-right tnum">${chf(a.sale_price_ttc)}</td>
-      <td class="px-4 py-2.5 text-right tnum">${a.variant_count}</td>
+      <td class="px-4 py-2.5 text-right tnum ${a.margin_percent != null && a.margin_percent < 0 ? 'text-rose2-600 font-semibold' : ''}">${a.margin_percent != null ? chf(a.margin_percent) + ' %' : '—'}</td>
       <td class="px-4 py-2.5 text-right tnum ${a.variants.some(v=>v.alert_threshold>0 && v.total_stock<=v.alert_threshold) ? 'text-rose2-600 font-bold':''}">${a.total_stock}</td>
       <td class="px-4 py-2.5"></td>
     </tr>`).join('') || '<tr><td colspan="9" class="px-4 py-8 text-center text-mute">Aucun article</td></tr>';
 }
+function artRootCatId(a) {
+  if (!a.category_id) return '';
+  const c = S.categories.find(x => x.id === a.category_id);
+  if (!c) return '';
+  return c.parent_id ? c.parent_id : c.id;
+}
+function artSubOptions(rootId, selectedId) {
+  const subs = S.categories.filter(c => c.parent_id === rootId);
+  if (!subs.length) return '<option value="">—</option>';
+  return '<option value="">—</option>' + subs.map(c => `<option value="${c.id}" ${selectedId==c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+}
+function refreshArtSubcategory() {
+  const rootId = +document.getElementById('artCat').value || '';
+  document.getElementById('artSubCat').innerHTML = artSubOptions(rootId);
+}
 function modalArticle(existing) {
   const a = existing || {};
+  const rootId = artRootCatId(a);
+  const roots = S.categories.filter(c => !c.parent_id);
   openModal(existing ? 'Modifier l\'article' : 'Nouvel article', `
     <div class="space-y-3.5">
-      <div><label class="lbl">Nom</label><input id="artName" class="field" value="${esc(a.name||'')}"></div>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="lbl">Catégorie</label><select id="artCat" class="field"><option value="">—</option>${S.categories.map(c=>`<option value="${c.id}" ${a.category_id==c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
-        <div><label class="lbl">Nature</label><select id="artNature" class="field"><option value="interne" ${a.nature==='interne'?'selected':''}>Interne</option><option value="vendable" ${a.nature==='vendable'?'selected':''}>Vendable (lié Caisse)</option></select></div>
+        <div><label class="lbl">Nom</label><input id="artName" class="field" value="${esc(a.name||'')}"></div>
+        <div><label class="lbl">Numéro d'article</label><input id="artNumber" class="field font-mono" placeholder="auto (ART-0000)" value="${esc(a.article_number||'')}"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Catégorie</label><select id="artCat" class="field" onchange="refreshArtSubcategory()"><option value="">—</option>${roots.map(c=>`<option value="${c.id}" ${rootId==c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+        <div><label class="lbl">Sous-catégorie</label><select id="artSubCat" class="field">${artSubOptions(rootId, a.category_id && (S.categories.find(c=>c.id===a.category_id)||{}).parent_id ? a.category_id : '')}</select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Forme</label><select id="artForme" class="field"><option value="">—</option>${S.formes.map(f=>`<option value="${f.id}" ${a.forme_id==f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></div>
+        <div><label class="lbl">Département <span class="font-normal text-mute">(budget)</span></label><select id="artDept" class="field"><option value="">—</option>${S.departments.map(d=>`<option value="${d.id}" ${a.department_id==d.id?'selected':''}>${esc(d.name)}</option>`).join('')}</select></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="lbl">Unité</label><input id="artUnit" class="field" value="${esc(a.unit||'pièce')}"></div>
@@ -899,10 +1343,22 @@ function modalArticle(existing) {
         <div><label class="lbl">Prix d'achat (CHF)</label><input id="artPurchase" type="number" step="0.01" class="field" value="${a.purchase_price||0}"></div>
         <div><label class="lbl">Prix de vente TTC (CHF)</label><input id="artSale" type="number" step="0.01" class="field" value="${a.sale_price_ttc||0}"></div>
       </div>
-      <div><label class="lbl">Photo</label><input id="artPhoto" type="file" accept="image/*" class="field"></div>
-      <p class="text-[11.5px] text-mute pt-1">Le code-barres et les attributs (taille, couleur…) se gèrent ensuite par variante, depuis la fiche de l'article. Le prix est commun à toutes les variantes.</p>
+      <div><label class="lbl">Photo générale</label><input id="artPhoto" type="file" accept="image/*" class="field"></div>
+      <p class="text-[11.5px] text-mute pt-1">Le code-barres et les attributs (taille, couleur…) se gèrent ensuite par variante, depuis la fiche de l'article. Le prix est commun à toutes les variantes. Des photos par couleur peuvent aussi être ajoutées depuis la fiche.</p>
     </div>`, async () => {
-    const payload = { name: document.getElementById('artName').value, category_id: +document.getElementById('artCat').value || null, nature: document.getElementById('artNature').value, unit: document.getElementById('artUnit').value, supplier_id: +document.getElementById('artSupplier').value || null, purchase_price: +document.getElementById('artPurchase').value, sale_price_ttc: +document.getElementById('artSale').value };
+    const subCatId = +document.getElementById('artSubCat').value || null;
+    const rootCatId = +document.getElementById('artCat').value || null;
+    const payload = {
+      name: document.getElementById('artName').value,
+      article_number: document.getElementById('artNumber').value.trim(),
+      category_id: subCatId || rootCatId,
+      forme_id: +document.getElementById('artForme').value || null,
+      department_id: +document.getElementById('artDept').value || null,
+      unit: document.getElementById('artUnit').value,
+      supplier_id: +document.getElementById('artSupplier').value || null,
+      purchase_price: +document.getElementById('artPurchase').value,
+      sale_price_ttc: +document.getElementById('artSale').value,
+    };
     let id = a.id;
     if (existing) await api('articles', 'PUT', { id, ...payload }); else { const r = await api('articles', 'POST', payload); id = r.id; }
     const file = document.getElementById('artPhoto').files[0];
@@ -918,50 +1374,142 @@ async function openFicheArticle(id) {
   document.getElementById('ficheArticleContent').innerHTML = `
     <div class="grid lg:grid-cols-3 gap-3.5">
       <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-1">
-        ${a.photo ? `<img src="uploads/${a.photo}" class="w-full aspect-square object-cover rounded-xl border border-line mb-3">` : ''}
+        <div class="flex items-start justify-between gap-2">
+          <span class="text-[10.5px] font-mono text-mute bg-canvas border border-line rounded px-1.5 py-0.5">${esc(a.article_number || '—')}</span>
+          <div class="flex items-center gap-2 shrink-0 staff-only">
+            ${btnEdit(`modalArticle(${JSON.stringify(a).replace(/'/g,"&#39;")})`)}
+            ${btnDelete(`deleteArticle(${a.id})`)}
+          </div>
+        </div>
+        ${a.photo ? `<img src="uploads/${a.photo}" class="w-full aspect-square object-cover rounded-xl border border-line mt-2 mb-3">` : ''}
         <h1 class="font-display text-[18px] font-bold">${esc(a.name)}</h1>
-        <p class="text-[12.5px] text-mute">${esc(a.category_name || 'Sans catégorie')} · ${NATURE_LABEL[a.nature]}</p>
+        <p class="text-[12.5px] text-mute">${esc(categoryLabel(a.category_id))}${a.forme_name ? ' · ' + esc(a.forme_name) : ''}</p>
         <div class="mt-3 text-[12.5px] space-y-1">
+          <p>Département : <b>${esc(a.department_name || '—')}</b></p>
           <p>Fournisseur préféré : <b>${esc(a.supplier_name || '—')}</b></p>
           <p>Prix d'achat : <b>${chf(a.purchase_price)} CHF</b></p>
           <p>Prix de vente TTC : <b>${chf(a.sale_price_ttc)} CHF</b></p>
           <p>Stock total (tous attributs) : <b>${a.total_stock ?? '—'}</b></p>
         </div>
-        <div class="flex gap-2 mt-4 staff-only">
-          <button onclick='modalArticle(${JSON.stringify(a).replace(/'/g,"&#39;")})' class="h-8 px-3 rounded-lg border border-line bg-white text-[12px] font-medium hover:bg-canvas">Modifier l'article</button>
+        <button onclick="modalPrintLabelsArticle(${a.id})" class="w-full mt-3 h-9 rounded-lg border border-line bg-white text-[12.5px] font-semibold hover:bg-canvas transition staff-only">Imprimer des étiquettes</button>
+        <div class="mt-4 pt-4 border-t border-line staff-only">
+          <div class="flex items-center justify-between mb-2"><h2 class="font-semibold text-[13px]">Photos par couleur</h2></div>
+          <div class="space-y-2" id="colorPhotoList">${renderColorPhotoList(a)}</div>
         </div>
       </div>
       <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-2">
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center justify-between mb-1">
           <h2 class="font-semibold text-[14.5px]">Attributs</h2>
           <button onclick="modalAttributeBatch(${a.id})" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 staff-only">+ Attribut</button>
+        </div>
+        <div class="flex items-center justify-between h-7 mb-2 staff-only">
+          <span class="text-[11.5px] text-mute" id="variantSelectCount"></span>
+          <span class="hidden" id="variantSelectDelete">${btnDelete(`deleteSelectedVariants(${a.id})`, '')}</span>
         </div>
         <div class="space-y-4" id="variantList">${renderVariantList(a)}</div>
       </div>
     </div>`;
+  selectedVariants.clear();
   applyRoleVisibility();
+}
+function findColorCode(colorValue) {
+  for (const attr of (S.attributes||[])) {
+    const v = (attr.values||[]).find(x => x.value === colorValue);
+    if (v && v.color_code) return v.color_code;
+  }
+  return '';
+}
+function renderColorPhotoList(a) {
+  const colors = [...new Set((a.variants||[]).flatMap(v => v.attributes.filter(x => x.is_primary).map(x => x.value)))];
+  if (!colors.length) return '<p class="text-mute text-[11.5px]">Aucune couleur définie sur les variantes de cet article</p>';
+  return colors.map(color => {
+    const cp = (a.color_photos||[]).find(p => p.color_value === color);
+    const code = findColorCode(color);
+    return `<div class="flex items-center gap-2.5">
+      ${cp ? `<img src="uploads/${cp.photo}" class="w-9 h-9 rounded-lg object-cover border border-line">` : `<div class="w-9 h-9 rounded-lg bg-canvas border border-line grid place-items-center text-mute text-[9px]">—</div>`}
+      ${code ? `<span class="w-3 h-3 rounded-full border border-line shrink-0" style="background:${esc(code)}"></span>` : ''}
+      <span class="text-[12px] flex-1">${esc(color)}</span>
+      <label class="text-[11px] font-semibold text-brand-600 hover:underline cursor-pointer">
+        ${cp ? 'Remplacer' : 'Ajouter'}
+        <input type="file" accept="image/*" class="hidden" onchange="uploadColorPhoto(${a.id}, '${esc(color).replace(/'/g,"\\'")}', this.files[0])">
+      </label>
+      ${cp ? btnDelete(`deleteColorPhoto(${a.id}, ${cp.id})`) : ''}
+    </div>`;
+  }).join('');
+}
+async function uploadColorPhoto(articleId, color, file) {
+  if (!file) return;
+  const fd = new FormData(); fd.append('file', file); fd.append('article_id', articleId); fd.append('color_value', color);
+  try { await api('article_color_photo', 'POST', fd, true); toast('Photo enregistrée'); openFicheArticle(articleId); }
+  catch (e) { toast(e.message, true); }
+}
+async function deleteColorPhoto(articleId, id) {
+  if (!confirm('Supprimer cette photo ?')) return;
+  await api('article_color_photo&id=' + id, 'DELETE');
+  toast('Photo supprimée'); openFicheArticle(articleId);
+}
+async function deleteArticle(id) {
+  if (!confirm('Supprimer cet article ? Toutes ses variantes, son historique de stock, demandes et commandes liées seront aussi supprimés.')) return;
+  await api('articles&id=' + id, 'DELETE');
+  toast('Article supprimé'); go('catalogue'); loadArticles();
+}
+let selectedVariants = new Set();
+function toggleVariantSelect(id, checked) {
+  if (checked) selectedVariants.add(id); else selectedVariants.delete(id);
+  updateVariantSelectBar();
+}
+function updateVariantSelectBar() {
+  const n = selectedVariants.size;
+  document.getElementById('variantSelectCount').textContent = n ? `${n} sélectionné(s)` : '';
+  document.getElementById('variantSelectDelete').classList.toggle('hidden', !n);
+}
+async function bulkDeleteVariants(ids) {
+  await Promise.all(ids.map(id => api('variants&id=' + id, 'DELETE')));
+}
+async function deleteSelectedVariants(articleId) {
+  const ids = [...selectedVariants];
+  if (!ids.length) return;
+  if (!confirm(`Supprimer les ${ids.length} valeur(s) sélectionnée(s) ? Leur historique de stock, demandes et commandes liées sera aussi supprimé.`)) return;
+  await bulkDeleteVariants(ids);
+  selectedVariants.clear();
+  toast('Supprimé'); openFicheArticle(articleId);
+}
+async function deleteVariantGroup(articleId, ids) {
+  if (!confirm(`Supprimer tout ce groupe (${ids.length} valeur(s)) ? Leur historique de stock, demandes et commandes liées sera aussi supprimé.`)) return;
+  await bulkDeleteVariants(ids);
+  toast('Groupe supprimé'); openFicheArticle(articleId);
 }
 function renderVariantRow(a, v) {
   const low = v.alert_threshold > 0 && v.total_stock <= v.alert_threshold;
+  const secondary = v.attributes.find(x => !x.is_primary);
+  const primary = v.attributes.find(x => x.is_primary);
+  const rowLabel = secondary ? secondary.value : (v.label || 'Standard');
+  const swatch = primary && primary.color_code ? `<span class="w-3 h-3 rounded-full border border-line shrink-0" style="background:${esc(primary.color_code)}" title="${esc(primary.value)}"></span>` : '';
   return `
     <div class="flex items-center gap-2 px-3 py-1.5 text-[12px]">
-      <span class="font-medium w-28 shrink-0 truncate">${esc(v.label || 'Standard')}${!v.active ? ' <span class="text-mute font-normal">(inactive)</span>' : ''}</span>
+      <input type="checkbox" class="shrink-0 staff-only" onchange="toggleVariantSelect(${v.id}, this.checked)" ${selectedVariants.has(v.id) ? 'checked' : ''}>
+      ${swatch}
+      <span class="font-medium w-28 shrink-0 truncate">${esc(rowLabel)}${!v.active ? ' <span class="text-mute font-normal">(inactive)</span>' : ''}</span>
       <span class="text-mute w-28 shrink-0 truncate">${esc(v.barcode || '—')}</span>
       <span class="tnum font-semibold w-12 text-right shrink-0 ${low ? 'text-rose2-600' : ''}">${v.total_stock}</span>
-      <div class="ml-auto flex gap-2 shrink-0 staff-only">
-        <button onclick='modalVariantEdit(${a.id}, ${JSON.stringify(v).replace(/'/g,"&#39;")})' class="font-semibold text-mute hover:text-ink">Modifier</button>
-        <button onclick="openVariantHistory(${v.id})" class="font-semibold text-mute hover:text-ink">Historique</button>
-        <button onclick="deleteVariant(${a.id}, ${v.id})" class="font-semibold text-mute hover:text-rose2-600">Supprimer</button>
+      <div class="ml-auto flex items-center gap-2.5 shrink-0 staff-only">
+        <button type="button" onclick="openVariantHistory(${v.id})" class="font-semibold text-mute hover:text-ink text-[11.5px]">Historique</button>
+        ${btnEdit(`modalVariantEdit(${a.id}, ${JSON.stringify(v).replace(/'/g,"&#39;")})`)}
+        ${btnDelete(`deleteVariant(${a.id}, ${v.id})`)}
       </div>
     </div>`;
 }
 function renderVariantGroup(a, title, variants, open) {
   const stock = variants.reduce((s, v) => s + v.total_stock, 0);
+  const ids = variants.map(v => v.id).join(',');
   return `
     <details class="border border-line rounded-xl overflow-hidden" ${open ? 'open' : ''}>
       <summary class="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3.5 py-2 bg-canvas/60 hover:bg-canvas transition">
         <span class="text-[11px] font-semibold uppercase tracking-[.06em] text-mute">${esc(title)} <span class="text-ink normal-case font-normal">(${variants.length})</span></span>
-        <span class="text-[12px] font-bold tnum">${stock}</span>
+        <span class="flex items-center gap-3">
+          <span class="text-[12px] font-bold tnum">${stock}</span>
+          <button type="button" onclick="event.preventDefault();event.stopPropagation();deleteVariantGroup(${a.id}, [${ids}])" class="text-mute hover:text-rose2-600 staff-only" title="Supprimer le groupe" aria-label="Supprimer le groupe">${ICON_DELETE}</button>
+        </span>
       </summary>
       <div class="divide-y divide-line border-t border-line">${variants.map(v => renderVariantRow(a, v)).join('')}</div>
     </details>`;
@@ -970,7 +1518,11 @@ function renderVariantList(a) {
   if (!a.variants.length) return '<p class="text-mute text-[12.5px]">Aucun attribut</p>';
   const groups = {}; const ungrouped = [];
   a.variants.forEach(v => {
-    if (v.attributes.length) {
+    if (v.attributes.length >= 2) {
+      const primary = v.attributes.find(x => x.is_primary) || v.attributes[0];
+      const key = `${primary.attribute_name} : ${primary.value}`;
+      (groups[key] = groups[key] || []).push(v);
+    } else if (v.attributes.length === 1) {
       const attrName = v.attributes[0].attribute_name;
       (groups[attrName] = groups[attrName] || []).push(v);
     } else ungrouped.push(v);
@@ -986,55 +1538,76 @@ function modalAttributeBatch(articleId) {
   if (!S.attributes.length) { toast('Crée d\'abord un attribut dans Paramètres → Produits', true); return; }
   openModal('Ajouter un attribut', `
     <div class="space-y-3.5">
-      <div><label class="lbl">Attribut</label><select id="batchAttr" class="field" onchange="renderBatchRows()">${S.attributes.map(attr=>`<option value="${attr.id}">${esc(attr.name)}</option>`).join('')}</select></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Attribut principal <span class="font-normal text-mute">(ex. Couleur)</span></label><select id="batchPrimary" class="field" onchange="refreshBatchSecondaryOptions();renderBatchValuePickers()">${S.attributes.map(attr=>`<option value="${attr.id}">${esc(attr.name)}</option>`).join('')}</select></div>
+        <div><label class="lbl">Attribut secondaire <span class="font-normal text-mute">(optionnel, ex. Taille)</span></label><select id="batchSecondary" class="field" onchange="renderBatchValuePickers()"><option value="">Aucun</option></select></div>
+      </div>
+      <div id="batchPrimaryValues"></div>
+      <div id="batchSecondaryValues"></div>
       <div><label class="lbl">Lieu de stock initial <span class="font-normal text-mute">(si tu saisis une quantité)</span></label><select id="batchLocation" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
-      <div id="batchRows" class="space-y-2"></div>
-      <button type="button" id="batchAddRow" onclick="addBatchFreeRow()" class="text-[12px] font-semibold text-brand-600 hover:underline hidden">+ Ajouter une valeur</button>
+      <button type="button" onclick="generateBatchGrid()" class="text-[12px] font-semibold text-brand-600 hover:underline">Générer les lignes</button>
+      <div id="batchGrid" class="space-y-2 max-h-[280px] overflow-y-auto pr-1"></div>
     </div>`, async () => {
-    const attributeId = +document.getElementById('batchAttr').value;
+    const primaryId = +document.getElementById('batchPrimary').value;
+    const secondaryId = +document.getElementById('batchSecondary').value || null;
     const locationId = +document.getElementById('batchLocation').value;
-    const items = [...document.querySelectorAll('.batch-row')]
-      .filter(row => row.querySelector('.batch-check') ? row.querySelector('.batch-check').checked : true)
-      .map(row => ({
-        value: row.querySelector('.batch-value').value || row.querySelector('.batch-value').dataset.value || '',
-        barcode: row.querySelector('.batch-barcode').value,
-        quantity: +row.querySelector('.batch-qty').value || 0,
-      }))
-      .filter(it => it.value);
-    if (!items.length) throw new Error('Sélectionne ou saisis au moins une valeur');
-    await api('variants_batch', 'POST', { article_id: articleId, attribute_id: attributeId, location_id: locationId, items });
+    const items = [...document.querySelectorAll('#batchGrid .batch-row')].map(row => ({
+      primary_value: row.dataset.primary,
+      secondary_value: row.dataset.secondary || '',
+      barcode: row.querySelector('.batch-barcode').value,
+      quantity: +row.querySelector('.batch-qty').value || 0,
+    }));
+    if (!items.length) throw new Error('Clique sur « Générer les lignes » avant de valider');
+    await api('variants_batch', 'POST', { article_id: articleId, primary_attribute_id: primaryId, secondary_attribute_id: secondaryId, location_id: locationId, items });
     closeModal(); toast('Attribut ajouté'); openFicheArticle(articleId);
   });
-  renderBatchRows();
+  refreshBatchSecondaryOptions();
+  renderBatchValuePickers();
 }
-function renderBatchRows() {
-  const attrId = +document.getElementById('batchAttr').value;
-  const attr = S.attributes.find(a => a.id === attrId);
-  const wrap = document.getElementById('batchRows');
-  const addBtn = document.getElementById('batchAddRow');
-  if (attr && attr.values && attr.values.length) {
-    wrap.innerHTML = attr.values.map(v => `
-      <div class="batch-row flex items-center gap-2">
-        <label class="flex items-center gap-1.5 w-24 shrink-0 text-[12.5px]"><input type="checkbox" class="batch-check" checked><span class="batch-value" data-value="${esc(v.value)}">${esc(v.value)}</span></label>
-        <input class="batch-barcode field" placeholder="Code-barres">
-        <input class="batch-qty field w-24" type="number" min="0" step="1" placeholder="Stock initial">
-      </div>`).join('');
-    addBtn.classList.add('hidden');
-  } else {
-    wrap.innerHTML = '';
-    addBtn.classList.remove('hidden');
-    addBatchFreeRow();
+function refreshBatchSecondaryOptions() {
+  const primaryId = +document.getElementById('batchPrimary').value;
+  const sel = document.getElementById('batchSecondary');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Aucun</option>' + S.attributes.filter(a => a.id !== primaryId).map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  sel.value = [...sel.options].some(o => o.value === current) ? current : '';
+}
+function renderValuePicker(attr) {
+  if (attr.values && attr.values.length) {
+    return `<div class="flex flex-wrap gap-x-3 gap-y-1.5">${attr.values.map(v => `<label class="inline-flex items-center gap-1.5 text-[12.5px]"><input type="checkbox" class="pick-check" data-value="${esc(v.value)}" checked>${esc(v.value)}</label>`).join('')}</div>`;
   }
+  return `<input class="pick-free field" placeholder="Valeurs séparées par une virgule (ex. Rouge, Bleu, Vert)">`;
 }
-function addBatchFreeRow() {
-  const wrap = document.getElementById('batchRows');
-  const row = document.createElement('div');
-  row.className = 'batch-row flex items-center gap-2';
-  row.innerHTML = `<input class="batch-value field w-24" placeholder="Valeur">
-    <input class="batch-barcode field" placeholder="Code-barres">
-    <input class="batch-qty field w-24" type="number" min="0" step="1" placeholder="Stock initial">
-    <button type="button" onclick="this.parentElement.remove()" class="text-mute hover:text-rose2-600 px-1">✕</button>`;
-  wrap.appendChild(row);
+function renderBatchValuePickers() {
+  const primaryAttr = S.attributes.find(a => a.id === +document.getElementById('batchPrimary').value);
+  const secondaryId = +document.getElementById('batchSecondary').value;
+  const secondaryAttr = secondaryId ? S.attributes.find(a => a.id === secondaryId) : null;
+  document.getElementById('batchPrimaryValues').innerHTML = primaryAttr ? `<label class="lbl">Valeurs — ${esc(primaryAttr.name)}</label>${renderValuePicker(primaryAttr)}` : '';
+  document.getElementById('batchSecondaryValues').innerHTML = secondaryAttr ? `<label class="lbl">Valeurs — ${esc(secondaryAttr.name)} <span class="font-normal text-mute">(mêmes valeurs pour chaque ${primaryAttr ? esc(primaryAttr.name.toLowerCase()) : 'valeur principale'})</span></label>${renderValuePicker(secondaryAttr)}` : '';
+  document.getElementById('batchGrid').innerHTML = '';
+}
+function getPickedValues(containerId) {
+  const container = document.getElementById(containerId);
+  const checks = container.querySelectorAll('.pick-check');
+  if (checks.length) return [...checks].filter(c => c.checked).map(c => c.dataset.value);
+  const free = container.querySelector('.pick-free');
+  return free ? free.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+}
+function generateBatchGrid() {
+  const primaryValues = getPickedValues('batchPrimaryValues');
+  const secondaryId = +document.getElementById('batchSecondary').value;
+  const secondaryValues = secondaryId ? getPickedValues('batchSecondaryValues') : [];
+  if (!primaryValues.length) { toast('Sélectionne ou saisis au moins une valeur principale', true); return; }
+  if (secondaryId && !secondaryValues.length) { toast('Sélectionne ou saisis au moins une valeur secondaire', true); return; }
+  const rowHtml = (label, primary, secondary) => `
+    <div class="batch-row flex items-center gap-2" data-primary="${esc(primary)}" data-secondary="${esc(secondary||'')}">
+      <span class="w-24 shrink-0 text-[12.5px] truncate">${esc(label)}</span>
+      <input class="batch-barcode field" placeholder="Code-barres">
+      <input class="batch-qty field w-24" type="number" min="0" step="1" placeholder="Stock initial">
+    </div>`;
+  document.getElementById('batchGrid').innerHTML = primaryValues.map(pv => {
+    if (!secondaryId) return rowHtml(pv, pv, '');
+    return `<div><p class="text-[11px] font-semibold uppercase tracking-[.06em] text-mute mb-1">${esc(pv)}</p><div class="space-y-1.5 mb-2">${secondaryValues.map(sv => rowHtml(sv, pv, sv)).join('')}</div></div>`;
+  }).join('');
 }
 function modalVariantEdit(articleId, v) {
   openModal('Modifier ' + (v.label || 'Standard'), `
@@ -1063,7 +1636,8 @@ async function openVariantHistory(variantId) {
   document.getElementById('modalSubmit').textContent = 'Fermer';
 }
 
-const ARTICLE_CSV_HEADERS = ['name','category','nature','barcode','unit','purchase_price','sale_price_ttc','alert_threshold'];
+/* Une ligne CSV = une variante (SKU) précise, tous les champs communs de l'article + ceux propres à la variante. */
+const ARTICLE_CSV_BASE_HEADERS = ['article_number','name','category','subcategory','forme','unit','supplier','purchase_price','sale_price_ttc','active','variant_label','barcode','alert_threshold'];
 function csvEscape(v) { v = String(v ?? ''); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; }
 function downloadCSV(filename, rows) {
   const blob = new Blob(['﻿' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -1071,13 +1645,42 @@ function downloadCSV(filename, rows) {
   const a = document.createElement('a'); a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
-function downloadBlankTemplate() { downloadCSV('modele-catalogue-vierge.csv', [ARTICLE_CSV_HEADERS]); }
+function downloadBlankTemplate() { downloadCSV('modele-catalogue-vierge.csv', [[...ARTICLE_CSV_BASE_HEADERS, 'Couleur', 'Taille']]); }
 function articlesToCSVRows(arts) {
-  const rows = [ARTICLE_CSV_HEADERS];
+  const attrNames = [...new Set(arts.flatMap(a => (a.variants||[]).flatMap(v => (v.attributes||[]).map(x => x.attribute_name))))];
+  const headers = [...ARTICLE_CSV_BASE_HEADERS, ...attrNames];
+  const rows = [headers];
   arts.forEach(a => (a.variants || []).forEach(v => {
-    rows.push([a.name, a.category_name || '', a.nature, v.barcode || '', a.unit, a.purchase_price, a.sale_price_ttc, v.alert_threshold]);
+    const isSub = a.category_parent_id ? true : false;
+    const cat = isSub ? a.parent_category_name : a.category_name;
+    const subcat = isSub ? a.category_name : '';
+    const attrMap = {}; (v.attributes||[]).forEach(x => attrMap[x.attribute_name] = x.value);
+    rows.push([
+      a.article_number || '', a.name, cat || '', subcat || '', a.forme_name || '', a.unit, a.supplier_name || '',
+      a.purchase_price, a.sale_price_ttc, a.active ? 1 : 0,
+      (v.label && v.label !== 'Standard') ? v.label : '', v.barcode || '', v.alert_threshold,
+      ...attrNames.map(n => attrMap[n] || ''),
+    ]);
   }));
   return rows;
+}
+/* Parseur CSV minimal gérant les guillemets (champs avec virgules/retours à la ligne). */
+function parseCSV(text) {
+  const rows = []; let row = []; let field = ''; let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = ''; rows.push(row); row = [];
+    } else field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.length > 1 || (r[0] || '').trim() !== '');
 }
 async function modalExportArticles() {
   await ensureArticles();
@@ -1108,66 +1711,274 @@ async function modalExportArticles() {
 }
 async function modalImport() {
   openModal('Importer un catalogue', `
-    <p class="text-[12.5px] text-mute mb-3">Fichier CSV avec colonnes : name, category, nature (vendable/interne), barcode, unit, purchase_price, sale_price_ttc, alert_threshold.</p>
+    <p class="text-[12.5px] text-mute mb-3">Fichier CSV — une ligne par variante (SKU). Colonnes : ${ARTICLE_CSV_BASE_HEADERS.join(', ')}, + une colonne par attribut utilisé (ex. Couleur, Taille). Si l'article existe déjà (par numéro ou nom), ses champs communs sont mis à jour ; la variante est ajoutée ou mise à jour (par code-barres, sinon par combinaison d'attributs).</p>
     <button type="button" onclick="downloadBlankTemplate()" class="text-[12px] font-semibold text-brand-600 hover:underline mb-3">Télécharger le modèle vierge (CSV)</button>
     <input id="importFile" type="file" accept=".csv" class="field">
   `, async () => {
     const file = document.getElementById('importFile').files[0];
     if (!file) throw new Error('Choisir un fichier CSV');
     const text = await file.text();
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
-    const headers = lines[0].split(',').map(h => h.trim());
-    const rows = lines.slice(1).map(l => {
-      const cells = l.split(',');
+    const table = parseCSV(text.replace(/^﻿/, ''));
+    if (table.length < 2) throw new Error('Fichier vide ou sans données');
+    const headers = table[0].map(h => h.trim());
+    const rows = table.slice(1).filter(r => r.some(c => (c || '').trim() !== '')).map(cells => {
       const o = {}; headers.forEach((h, idx) => o[h] = (cells[idx] || '').trim());
       return o;
     });
     const r = await api('articles_import', 'POST', { articles: rows });
-    closeModal(); toast(`${r.created} article(s) importé(s), ${r.skipped} ignoré(s)`); loadArticles();
+    closeModal();
+    toast(`${r.created_articles} article(s) créé(s), ${r.updated_articles} mis à jour, ${r.created_variants} variante(s) créée(s), ${r.updated_variants} mise(s) à jour, ${r.skipped} ignorée(s)`);
+    loadArticles();
   });
 }
 
 /* ================================================================ STOCK */
+const USAGE_LABEL = { boutique: 'Boutique', equipement: 'Équipement', non_affecte: 'Non affecté' };
+const MOVEMENT_TYPE_LABEL = { entry: 'Entrée', exit: 'Sortie', adjustment: 'Ajustement', transfer: 'Transfert', dispatch: 'Dispatch' };
+let stockTab = 'stock';
+function setStockTab(tab) {
+  stockTab = tab;
+  document.querySelectorAll('.stocktab-btn').forEach(b => b.classList.toggle('active', b.dataset.stab === tab));
+  document.querySelectorAll('.stocktab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.stabPanel !== tab));
+}
+async function loadStockView() {
+  setStockTab(stockTab);
+  await Promise.all([loadStock(), loadDispatch(), loadLoans(), loadMovementsHistory()]);
+}
 async function loadStock() {
   const rows = await api('stock');
+  S.stockLevels = rows;
   document.getElementById('stockRows').innerHTML = rows.map(r => `
     <tr>
       <td class="px-4 py-2.5 font-medium">${esc(r.article_name)}${r.variant_label && r.variant_label !== 'Standard' ? ` <span class="text-mute font-normal">— ${esc(r.variant_label)}</span>` : ''}</td>
       <td class="px-4 py-2.5">${esc(r.location_name)}</td>
+      <td class="px-4 py-2.5"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">${USAGE_LABEL[r.usage] || esc(r.usage)}</span></td>
       <td class="px-4 py-2.5 text-right tnum ${r.alert_threshold>0 && r.quantity<=r.alert_threshold ? 'text-rose2-600 font-bold':''}">${r.quantity}</td>
+      <td class="px-4 py-2.5 text-right tnum ${r.usage==='equipement' && r.loaned_quantity>0 ? 'text-amber2-600 font-semibold':''}">${r.usage==='equipement' ? r.available_quantity : '—'}</td>
       <td class="px-4 py-2.5 text-mute">${r.alert_threshold || '—'}</td>
-    </tr>`).join('') || '<tr><td colspan="4" class="px-4 py-8 text-center text-mute">Aucun mouvement de stock</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="6" class="px-4 py-8 text-center text-mute">Aucun mouvement de stock</td></tr>';
 }
-async function modalMovement() {
+
+/* Recherche produit (autocomplétion) réutilisée dans les modales mouvement/transfert : filtre côté client
+ * sur le cache déjà chargé (nom, code-barres, article_number), pas besoin d'un aller-retour serveur. */
+function productSearchField(prefix, label = 'Article') {
+  return `<div class="relative">
+    <label class="lbl">${label}</label>
+    <input id="${prefix}VariantSearch" class="field" placeholder="Nom, code-barres ou référence…" autocomplete="off" oninput="onProductSearchInput('${prefix}')" onfocus="onProductSearchInput('${prefix}')">
+    <input type="hidden" id="${prefix}Variant">
+    <div id="${prefix}VariantResults" class="hidden absolute z-20 mt-1 w-full bg-white border border-line rounded-lg shadow-pop max-h-56 overflow-auto"></div>
+  </div>`;
+}
+async function onProductSearchInput(prefix) {
+  const q = document.getElementById(prefix + 'VariantSearch').value.trim().toLowerCase();
+  const box = document.getElementById(prefix + 'VariantResults');
+  if (!q) { box.classList.add('hidden'); box.innerHTML = ''; return; }
   const variants = await ensureVariants();
+  const matches = variants.filter(v =>
+    v.display_name.toLowerCase().includes(q) ||
+    (v.barcode || '').toLowerCase().includes(q) ||
+    (v.article_number || '').toLowerCase().includes(q)
+  ).slice(0, 15);
+  box.innerHTML = matches.map(v => `
+    <div class="px-3 py-2 text-[12.5px] hover:bg-canvas cursor-pointer" onmousedown="event.preventDefault();selectProduct('${prefix}', ${v.id})">
+      ${esc(v.display_name)}${v.barcode ? ` <span class="text-mute">— ${esc(v.barcode)}</span>` : ''}
+    </div>`).join('') || '<div class="px-3 py-2 text-[12.5px] text-mute">Aucun résultat</div>';
+  box.classList.remove('hidden');
+}
+async function selectProduct(prefix, variantId) {
+  const variants = await ensureVariants();
+  const v = variants.find(x => x.id === variantId);
+  document.getElementById(prefix + 'Variant').value = variantId;
+  document.getElementById(prefix + 'VariantSearch').value = v ? v.display_name : '';
+  document.getElementById(prefix + 'VariantResults').classList.add('hidden');
+}
+document.addEventListener('click', e => {
+  document.querySelectorAll('[id$="VariantResults"]').forEach(box => {
+    const prefix = box.id.replace('VariantResults', '');
+    const input = document.getElementById(prefix + 'VariantSearch');
+    if (input && !input.contains(e.target) && !box.contains(e.target)) box.classList.add('hidden');
+  });
+});
+
+function usageSelect(id, withNonAffecte = false) {
+  return `<select id="${id}" class="field">
+    <option value="boutique">Boutique</option>
+    <option value="equipement">Équipement</option>
+    ${withNonAffecte ? '<option value="non_affecte">Non affecté</option>' : ''}
+  </select>`;
+}
+
+async function modalMovement() {
+  await ensureVariants();
   openModal('Nouveau mouvement de stock', `
     <div class="space-y-3.5">
-      <div><label class="lbl">Article</label><select id="movVariant" class="field">${variants.map(v=>`<option value="${v.id}">${esc(v.display_name)}</option>`).join('')}</select></div>
+      ${productSearchField('mov')}
       <div><label class="lbl">Lieu</label><select id="movLocation" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="lbl">Type</label><select id="movType" class="field"><option value="entry">Entrée</option><option value="exit">Sortie</option><option value="adjustment">Ajustement</option></select></div>
         <div><label class="lbl">Quantité</label><input id="movQty" type="number" min="0.01" step="0.01" value="1" class="field"></div>
       </div>
+      <div><label class="lbl">Usage</label>${usageSelect('movUsage', true)}</div>
       <div><label class="lbl">Motif</label><input id="movReason" class="field"></div>
     </div>`, async () => {
-    await api('stock_movement', 'POST', { variant_id: +document.getElementById('movVariant').value, location_id: +document.getElementById('movLocation').value, type: document.getElementById('movType').value, quantity: +document.getElementById('movQty').value, reason: document.getElementById('movReason').value });
-    closeModal(); toast('Mouvement enregistré'); loadStock(); loadArticles();
+    const variantId = +document.getElementById('movVariant').value;
+    if (!variantId) throw new Error('Choisir un article dans la liste');
+    await api('stock_movement', 'POST', { variant_id: variantId, location_id: +document.getElementById('movLocation').value, type: document.getElementById('movType').value, quantity: +document.getElementById('movQty').value, reason: document.getElementById('movReason').value, usage: document.getElementById('movUsage').value });
+    closeModal(); toast('Mouvement enregistré'); loadStockView(); loadArticles();
   });
 }
 async function modalTransfer() {
-  const variants = await ensureVariants();
+  await ensureVariants();
   openModal('Transfert entre lieux', `
     <div class="space-y-3.5">
-      <div><label class="lbl">Article</label><select id="trfVariant" class="field">${variants.map(v=>`<option value="${v.id}">${esc(v.display_name)}</option>`).join('')}</select></div>
+      ${productSearchField('trf')}
       <div class="grid grid-cols-2 gap-3">
         <div><label class="lbl">De</label><select id="trfFrom" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
         <div><label class="lbl">Vers</label><select id="trfTo" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
       </div>
-      <div><label class="lbl">Quantité</label><input id="trfQty" type="number" min="0.01" step="0.01" value="1" class="field"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Usage</label>${usageSelect('trfUsage', true)}</div>
+        <div><label class="lbl">Quantité</label><input id="trfQty" type="number" min="0.01" step="0.01" value="1" class="field"></div>
+      </div>
     </div>`, async () => {
-    await api('stock_transfer', 'POST', { variant_id: +document.getElementById('trfVariant').value, from_location_id: +document.getElementById('trfFrom').value, to_location_id: +document.getElementById('trfTo').value, quantity: +document.getElementById('trfQty').value });
-    closeModal(); toast('Transfert effectué'); loadStock();
+    const variantId = +document.getElementById('trfVariant').value;
+    if (!variantId) throw new Error('Choisir un article dans la liste');
+    await api('stock_transfer', 'POST', { variant_id: variantId, from_location_id: +document.getElementById('trfFrom').value, to_location_id: +document.getElementById('trfTo').value, quantity: +document.getElementById('trfQty').value, usage: document.getElementById('trfUsage').value });
+    closeModal(); toast('Transfert effectué'); loadStockView();
   });
+}
+
+/* ---------------------------------------------------------------- Dispatcher (non_affecte -> boutique/équipement) */
+async function loadDispatch() {
+  const rows = (S.stockLevels || []).filter(r => r.usage === 'non_affecte' && r.quantity > 0);
+  document.getElementById('dispatchRows').innerHTML = rows.map(r => `
+    <tr>
+      <td class="px-4 py-2.5 font-medium">${esc(r.article_name)}${r.variant_label && r.variant_label !== 'Standard' ? ` <span class="text-mute font-normal">— ${esc(r.variant_label)}</span>` : ''}</td>
+      <td class="px-4 py-2.5">${esc(r.location_name)}</td>
+      <td class="px-4 py-2.5 text-right tnum font-semibold">${r.quantity}</td>
+      <td class="px-4 py-2.5 text-right"><input type="number" min="0" step="0.01" value="0" class="field w-24 text-right" id="dsp-b-${r.variant_id}-${r.location_id}"></td>
+      <td class="px-4 py-2.5 text-right"><input type="number" min="0" step="0.01" value="0" class="field w-24 text-right" id="dsp-e-${r.variant_id}-${r.location_id}"></td>
+      <td class="px-4 py-2.5"><button onclick="submitDispatch(${r.variant_id}, ${r.location_id})" class="h-8 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12px] font-semibold hover:bg-brand-700 transition">Répartir</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="px-4 py-8 text-center text-mute">Aucun stock non affecté</td></tr>';
+}
+async function submitDispatch(variantId, locationId) {
+  const qtyBoutique = +document.getElementById(`dsp-b-${variantId}-${locationId}`).value || 0;
+  const qtyEquipement = +document.getElementById(`dsp-e-${variantId}-${locationId}`).value || 0;
+  if (qtyBoutique <= 0 && qtyEquipement <= 0) { toast('Indiquer une quantité à répartir', true); return; }
+  try {
+    await api('stock_dispatch', 'POST', { variant_id: variantId, location_id: locationId, qty_boutique: qtyBoutique, qty_equipement: qtyEquipement });
+    toast('Stock dispatché'); loadStockView();
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ---------------------------------------------------------------- Équipement : prêts & dons */
+async function loadLoans() {
+  const rows = await api('equipment_loans');
+  S.loans = rows;
+  document.getElementById('loanRows').innerHTML = rows.map(l => `
+    <tr>
+      <td class="px-4 py-2.5 font-medium">${esc(l.article_name)}${l.variant_label && l.variant_label !== 'Standard' ? ` <span class="text-mute font-normal">— ${esc(l.variant_label)}</span>` : ''}</td>
+      <td class="px-4 py-2.5">${esc(l.location_name)}</td>
+      <td class="px-4 py-2.5">${esc(l.player_name)}</td>
+      <td class="px-4 py-2.5 text-right tnum">${l.quantity}</td>
+      <td class="px-4 py-2.5 text-mute">${dateCH(l.loan_date)}</td>
+      <td class="px-4 py-2.5"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${l.status==='pret'?'bg-amber2-50 text-amber2-600':'bg-green2-50 text-green2-600'}">${l.status==='pret'?'En cours':'Rendu'}</span></td>
+      <td class="px-4 py-2.5">${l.status==='pret' ? `<div class="flex items-center gap-2 justify-end">
+          <button onclick="returnLoan(${l.id})" class="text-[11.5px] font-semibold text-brand-700 hover:underline">Rendre</button>
+          ${btnDelete(`cancelLoan(${l.id})`)}
+        </div>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="7" class="px-4 py-8 text-center text-mute">Aucun prêt</td></tr>';
+}
+async function returnLoan(id) {
+  try { await api('equipment_loans', 'PUT', { id, status: 'rendu' }); toast('Prêt marqué comme rendu'); loadStockView(); }
+  catch (e) { toast(e.message, true); }
+}
+async function cancelLoan(id) {
+  if (!confirm('Annuler ce prêt ?')) return;
+  try { await api('equipment_loans&id=' + id, 'DELETE'); toast('Prêt annulé'); loadStockView(); }
+  catch (e) { toast(e.message, true); }
+}
+async function modalEquipmentLoan() {
+  await ensureVariants();
+  openModal('Prêter un équipement', `
+    <div class="space-y-3.5">
+      ${productSearchField('loan')}
+      <div><label class="lbl">Lieu</label><select id="loanLocation" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Joueur</label><input id="loanPlayer" class="field"></div>
+        <div><label class="lbl">Quantité</label><input id="loanQty" type="number" min="0.01" step="0.01" value="1" class="field"></div>
+      </div>
+    </div>`, async () => {
+    const variantId = +document.getElementById('loanVariant').value;
+    if (!variantId) throw new Error('Choisir un article dans la liste');
+    await api('equipment_loans', 'POST', { variant_id: variantId, location_id: +document.getElementById('loanLocation').value, player_name: document.getElementById('loanPlayer').value, quantity: +document.getElementById('loanQty').value });
+    closeModal(); toast('Prêt enregistré'); loadStockView();
+  });
+}
+async function modalEquipmentDon() {
+  await ensureVariants();
+  openModal('Don définitif d\'équipement', `
+    <div class="space-y-3.5">
+      ${productSearchField('don')}
+      <div><label class="lbl">Lieu</label><select id="donLocation" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Joueur</label><input id="donPlayer" class="field"></div>
+        <div><label class="lbl">Quantité</label><input id="donQty" type="number" min="0.01" step="0.01" value="1" class="field"></div>
+      </div>
+      <p class="text-[11.5px] text-mute">Le don sort définitivement l'article de l'inventaire (contrairement à un prêt).</p>
+    </div>`, async () => {
+    const variantId = +document.getElementById('donVariant').value;
+    if (!variantId) throw new Error('Choisir un article dans la liste');
+    await api('equipment_don', 'POST', { variant_id: variantId, location_id: +document.getElementById('donLocation').value, player_name: document.getElementById('donPlayer').value, quantity: +document.getElementById('donQty').value });
+    closeModal(); toast('Don enregistré'); loadStockView();
+  });
+}
+
+/* ---------------------------------------------------------------- Historique des mouvements */
+async function loadMovementsHistory() {
+  const rows = await api('stock_movements');
+  S.movements = rows;
+  document.getElementById('movementRows').innerHTML = rows.map(m => `
+    <tr>
+      <td class="px-4 py-2.5 text-mute whitespace-nowrap">${dateCH(m.created_at)}</td>
+      <td class="px-4 py-2.5 font-medium">${esc(m.article_name)}${m.variant_label && m.variant_label !== 'Standard' ? ` <span class="text-mute font-normal">— ${esc(m.variant_label)}</span>` : ''}</td>
+      <td class="px-4 py-2.5">${esc(m.location_name)}</td>
+      <td class="px-4 py-2.5">${USAGE_LABEL[m.usage] || esc(m.usage)}</td>
+      <td class="px-4 py-2.5">${MOVEMENT_TYPE_LABEL[m.type] || esc(m.type)}</td>
+      <td class="px-4 py-2.5 text-right tnum">${m.quantity}</td>
+      <td class="px-4 py-2.5 text-mute">${esc(m.reason)} ${m.ref_type && m.ref_type !== 'manuel' ? `<span class="text-[11px]">(${esc(m.ref_type)})</span>` : ''}</td>
+      <td class="px-4 py-2.5 text-mute">${esc(m.user_name || '—')}</td>
+      <td class="px-4 py-2.5"><div class="flex items-center gap-2 justify-end">${btnEdit(`modalEditMovement(${JSON.stringify(m).replace(/'/g,"&#39;")})`)}${btnDelete(`deleteMovement(${m.id})`)}</div></td>
+    </tr>`).join('') || '<tr><td colspan="9" class="px-4 py-8 text-center text-mute">Aucun mouvement</td></tr>';
+}
+function modalEditMovement(m) {
+  const isGroup = ['transfert', 'dispatch'].includes(m.ref_type) && m.ref_id;
+  openModal('Modifier le mouvement', `
+    <div class="space-y-3.5">
+      <p class="text-[12.5px] text-mute">${esc(m.article_name)}${m.variant_label && m.variant_label !== 'Standard' ? ' — ' + esc(m.variant_label) : ''}${isGroup ? ' — mouvement lié (transfert/dispatch) : seule la quantité est modifiable.' : ''}</p>
+      <div><label class="lbl">Quantité</label><input id="editMovQty" type="number" min="0.01" step="0.01" value="${m.quantity}" class="field"></div>
+      ${!isGroup ? `
+      <div><label class="lbl">Lieu</label><select id="editMovLocation" class="field">${S.locations.map(l=>`<option value="${l.id}" ${l.id===m.location_id?'selected':''}>${esc(l.name)}</option>`).join('')}</select></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Usage</label>${usageSelect('editMovUsage', true)}</div>
+        <div><label class="lbl">Type</label><select id="editMovType" class="field"><option value="entry" ${m.type==='entry'?'selected':''}>Entrée</option><option value="exit" ${m.type==='exit'?'selected':''}>Sortie</option><option value="adjustment" ${m.type==='adjustment'?'selected':''}>Ajustement</option></select></div>
+      </div>` : ''}
+    </div>`, async () => {
+    const payload = { id: m.id, quantity: +document.getElementById('editMovQty').value };
+    if (!isGroup) {
+      payload.location_id = +document.getElementById('editMovLocation').value;
+      payload.usage = document.getElementById('editMovUsage').value;
+      payload.type = document.getElementById('editMovType').value;
+    }
+    await api('stock_movements', 'PUT', payload);
+    closeModal(); toast('Mouvement modifié'); loadStockView();
+  });
+  if (!isGroup) document.getElementById('editMovUsage').value = m.usage;
+}
+async function deleteMovement(id) {
+  if (!confirm('Supprimer ce mouvement ? Un transfert ou dispatch est supprimé en entier (les deux moitiés).')) return;
+  try { await api('stock_movements&id=' + id, 'DELETE'); toast('Mouvement supprimé'); loadStockView(); }
+  catch (e) { toast(e.message, true); }
 }
 
 /* ================================================================ COMMANDES FOURNISSEURS */
@@ -1185,39 +1996,55 @@ async function loadOrders() {
       <td class="px-4 py-2.5"></td>
     </tr>`).join('') || '<tr><td colspan="6" class="px-4 py-8 text-center text-mute">Aucune commande</td></tr>';
 }
-async function modalOrder() {
+async function modalOrder(existing) {
   await ensureVariants();
-  openModal('Nouvelle commande fournisseur', `
+  openModal(existing ? `Modifier la commande #${existing.id}` : 'Nouvelle commande fournisseur', `
     <div class="space-y-3.5">
-      <div><label class="lbl">Fournisseur</label><select id="ordSupplier" class="field">${S.suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></div>
-      <div><label class="lbl">Livraison prévue</label><input id="ordExpected" type="date" class="field"></div>
+      <div><label class="lbl">Fournisseur</label><select id="ordSupplier" class="field">${S.suppliers.map(s=>`<option value="${s.id}" ${existing && +existing.supplier_id === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div>
+      <div><label class="lbl">Livraison prévue</label><input id="ordExpected" type="date" class="field" value="${existing ? (existing.expected_date || '').slice(0,10) : ''}"></div>
       <div>
         <label class="lbl">Lignes</label>
         <div id="ordLines" class="space-y-2"></div>
         <button type="button" onclick="addOrderLine()" class="text-[12px] font-semibold text-brand-600 hover:underline mt-1">+ Ajouter une ligne</button>
       </div>
-      <div><label class="lbl">Notes</label><textarea id="ordNotes" class="field" rows="2"></textarea></div>
+      <div><label class="lbl">Notes</label><textarea id="ordNotes" class="field" rows="2">${existing ? esc(existing.notes || '') : ''}</textarea></div>
     </div>`, async () => {
     const lines = [...document.querySelectorAll('#ordLines .ord-line')].map(row => ({ variant_id: +row.querySelector('.ol-art').value, quantity: +row.querySelector('.ol-qty').value, unit_price: +row.querySelector('.ol-price').value })).filter(l => l.variant_id && l.quantity > 0);
     if (!lines.length) throw new Error('Au moins une ligne requise');
-    await api('orders', 'POST', { supplier_id: +document.getElementById('ordSupplier').value, expected_date: document.getElementById('ordExpected').value, notes: document.getElementById('ordNotes').value, lines });
-    closeModal(); toast('Commande créée'); loadOrders();
+    const payload = { supplier_id: +document.getElementById('ordSupplier').value, expected_date: document.getElementById('ordExpected').value, notes: document.getElementById('ordNotes').value, lines };
+    if (existing) {
+      await api('orders', 'PUT', { id: existing.id, ...payload });
+      closeModal(); toast('Commande modifiée'); openFicheCommande(existing.id);
+    } else {
+      await api('orders', 'POST', payload);
+      closeModal(); toast('Commande créée'); loadOrders();
+    }
   });
-  addOrderLine();
+  if (existing && existing.lines && existing.lines.length) {
+    existing.lines.forEach(l => addOrderLine(l));
+  } else {
+    addOrderLine();
+  }
 }
-function addOrderLine() {
+function addOrderLine(preset) {
   const wrap = document.getElementById('ordLines');
   const variants = flattenVariants(S.articles);
   const row = document.createElement('div');
   row.className = 'ord-line flex gap-2';
-  row.innerHTML = `<select class="ol-art field">${variants.map(v=>`<option value="${v.id}" data-price="${v.purchase_price}">${esc(v.display_name)}</option>`).join('')}</select>
+  row.innerHTML = `<select class="ol-art field">${variants.map(v=>`<option value="${v.id}" data-price="${v.purchase_price}">${esc(v.display_name)}${v.article_number ? ' (' + esc(v.article_number) + ')' : ''}</option>`).join('')}</select>
     <input class="ol-qty field w-20" type="number" min="1" value="1">
     <input class="ol-price field w-24" type="number" step="0.01" placeholder="Prix">
     <button type="button" onclick="this.parentElement.remove()" class="text-mute hover:text-rose2-600 px-1">✕</button>`;
   wrap.appendChild(row);
-  const sel = row.querySelector('.ol-art'), price = row.querySelector('.ol-price');
+  const sel = row.querySelector('.ol-art'), qty = row.querySelector('.ol-qty'), price = row.querySelector('.ol-price');
   const setPrice = () => price.value = sel.selectedOptions[0]?.dataset.price || 0;
-  sel.addEventListener('change', setPrice); setPrice();
+  if (preset) {
+    sel.value = preset.variant_id;
+    qty.value = preset.quantity_ordered;
+    price.value = preset.unit_price;
+  } else {
+    sel.addEventListener('change', setPrice); setPrice();
+  }
 }
 
 async function openFicheCommande(id) {
@@ -1228,20 +2055,27 @@ async function openFicheCommande(id) {
       <div><h1 class="font-display text-[20px] font-bold">Commande #${o.id} — ${esc(o.supplier_name)}</h1>
         <span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${orderBadge(o.status)}">${ORDER_STATUS_LABEL[o.status]}</span></div>
       <div class="flex flex-wrap gap-2 staff-only">
+        ${o.status==='draft' ? `<button onclick="modalOrder(window._currentOrder)" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Modifier</button>` : ''}
         ${o.status==='draft' ? `<button onclick="setOrderStatus(${o.id},'sent')" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Marquer envoyée</button>` : ''}
         ${o.status==='sent' ? `<button onclick="setOrderStatus(${o.id},'confirmed')" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Marquer confirmée</button>` : ''}
         ${['sent','confirmed','received_partial'].includes(o.status) ? `<button onclick="modalReceive(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Réceptionner</button>` : ''}
-        <button onclick="printOrder(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Générer le bon de commande</button>
+        <button onclick="downloadOrderCsv(${o.id})" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Télécharger le bon de commande</button>
+        <button onclick="printOrder(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Imprimer</button>
         <button onclick="modalInvoice(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">+ Facture</button>
       </div>
     </div>
     <div class="grid lg:grid-cols-3 gap-3.5">
       <div class="bg-white border border-line rounded-xl2 shadow-card p-5 lg:col-span-2">
         <h2 class="font-semibold text-[14.5px] mb-3">Lignes</h2>
-        <table class="w-full text-[12.5px]"><thead><tr class="text-left text-[11px] uppercase text-mute border-b border-line"><th class="py-2">Article</th><th class="py-2 text-right">Commandé</th><th class="py-2 text-right">Reçu</th><th class="py-2 text-right">Prix</th><th class="py-2 text-right">Total</th></tr></thead>
-        <tbody>${o.lines.map(l => `<tr class="border-b border-line last:border-0"><td class="py-2">${esc(lineName(l))}</td><td class="py-2 text-right tnum">${l.quantity_ordered}</td><td class="py-2 text-right tnum">${l.quantity_received}</td><td class="py-2 text-right tnum">${chf(l.unit_price)}</td><td class="py-2 text-right tnum">${chf(l.quantity_ordered*l.unit_price)}</td></tr>`).join('')}</tbody></table>
+        <table class="w-full text-[12.5px]"><thead><tr class="text-left text-[11px] uppercase text-mute border-b border-line"><th class="py-2">Article</th><th class="py-2 text-right">Commandé</th><th class="py-2 text-right">Reçu</th><th class="py-2 text-right">Prix</th><th class="py-2 text-right">Total (CHF)</th></tr></thead>
+        <tbody>${o.lines.map(l => `<tr class="border-b border-line last:border-0"><td class="py-2">${esc(lineName(l))}<br><span class="text-[10.5px] text-mute font-mono">${esc(l.article_number || '—')}</span></td><td class="py-2 text-right tnum">${l.quantity_ordered}</td><td class="py-2 text-right tnum">${l.quantity_received}</td><td class="py-2 text-right tnum">${chf(l.unit_price)}</td><td class="py-2 text-right tnum">${chf(l.quantity_ordered*l.unit_price)}</td></tr>`).join('')}</tbody>
+        <tfoot>
+          <tr><td colspan="4" class="py-2 text-right text-mute">Total HT (CHF)</td><td class="py-2 text-right tnum">${chf(o.total_ht)}</td></tr>
+          <tr><td colspan="4" class="py-2 text-right text-mute">TVA (${o.vat_rate}%)</td><td class="py-2 text-right tnum">${chf(o.vat_amount)}</td></tr>
+          <tr><td colspan="4" class="py-2 text-right font-semibold">Total TTC (CHF)</td><td class="py-2 text-right tnum font-semibold">${chf(o.total_ttc)}</td></tr>
+        </tfoot></table>
         <h2 class="font-semibold text-[14.5px] mt-5 mb-2">Factures liées</h2>
-        ${o.invoices.length ? o.invoices.map(f => `<p class="text-[12.5px]"><a href="api.php?action=download&file=${encodeURIComponent(f.filename)}" class="text-brand-600 hover:underline">${dateCH(f.invoice_date)} — ${chf(f.amount)} CHF</a></p>`).join('') : '<p class="text-mute text-[12.5px]">Aucune facture</p>'}
+        ${o.invoices.length ? o.invoices.map(f => renderInvoice(f, o.id)).join('') : '<p class="text-mute text-[12.5px]">Aucune facture</p>'}
       </div>
       <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
         <h2 class="font-semibold text-[14.5px] mb-2">Détails</h2>
@@ -1256,32 +2090,129 @@ async function openFicheCommande(id) {
   applyRoleVisibility();
   window._currentOrder = o;
 }
+const INVOICE_STATUS_LABEL = { a_controler: 'À contrôler', approuvee: 'Approuvée', en_attente_paiement: 'En attente de paiement', payee: 'Payée' };
+function renderInvoice(f, orderId) {
+  const anomalies = f.anomalies || [];
+  return `
+    <div class="border border-line rounded-lg p-3 mb-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <a href="api.php?action=download&file=${encodeURIComponent(f.filename)}" class="text-brand-600 hover:underline text-[12.5px]">${dateCH(f.invoice_date)} — ${chf(f.amount)} CHF</a>
+        <select class="field !h-7 !py-0 !text-[11.5px] w-auto staff-only" onchange="setInvoiceStatus(${f.id}, this.value)">
+          ${Object.entries(INVOICE_STATUS_LABEL).map(([k,v]) => `<option value="${k}" ${f.status===k?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+      ${anomalies.length ? `
+        <div class="mt-2 space-y-1">
+          ${anomalies.map(a => `
+            <div class="flex items-center justify-between gap-2 text-[11.5px] px-2 py-1 rounded-md ${a.resolved ? 'bg-canvas text-mute' : 'bg-rose2-50 text-rose2-600'}">
+              <span>${anomalyLabel(a)}</span>
+              ${!a.resolved ? `<button onclick="resolveAnomaly(${a.id}, ${orderId})" class="font-semibold hover:underline staff-only">Marquer résolu</button>` : '<span>Résolu</span>'}
+            </div>`).join('')}
+        </div>` : (f.lines && f.lines.length ? '<p class="text-[11.5px] text-green2-600 mt-1">Aucune anomalie</p>' : '')}
+    </div>`;
+}
+function anomalyLabel(a) {
+  const art = esc(a.article_number || a.article_name || ('variante #' + (a.variant_id ?? '?')));
+  if (a.type === 'quantity_mismatch') return `Quantité — ${art} : commandé ${a.expected_value}, facturé ${a.actual_value}`;
+  if (a.type === 'price_mismatch') return `Prix — ${art} : commandé ${chf(a.expected_value)}, facturé ${chf(a.actual_value)}`;
+  if (a.type === 'unknown_article') return `Article facturé inconnu dans la commande (variante #${a.actual_value})`;
+  return art;
+}
+async function setInvoiceStatus(id, status) { await api('invoice', 'PUT', { id, status }); toast('Statut facture mis à jour'); openFicheCommande(window._currentOrder.id); }
+async function resolveAnomaly(id, orderId) { await api('invoice_anomaly', 'PUT', { id, resolved: 1 }); toast('Anomalie résolue'); openFicheCommande(orderId); }
+function downloadOrderCsv(id) { window.location.href = 'api.php?action=order_export_csv&id=' + id; }
 function lineName(l) { return l.article_name + (l.variant_label && l.variant_label !== 'Standard' ? ' — ' + l.variant_label : ''); }
 async function setOrderStatus(id, status) { await api('orders', 'PUT', { id, status }); toast('Commande mise à jour'); openFicheCommande(id); }
-function modalReceive(orderId) {
+// Accumule, pour la session de réception en cours (scans + validation finale), les quantités reçues par
+// variante afin de proposer automatiquement l'aperçu d'impression des étiquettes une fois la réception validée.
+function receiveSessionAdd(orderId, variantId, qty, display_name, barcode, sale_price_ttc) {
+  if (!window._receiveSession || window._receiveSession.orderId !== orderId) {
+    window._receiveSession = { orderId, items: {} };
+  }
+  const items = window._receiveSession.items;
+  if (!items[variantId]) items[variantId] = { id: variantId, display_name, barcode, sale_price_ttc, copies: 0 };
+  items[variantId].copies += qty;
+}
+function modalReceive(orderId, preserveLocation) {
   const o = window._currentOrder;
+  if (!preserveLocation) window._receiveSession = { orderId, items: {} };
   openModal('Réception de commande', `
     <div class="space-y-3">
       <div><label class="lbl">Lieu de réception</label><select id="recLocation" class="field">${S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
-      ${o.lines.map(l => `<div class="flex items-center gap-2"><span class="flex-1 text-[12.5px]">${esc(lineName(l))} (reste ${l.quantity_ordered-l.quantity_received})</span><input class="rec-line field w-24" data-line="${l.id}" type="number" min="0" step="0.01" value="${l.quantity_ordered-l.quantity_received}"></div>`).join('')}
+      <div>
+        <label class="lbl">Scanner un article reçu</label>
+        <input id="recScan" class="field" placeholder="Scanner ou saisir un code-barres puis Entrée" autocomplete="off"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();receiveScan(${orderId});}">
+        <p class="text-[11px] text-mute mt-1">Chaque scan incrémente la quantité reçue de 1 et met à jour le stock (non affecté) immédiatement.</p>
+      </div>
+      <div class="border-t border-line pt-3 space-y-2">
+        ${o.lines.map(l => `<div class="flex items-center gap-2"><span class="flex-1 text-[12.5px]">${esc(lineName(l))} (reste ${l.quantity_ordered-l.quantity_received})</span><input class="rec-line field w-24" data-line="${l.id}" data-variant="${l.variant_id}" type="number" min="0" step="0.01" value="${l.quantity_ordered-l.quantity_received}"></div>`).join('')}
+      </div>
     </div>`, async () => {
-    const lines = [...document.querySelectorAll('.rec-line')].map(inp => ({ line_id: +inp.dataset.line, quantity_received: +inp.value })).filter(l => l.quantity_received > 0);
-    await api('orders_receive', 'POST', { order_id: orderId, location_id: +document.getElementById('recLocation').value, lines });
+    const inputs = [...document.querySelectorAll('.rec-line')];
+    const lines = inputs.map(inp => ({ line_id: +inp.dataset.line, quantity_received: +inp.value })).filter(l => l.quantity_received > 0);
+    const r = await api('orders_receive', 'POST', { order_id: orderId, location_id: +document.getElementById('recLocation').value, lines });
+    (r.received || []).forEach(it => receiveSessionAdd(orderId, it.variant_id, it.quantity, it.display_name, it.barcode, it.sale_price_ttc));
     closeModal(); toast('Réception enregistrée'); openFicheCommande(orderId); loadArticles();
+    // Validation finale de la réception (ce bouton) : prépare l'aperçu d'impression des étiquettes pour
+    // toutes les variantes reçues durant cette session (scans + saisie manuelle), copies = quantité reçue
+    // (arrondie à l'entier supérieur — on ne peut pas imprimer une demi-étiquette). Aperçu ajustable avant impression.
+    const session = window._receiveSession;
+    if (session && session.orderId === orderId) {
+      const items = Object.values(session.items).filter(it => it.barcode).map(it => ({ ...it, copies: Math.max(1, Math.ceil(it.copies)) }));
+      window._receiveSession = null;
+      if (items.length) openLabelModal('Étiquettes — réception commande #' + orderId, items);
+    }
   });
+  if (preserveLocation) document.getElementById('recLocation').value = preserveLocation;
+  document.getElementById('recScan').focus();
+}
+async function receiveScan(orderId) {
+  const inp = document.getElementById('recScan');
+  const code = (inp.value || '').trim();
+  if (!code) return;
+  inp.value = '';
+  const locationId = +document.getElementById('recLocation').value;
+  try {
+    const r = await api('orders_receive_scan', 'POST', { order_id: orderId, barcode: code, location_id: locationId });
+    toast(r.exceeded ? 'Réceptionné (dépasse la quantité commandée)' : 'Article réceptionné', r.exceeded);
+    if (r.barcode) receiveSessionAdd(orderId, r.variant_id, 1, r.display_name, r.barcode, r.sale_price_ttc);
+    window._currentOrder = await api('orders', 'GET', { id: orderId });
+    loadArticles();
+    modalReceive(orderId, locationId);
+  } catch (e) { toast(e.message, true); document.getElementById('recScan').focus(); }
 }
 function modalInvoice(orderId) {
+  const o = window._currentOrder;
   openModal('Ajouter une facture', `
     <div class="space-y-3.5">
       <div><label class="lbl">Montant (CHF)</label><input id="invAmount" type="number" step="0.01" class="field"></div>
       <div><label class="lbl">Date de facture</label><input id="invDate" type="date" class="field"></div>
       <div><label class="lbl">Fichier (PDF/image)</label><input id="invFile" type="file" accept=".pdf,image/*" class="field"></div>
+      <div>
+        <label class="lbl">Lignes facturées (saisie manuelle, pré-remplies avec la commande)</label>
+        <p class="text-[11px] text-mute mb-1.5">Aucune extraction automatique de facture dans cette application : ajustez les quantités/prix selon la facture reçue pour détecter les écarts.</p>
+        <div class="space-y-1.5">
+          ${o.lines.map(l => `<div class="flex items-center gap-2 inv-line" data-variant="${l.variant_id}">
+            <span class="flex-1 text-[12px]">${esc(lineName(l))}</span>
+            <input class="inv-qty field w-20" type="number" min="0" step="0.01" value="${l.quantity_ordered}" title="Quantité facturée">
+            <input class="inv-price field w-24" type="number" min="0" step="0.01" value="${l.unit_price}" title="Prix unitaire facturé HT">
+          </div>`).join('')}
+        </div>
+      </div>
     </div>`, async () => {
     const file = document.getElementById('invFile').files[0];
     if (!file) throw new Error('Fichier requis');
-    const fd = new FormData(); fd.append('file', file); fd.append('order_id', orderId); fd.append('amount', document.getElementById('invAmount').value); fd.append('invoice_date', document.getElementById('invDate').value);
-    await api('invoice_upload', 'POST', fd, true);
-    closeModal(); toast('Facture ajoutée'); openFicheCommande(orderId);
+    const invLines = [...document.querySelectorAll('.inv-line')].map(row => ({
+      variant_id: +row.dataset.variant,
+      quantity_invoiced: +row.querySelector('.inv-qty').value,
+      unit_price_invoiced: +row.querySelector('.inv-price').value,
+    }));
+    const fd = new FormData(); fd.append('file', file); fd.append('order_id', orderId); fd.append('amount', document.getElementById('invAmount').value); fd.append('invoice_date', document.getElementById('invDate').value); fd.append('lines', JSON.stringify(invLines));
+    const r = await api('invoice_upload', 'POST', fd, true);
+    closeModal();
+    toast(r.anomalies ? `Facture ajoutée — ${r.anomalies} anomalie(s) détectée(s)` : 'Facture ajoutée, aucune anomalie', !!r.anomalies);
+    openFicheCommande(orderId);
   });
 }
 function printOrder(id) {
@@ -1297,9 +2228,9 @@ function printOrder(id) {
       <p style="font-size:13px;"><b>Fournisseur :</b> ${esc(o.supplier_name)}<br>${esc(o.supplier_address||'')}<br>${esc(o.supplier_email||'')} ${esc(o.supplier_phone||'')}</p>
       <p style="font-size:13px;"><b>Livraison souhaitée :</b> ${dateCH(o.expected_date)}</p>
       <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;">
-        <thead><tr style="background:#ffdd00;"><th style="padding:6px;text-align:left;">Article</th><th style="padding:6px;text-align:right;">Qté</th><th style="padding:6px;text-align:right;">Prix</th><th style="padding:6px;text-align:right;">Total</th></tr></thead>
+        <thead><tr style="background:#ffdd00;"><th style="padding:6px;text-align:left;">Article</th><th style="padding:6px;text-align:right;">Qté</th><th style="padding:6px;text-align:right;">Prix</th><th style="padding:6px;text-align:right;">Total (CHF)</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr><td colspan="3" style="padding:6px;text-align:right;font-weight:bold;">Total</td><td style="padding:6px;text-align:right;font-weight:bold;">${chf(total)} CHF</td></tr></tfoot>
+        <tfoot><tr><td colspan="3" style="padding:6px;text-align:right;font-weight:bold;">Total (CHF)</td><td style="padding:6px;text-align:right;font-weight:bold;">${chf(total)}</td></tr></tfoot>
       </table>
       ${o.notes ? `<p style="font-size:12px;margin-top:16px;">${esc(o.notes)}</p>` : ''}
     </div>`;
@@ -1307,35 +2238,89 @@ function printOrder(id) {
 }
 
 /* ================================================================ ÉTIQUETTES */
-async function loadLabelSelect() {
-  const variants = await ensureVariants();
-  document.getElementById('labelArticles').innerHTML = variants.filter(v => v.barcode).map(v => `<option value="${v.id}">${esc(v.display_name)} — ${esc(v.barcode)}</option>`).join('') || '<option disabled>Aucune variante avec code-barres</option>';
-}
+// Étiquettes intégrées au catalogue (plus d'onglet dédié) : impression déclenchée soit depuis la fiche
+// article (variantes de cet article, copies=1 par défaut), soit automatiquement après une réception de
+// commande (copies = quantité reçue par variante). openLabelModal() est le point d'entrée commun.
 const LABEL_SIZES = { '62x29': [62,29], '62x100': [62,100], '29x90': [29,90], '62cont': [62,40] };
-function generateLabels() {
-  const ids = [...document.getElementById('labelArticles').selectedOptions].map(o => +o.value);
-  if (!ids.length) { toast('Sélectionner au moins un article', true); return; }
-  const copies = +document.getElementById('labelCopies').value || 1;
-  const [w, h] = LABEL_SIZES[document.getElementById('labelFormat').value];
-  const variants = flattenVariants(S.articles).filter(v => ids.includes(v.id));
-  const preview = document.getElementById('labelPreview');
+async function fetchLabelFormat() {
+  try { const r = await api('label_settings'); return r.label_format || '62x29'; } catch (e) { return '62x29'; }
+}
+// items: [{ id, display_name, barcode, sale_price_ttc, copies }]
+async function openLabelModal(title, items) {
+  if (!items.length) { toast('Aucune variante avec code-barres à imprimer', true); return; }
+  const fmt = await fetchLabelFormat();
+  window._labelModalItems = items;
+  const rows = items.map((it, idx) => `
+    <div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0">
+      <input type="checkbox" class="lbl-check" data-idx="${idx}" checked>
+      <span class="flex-1 text-[12.5px]">${esc(it.display_name)} <span class="text-mute font-mono text-[11px]">${esc(it.barcode)}</span></span>
+      <input type="number" min="1" class="lbl-copies field w-20 !h-8" data-idx="${idx}" value="${it.copies || 1}">
+    </div>`).join('');
+  openModal(title, `
+    <div class="space-y-3">
+      <div>
+        <label class="lbl">Format d'étiquette (Brother QL)</label>
+        <select id="lblModalFormat" class="field" onchange="generateLabelModalPreview()">
+          <option value="62x29" ${fmt==='62x29'?'selected':''}>DK-11209 — 62 × 29 mm</option>
+          <option value="62x100" ${fmt==='62x100'?'selected':''}>DK-11202 — 62 × 100 mm</option>
+          <option value="29x90" ${fmt==='29x90'?'selected':''}>DK-11201 — 29 × 90 mm</option>
+          <option value="62cont" ${fmt==='62cont'?'selected':''}>Ruban continu 62 mm</option>
+        </select>
+      </div>
+      <label class="lbl">Variantes et copies</label>
+      <div class="max-h-[220px] overflow-y-auto border border-line rounded-lg px-2">${rows}</div>
+      <button type="button" onclick="generateLabelModalPreview()" class="w-full h-9 rounded-lg border border-line bg-white text-[12.5px] font-semibold hover:bg-canvas transition">Générer l'aperçu</button>
+      <div>
+        <p class="text-[11px] text-mute mb-1.5">Aperçu</p>
+        <div id="lblModalPreview" class="flex flex-wrap gap-2 max-h-[260px] overflow-y-auto border border-line rounded-lg p-2"></div>
+      </div>
+    </div>`, () => printLabelModal());
+  document.getElementById('modalSubmit').textContent = 'Imprimer';
+  generateLabelModalPreview();
+}
+function generateLabelModalPreview() {
+  const items = window._labelModalItems || [];
+  const checks = [...document.querySelectorAll('.lbl-check')];
+  const copiesInputs = [...document.querySelectorAll('.lbl-copies')];
+  const format = document.getElementById('lblModalFormat').value;
+  const [w, h] = LABEL_SIZES[format];
+  const preview = document.getElementById('lblModalPreview');
   preview.innerHTML = '';
-  variants.forEach(v => {
+  checks.forEach(chk => {
+    if (!chk.checked) return;
+    const idx = +chk.dataset.idx;
+    const v = items[idx];
+    const copiesInput = copiesInputs.find(c => +c.dataset.idx === idx);
+    const copies = Math.max(1, +copiesInput.value || 1);
     for (let i = 0; i < copies; i++) {
       const div = document.createElement('div');
       div.className = 'label-item border border-line rounded-lg p-2 bg-white';
       div.style.width = (w * 3) + 'px';
-      div.innerHTML = `<p style="font-size:10px;font-weight:600;margin:0 0 2px;">${esc(v.display_name)}</p><svg class="lbl-svg"></svg><p style="font-size:9px;margin:2px 0 0;">${chf(v.sale_price_ttc)} CHF</p>`;
+      div.innerHTML = `<p style="font-size:10px;font-weight:600;margin:0 0 2px;">${esc(v.display_name)}</p><svg class="lbl-svg"></svg>${v.sale_price_ttc != null ? `<p style="font-size:9px;margin:2px 0 0;">${chf(v.sale_price_ttc)} CHF</p>` : ''}`;
       preview.appendChild(div);
       JsBarcode(div.querySelector('.lbl-svg'), v.barcode, { format: 'CODE128', height: h, displayValue: true, fontSize: 10, margin: 2 });
     }
   });
 }
-function printLabels() {
-  const items = document.getElementById('labelPreview').innerHTML;
+function printLabelModal() {
+  const items = document.getElementById('lblModalPreview').innerHTML;
   if (!items.trim()) { toast('Générer un aperçu avant d\'imprimer', true); return; }
+  closeModal();
   document.getElementById('printZone').innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;">${items}</div>`;
   setTimeout(() => window.print(), 60);
+}
+// Depuis la fiche article : imprime les étiquettes des variantes de CET article uniquement (copies=1 par défaut).
+function modalPrintLabelsArticle(articleId) {
+  const a = S.articles.find(x => x.id === articleId);
+  if (!a) return;
+  const items = (a.variants || []).filter(v => v.barcode).map(v => ({
+    id: v.id,
+    display_name: a.name + (v.label && v.label !== 'Standard' ? ' — ' + v.label : ''),
+    barcode: v.barcode,
+    sale_price_ttc: a.sale_price_ttc,
+    copies: 1,
+  }));
+  openLabelModal("Imprimer des étiquettes — " + a.name, items);
 }
 
 /* ================================================================ BUDGETS */
@@ -1345,8 +2330,8 @@ async function loadBudgets() {
   document.getElementById('budgetsSub').textContent = 'Exercice ' + d.fiscal_year;
   document.getElementById('budgetCards').innerHTML = d.budgets.map(b => `
     <div class="bg-white border border-line rounded-xl2 shadow-card p-4">
-      <div class="flex items-center justify-between mb-2"><p class="font-semibold text-[13.5px]">${esc(b.category_name)}</p>
-        <button onclick='editBudget(${JSON.stringify(b).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Modifier</button></div>
+      <div class="flex items-center justify-between mb-2"><p class="font-semibold text-[13.5px]">${esc(b.department_name)}</p>
+        <div class="flex items-center gap-2">${btnEdit(`editBudget(${b.id})`)}${btnDelete(`deleteBudget(${b.id})`)}</div></div>
       ${budgetBar(b)}
     </div>`).join('') || '<p class="text-mute text-[13px]">Aucun budget pour cet exercice</p>';
 }
@@ -1354,30 +2339,60 @@ function modalBudget(existing) {
   const b = existing || {};
   openModal(existing ? 'Modifier le budget' : 'Nouveau budget', `
     <div class="space-y-3.5">
-      <div><label class="lbl">Catégorie</label><select id="budCat" class="field" ${existing?'disabled':''}>${S.categories.map(c=>`<option value="${c.id}" ${b.category_id==c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+      <div><label class="lbl">Département</label><select id="budDep" class="field" ${existing?'disabled':''}>${S.departments.map(d=>`<option value="${d.id}" ${b.department_id==d.id?'selected':''}>${esc(d.name)}</option>`).join('')}</select></div>
       <div><label class="lbl">Montant alloué (CHF)</label><input id="budAmount" type="number" step="0.01" class="field" value="${b.amount_allocated||0}"></div>
     </div>`, async () => {
     if (existing) await api('budgets', 'PUT', { id: b.id, amount_allocated: +document.getElementById('budAmount').value });
-    else await api('budgets', 'POST', { category_id: +document.getElementById('budCat').value, amount_allocated: +document.getElementById('budAmount').value });
+    else await api('budgets', 'POST', { department_id: +document.getElementById('budDep').value, amount_allocated: +document.getElementById('budAmount').value });
     closeModal(); toast('Budget enregistré'); loadBudgets();
   });
 }
-function editBudget(b) { modalBudget(b); }
+function editBudget(id) { modalBudget(S.budgets.find(b => b.id === id)); }
+async function deleteBudget(id) {
+  if (!confirm('Supprimer ce budget ?')) return;
+  await api('budgets&id=' + id, 'DELETE');
+  toast('Budget supprimé'); loadBudgets();
+}
 
 /* ================================================================ RAPPORTS */
 async function loadReportFilters() {
-  document.getElementById('repCat').innerHTML = '<option value="">Toutes</option>' + S.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const roots = S.categories.filter(c => !c.parent_id);
+  document.getElementById('repCatRoot').innerHTML = '<option value="">Toutes</option>' + roots.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  refreshRepSubcategory();
+  document.getElementById('repDept').innerHTML = '<option value="">Tous</option>' + S.departments.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');
   document.getElementById('repSupplier').innerHTML = '<option value="">Tous</option>' + S.suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   document.getElementById('repLoc').innerHTML = '<option value="">Tous</option>' + S.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('');
   loadReports();
 }
+function refreshRepSubcategory() {
+  const rootId = +document.getElementById('repCatRoot').value || '';
+  const subs = S.categories.filter(c => c.parent_id === rootId);
+  document.getElementById('repCatSub').innerHTML = '<option value="">Toutes</option>' + subs.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+}
 function reportParams() {
-  return { from: document.getElementById('repFrom').value, to: document.getElementById('repTo').value, category_id: document.getElementById('repCat').value, supplier_id: document.getElementById('repSupplier').value, location_id: document.getElementById('repLoc').value };
+  const subCatId = document.getElementById('repCatSub').value;
+  const rootCatId = document.getElementById('repCatRoot').value;
+  return {
+    from: document.getElementById('repFrom').value,
+    to: document.getElementById('repTo').value,
+    category_id: subCatId || rootCatId,
+    department_id: document.getElementById('repDept').value,
+    supplier_id: document.getElementById('repSupplier').value,
+    location_id: document.getElementById('repLoc').value
+  };
+}
+const usageLabels = { non_affecte: 'Non affecté', boutique: 'Boutique', equipement: 'Équipement' };
+async function loadStockValue() {
+  const p = reportParams();
+  const d = await api('stock_value', 'GET', { category_id: p.category_id, department_id: p.department_id });
+  document.getElementById('stockValueTotal').textContent = chf(d.total) + ' CHF';
+  document.getElementById('stockValueByUsage').innerHTML = d.by_usage.map(u => `<div class="flex items-center justify-between text-[11.5px]"><span class="text-mute">${esc(usageLabels[u.usage_type] || u.usage_type || 'Autre')}</span><span class="font-medium tnum">${chf(u.value)} CHF</span></div>`).join('') || '<p class="text-mute text-[11.5px]">Aucune donnée</p>';
 }
 async function loadReports() {
   const d = await api('reports', 'GET', reportParams());
   document.getElementById('repByCategory').innerHTML = Object.entries(d.by_category).map(([k,v]) => `<div class="flex items-center justify-between py-1.5 border-b border-line last:border-0"><span class="text-[12.5px]">${esc(k)}</span><span class="text-[12.5px] font-semibold tnum">${chf(v)} CHF</span></div>`).join('') || '<p class="text-mute text-[12.5px]">Aucune donnée</p>';
   document.getElementById('repRows').innerHTML = d.rows.map(r => `<tr><td class="px-4 py-2">${dateCH(r.created_at)}</td><td class="px-4 py-2">${esc(lineName(r))}</td><td class="px-4 py-2">${esc(r.supplier_name)}</td><td class="px-4 py-2 text-right tnum">${r.quantity_ordered}</td><td class="px-4 py-2 text-right tnum">${chf(r.total)}</td></tr>`).join('') || '<tr><td colspan="5" class="px-4 py-8 text-center text-mute">Aucune donnée</td></tr>';
+  loadStockValue();
 }
 function exportOdoo() {
   const p = new URLSearchParams({ ...reportParams(), format: 'odoo' });
@@ -1393,9 +2408,41 @@ function setParamTab(tab) {
 }
 async function loadSettingsView() {
   setParamTab(paramTab);
-  document.getElementById('locationList').innerHTML = S.locations.map(l => `<div class="flex items-center justify-between text-[12.5px]"><span>${esc(l.name)} ${!l.active?'<span class=\"text-mute\">(inactif)</span>':''}</span><button onclick='editLocation(${JSON.stringify(l).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Modifier</button></div>`).join('') || '<p class="text-mute text-[12.5px]">Aucun lieu</p>';
-  document.getElementById('categoryList').innerHTML = S.categories.map(c => `<div class="flex items-center justify-between text-[12.5px]"><span>${esc(c.name)}</span><button onclick='editCategory(${JSON.stringify(c).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Modifier</button></div>`).join('') || '<p class="text-mute text-[12.5px]">Aucune catégorie</p>';
-  document.getElementById('attributeList').innerHTML = S.attributes.map(a => `<div class="flex items-center justify-between text-[12.5px]"><div><span>${esc(a.name)}</span>${a.values.length ? `<span class="text-mute"> — ${a.values.map(v=>esc(v.value)).join(', ')}</span>` : ''}</div><div class="space-x-2 shrink-0"><button onclick='modalAttributeValues(${JSON.stringify(a).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Valeurs</button><button onclick='editAttribute(${JSON.stringify(a).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px]">Modifier</button><button onclick="deleteAttribute(${a.id})" class="text-mute hover:text-rose2-600 text-[11px]">Supprimer</button></div></div>`).join('') || '<p class="text-mute text-[12.5px]">Aucun attribut</p>';
+  document.getElementById('locationList').innerHTML = S.locations.map(l => `
+    <div class="flex items-center justify-between text-[12.5px]">
+      <span>${esc(l.name)} ${!l.active?'<span class="text-mute">(inactif)</span>':''}</span>
+      <div class="flex items-center gap-2 shrink-0">${btnEdit(`editLocation(${l.id})`)}${btnDelete(`deleteLocation(${l.id})`)}</div>
+    </div>`).join('') || '<p class="text-mute text-[12.5px]">Aucun lieu</p>';
+
+  document.getElementById('categoryList').innerHTML = categoryTree().map(root => `
+    <div>
+      <div class="flex items-center justify-between text-[12.5px] py-0.5">
+        <span class="font-semibold">${esc(root.name)}</span>
+        <div class="flex items-center gap-2 shrink-0">
+          <button type="button" onclick="modalCategory(null, ${root.id})" class="text-[11px] font-semibold text-brand-600 hover:underline">+ sous-catégorie</button>
+          ${btnEdit(`editCategory(${root.id})`)}${btnDelete(`deleteCategory(${root.id})`)}
+        </div>
+      </div>
+      ${root.children.map(c => `
+        <div class="flex items-center justify-between text-[12.5px] py-0.5 pl-4">
+          <span class="text-mute">— ${esc(c.name)}</span>
+          <div class="flex items-center gap-2 shrink-0">${btnEdit(`editCategory(${c.id})`)}${btnDelete(`deleteCategory(${c.id})`)}</div>
+        </div>`).join('')}
+    </div>`).join('') || '<p class="text-mute text-[12.5px]">Aucune catégorie</p>';
+
+  document.getElementById('departmentList').innerHTML = S.departments.map(d => `
+    <div class="flex items-center justify-between text-[12.5px]">
+      <span>${esc(d.name)}</span>
+      <div class="flex items-center gap-2 shrink-0">${btnEdit(`editDepartment(${d.id})`)}${btnDelete(`deleteDepartment(${d.id})`)}</div>
+    </div>`).join('') || '<p class="text-mute text-[12.5px]">Aucun département</p>';
+
+  document.getElementById('formeList').innerHTML = S.formes.map(f => `
+    <div class="flex items-center justify-between text-[12.5px]">
+      <span>${esc(f.name)}</span>
+      <div class="flex items-center gap-2 shrink-0">${btnEdit(`editForme(${f.id})`)}${btnDelete(`deleteForme(${f.id})`)}</div>
+    </div>`).join('') || '<p class="text-mute text-[12.5px]">Aucune forme</p>';
+
+  document.getElementById('attributeList').innerHTML = S.attributes.map(a => `<div class="flex items-center justify-between text-[12.5px]"><div><span>${esc(a.name)}</span>${a.values.length ? `<span class="text-mute"> — ${a.values.map(v=>esc(v.value)).join(', ')}</span>` : ''}</div><div class="flex items-center gap-2 shrink-0"><button type="button" onclick='modalAttributeValues(${JSON.stringify(a).replace(/'/g,"&#39;")})' class="text-mute hover:text-ink text-[11px] font-semibold">Valeurs</button>${btnEdit(`editAttribute(${a.id})`)}${btnDelete(`deleteAttribute(${a.id})`)}</div></div>`).join('') || '<p class="text-mute text-[12.5px]">Aucun attribut</p>';
   if (isAdmin()) {
     const users = await api('users');
     document.getElementById('userList').innerHTML = users.map(u => `
@@ -1427,16 +2474,67 @@ function modalLocation(existing) {
     closeModal(); toast('Lieu enregistré'); await loadRefData(); loadSettingsView();
   });
 }
-function editLocation(l) { modalLocation(l); }
-function modalCategory(existing) {
+function editLocation(id) { modalLocation(S.locations.find(l => l.id === id)); }
+async function deleteLocation(id) {
+  if (!confirm('Supprimer ce lieu ?')) return;
+  try { await api('locations&id=' + id, 'DELETE'); toast('Lieu supprimé'); await loadRefData(); loadSettingsView(); }
+  catch (e) { toast(e.message, true); }
+}
+function modalCategory(existing, presetParentId) {
   const c = existing || {};
-  openModal(existing ? 'Modifier la catégorie' : 'Nouvelle catégorie', `<div><label class="lbl">Nom</label><input id="catName" class="field" value="${esc(c.name||'')}"></div>`, async () => {
-    if (existing) await api('categories', 'PUT', { id: c.id, name: document.getElementById('catName').value });
-    else await api('categories', 'POST', { name: document.getElementById('catName').value });
+  const isSub = existing ? !!existing.parent_id : !!presetParentId;
+  const roots = S.categories.filter(x => !x.parent_id && x.id !== (existing && existing.id));
+  openModal(existing ? 'Modifier la catégorie' : (presetParentId ? 'Nouvelle sous-catégorie' : 'Nouvelle catégorie'), `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Nom</label><input id="catName" class="field" value="${esc(c.name||'')}"></div>
+      <div><label class="lbl">Catégorie parente <span class="font-normal text-mute">(vide = catégorie racine)</span></label>
+        <select id="catParent" class="field">
+          <option value="">— Catégorie racine —</option>
+          ${roots.map(r => `<option value="${r.id}" ${(c.parent_id||presetParentId)==r.id?'selected':''}>${esc(r.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>`, async () => {
+    const name = document.getElementById('catName').value;
+    const parentId = +document.getElementById('catParent').value || null;
+    if (existing) await api('categories', 'PUT', { id: c.id, name, parent_id: parentId });
+    else await api('categories', 'POST', { name, parent_id: parentId });
     closeModal(); toast('Catégorie enregistrée'); await loadRefData(); loadSettingsView();
   });
 }
-function editCategory(c) { modalCategory(c); }
+function editCategory(id) { modalCategory(S.categories.find(c => c.id === id)); }
+async function deleteCategory(id) {
+  if (!confirm('Supprimer cette catégorie ? Ses éventuelles sous-catégories seront aussi supprimées.')) return;
+  await api('categories&id=' + id, 'DELETE');
+  toast('Catégorie supprimée'); await loadRefData(); loadSettingsView();
+}
+function modalDepartment(existing) {
+  const d = existing || {};
+  openModal(existing ? 'Modifier le département' : 'Nouveau département', `<div><label class="lbl">Nom</label><input id="depName" class="field" value="${esc(d.name||'')}"></div>`, async () => {
+    if (existing) await api('departments', 'PUT', { id: d.id, name: document.getElementById('depName').value });
+    else await api('departments', 'POST', { name: document.getElementById('depName').value });
+    closeModal(); toast('Département enregistré'); await loadRefData(); loadSettingsView();
+  });
+}
+function editDepartment(id) { modalDepartment(S.departments.find(d => d.id === id)); }
+async function deleteDepartment(id) {
+  if (!confirm('Supprimer ce département ? Les budgets associés seront aussi supprimés.')) return;
+  await api('departments&id=' + id, 'DELETE');
+  toast('Département supprimé'); await loadRefData(); loadSettingsView();
+}
+function modalForme(existing) {
+  const f = existing || {};
+  openModal(existing ? 'Modifier la forme' : 'Nouvelle forme', `<div><label class="lbl">Nom</label><input id="formeName" class="field" value="${esc(f.name||'')}"></div>`, async () => {
+    if (existing) await api('formes', 'PUT', { id: f.id, name: document.getElementById('formeName').value });
+    else await api('formes', 'POST', { name: document.getElementById('formeName').value });
+    closeModal(); toast('Forme enregistrée'); await loadRefData(); loadSettingsView();
+  });
+}
+function editForme(id) { modalForme(S.formes.find(f => f.id === id)); }
+async function deleteForme(id) {
+  if (!confirm('Supprimer cette forme ?')) return;
+  await api('formes&id=' + id, 'DELETE');
+  toast('Forme supprimée'); await loadRefData(); loadSettingsView();
+}
 function modalAttribute(existing) {
   const a = existing || {};
   openModal(existing ? 'Modifier l\'attribut' : 'Nouvel attribut', `<div><label class="lbl">Nom</label><input id="attrName" class="field" placeholder="Ex. Taille, Couleur…" value="${esc(a.name||'')}"></div>`, async () => {
@@ -1445,7 +2543,7 @@ function modalAttribute(existing) {
     closeModal(); toast('Attribut enregistré'); await loadRefData(); loadSettingsView();
   });
 }
-function editAttribute(a) { modalAttribute(a); }
+function editAttribute(id) { modalAttribute(S.attributes.find(a => a.id === id)); }
 async function deleteAttribute(id) {
   const attr = S.attributes.find(a => a.id === id);
   const name = attr ? attr.name : 'cet attribut';
@@ -1455,14 +2553,23 @@ async function deleteAttribute(id) {
 }
 function renderAttributeValuesBody(attr) {
   return `
-    <p class="text-[12px] text-mute mb-3">Valeurs possibles pour <b class="text-ink">${esc(attr.name)}</b> (ex. XS, S, M, L…), proposées ensuite en liste déroulante sur chaque article.</p>
+    <p class="text-[12px] text-mute mb-3">Valeurs possibles pour <b class="text-ink">${esc(attr.name)}</b> (ex. XS, S, M, L…), proposées ensuite en liste déroulante sur chaque article. Un code couleur (facultatif) permet de distinguer visuellement chaque valeur.</p>
     <div class="space-y-1.5 mb-3" id="attrValuesList">
-      ${attr.values.length ? attr.values.map(v => `<div class="flex items-center justify-between text-[12.5px] bg-canvas rounded-lg px-3 py-1.5"><span>${esc(v.value)}</span><button onclick="deleteAttributeValue(${attr.id}, ${v.id})" class="text-mute hover:text-rose2-600">✕</button></div>`).join('') : '<p class="text-mute text-[12.5px]">Aucune valeur pour l\'instant</p>'}
+      ${attr.values.length ? attr.values.map(v => `<div class="flex items-center gap-2 text-[12.5px] bg-canvas rounded-lg px-3 py-1.5">
+        <input type="color" class="w-6 h-6 rounded border border-line cursor-pointer shrink-0 p-0" value="${esc(v.color_code || '#cccccc')}" title="Code couleur" onchange="updateAttributeValueColor(${attr.id}, ${v.id}, this.value)">
+        <span class="flex-1">${esc(v.value)}</span>
+        <button onclick="deleteAttributeValue(${attr.id}, ${v.id})" class="text-mute hover:text-rose2-600">✕</button>
+      </div>`).join('') : '<p class="text-mute text-[12.5px]">Aucune valeur pour l\'instant</p>'}
     </div>
     <div class="flex gap-2">
+      <input type="color" id="newAttrValueColor" class="w-9 h-9 rounded-lg border border-line cursor-pointer shrink-0 p-0" value="#cccccc" title="Code couleur (facultatif)">
       <input id="newAttrValue" class="field" placeholder="Nouvelle valeur…" onkeydown="if(event.key==='Enter'){event.preventDefault();addAttributeValue(${attr.id})}">
       <button type="button" onclick="addAttributeValue(${attr.id})" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shrink-0">Ajouter</button>
     </div>`;
+}
+async function updateAttributeValueColor(attrId, valueId, colorCode) {
+  try { await api('attribute_values', 'PUT', { id: valueId, color_code: colorCode }); await refreshAttributeValuesModal(attrId); }
+  catch (e) { toast(e.message, true); }
 }
 function modalAttributeValues(attr) {
   openModal('Valeurs — ' + attr.name, renderAttributeValuesBody(attr), () => closeModal());
@@ -1478,7 +2585,8 @@ async function addAttributeValue(attrId) {
   const input = document.getElementById('newAttrValue');
   const value = input.value.trim();
   if (!value) return;
-  try { await api('attribute_values', 'POST', { attribute_id: attrId, value }); await refreshAttributeValuesModal(attrId); }
+  const color_code = document.getElementById('newAttrValueColor').value;
+  try { await api('attribute_values', 'POST', { attribute_id: attrId, value, color_code }); await refreshAttributeValuesModal(attrId); }
   catch (e) { toast(e.message, true); }
 }
 async function deleteAttributeValue(attrId, valueId) {
