@@ -138,6 +138,9 @@ tailwind.config = {
         <div class="text-[10.5px] text-[#8C897C] mt-0.5 tracking-wide">Stock & Achats</div>
       </div>
     </div>
+    <div class="px-3 pt-3 demandeur-hide">
+      <select id="seasonSelect" onchange="changeSeason(this.value)" class="w-full h-9 px-2.5 rounded-lg bg-[#211F18] border border-[#33301F] text-[12.5px] text-white outline-none focus:border-brand-500"></select>
+    </div>
 
     <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-0.5" id="sideNav">
       <p class="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Pilotage</p>
@@ -146,11 +149,6 @@ tailwind.config = {
         Dashboard
       </a>
       <p class="px-3 pt-4 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Achats</p>
-      <a href="#" data-view="demandes" class="nav-item flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
-        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-        Demandes
-        <span class="ml-auto text-[10.5px] font-semibold bg-rose2-50 text-rose2-600 px-1.5 py-0.5 rounded-md tnum hidden" id="badgeRequests"></span>
-      </a>
       <a href="#" data-view="commandes" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
         <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
         Commandes fournisseurs
@@ -167,6 +165,16 @@ tailwind.config = {
       <a href="#" data-view="stock" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
         <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
         Stock & Lieux
+      </a>
+      <p class="px-3 pt-4 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Boutique</p>
+      <a href="#" data-view="demandes" class="nav-item flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Demandes
+        <span class="ml-auto text-[10.5px] font-semibold bg-rose2-50 text-rose2-600 px-1.5 py-0.5 rounded-md tnum hidden" id="badgeRequests"></span>
+      </a>
+      <a href="#" data-view="promos" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
+        <svg class="w-[17px] h-[17px] text-[#8E8C82]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24L3 3v6.59a2 2 0 0 0 .59 1.41l9.58 9.58a2 2 0 0 0 2.82 0l4.6-4.6a2 2 0 0 0 0-2.82Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        Codes promo
       </a>
       <p class="px-3 pt-4 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-[#75736A]">Finance</p>
       <a href="#" data-view="budgets" class="nav-item staff-only flex items-center gap-2.5 px-3 py-2 rounded-lg text-[#C9C7BD] hover:bg-[#211F18] hover:text-white">
@@ -315,7 +323,7 @@ tailwind.config = {
               <thead>
                 <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
                   <th class="px-4 py-2.5 font-semibold">#</th><th class="px-4 py-2.5 font-semibold">Fournisseur</th>
-                  <th class="px-4 py-2.5 font-semibold">Statut</th><th class="px-4 py-2.5 font-semibold">Livraison prévue</th>
+                  <th class="px-4 py-2.5 font-semibold">Statut</th><th class="px-4 py-2.5 font-semibold">Date commande</th><th class="px-4 py-2.5 font-semibold">Livraison prévue</th>
                   <th class="px-4 py-2.5 font-semibold text-right">Total (CHF)</th><th class="px-4 py-2.5"></th>
                 </tr>
               </thead>
@@ -343,6 +351,31 @@ tailwind.config = {
         <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-3.5" id="supplierCards"></div>
       </section>
 
+      <!-- ============ CODES PROMO ============ -->
+      <section id="view-promos" class="view px-4 lg:px-6 py-6">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h1 class="font-display text-[22px] font-bold tracking-tight">Codes promo</h1>
+            <p class="text-mute text-[13px] mt-0.5">Rabais applicables sur la boutique publique (/shop)</p>
+          </div>
+          <button onclick="modalPromoCode()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Nouveau code</button>
+        </div>
+        <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-[12.5px] min-w-[680px]">
+              <thead>
+                <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                  <th class="px-4 py-2.5 font-semibold">Code</th><th class="px-4 py-2.5 font-semibold text-right">Rabais</th>
+                  <th class="px-4 py-2.5 font-semibold">Expiration</th><th class="px-4 py-2.5 font-semibold text-right">Utilisations</th>
+                  <th class="px-4 py-2.5 font-semibold">Statut</th><th class="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody id="promoRows" class="divide-y divide-line"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- ============ CATALOGUE ============ -->
       <section id="view-catalogue" class="view px-4 lg:px-6 py-6">
         <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
@@ -352,7 +385,7 @@ tailwind.config = {
           </div>
           <div class="flex items-center gap-2 staff-only">
             <button onclick="modalImport()" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Importer</button>
-            <button onclick="modalExportArticles()" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Exporter</button>
+            <button onclick="exportSelectedArticles()" id="btnExportSelection" class="hidden h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium hover:bg-canvas transition">Exporter la sélection (<span id="exportSelectionCount">0</span>)</button>
             <button onclick="modalArticle()" class="h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">+ Nouvel article</button>
           </div>
         </div>
@@ -366,6 +399,7 @@ tailwind.config = {
             <table class="w-full text-[12.5px] min-w-[820px]">
               <thead>
                 <tr class="text-left text-[11px] uppercase tracking-[.06em] text-mute border-b border-line bg-canvas/50">
+                  <th class="px-4 py-2.5 font-semibold staff-only"><input type="checkbox" id="articleSelectAll" onchange="toggleAllArticles(this)"></th>
                   <th class="px-4 py-2.5 font-semibold"></th><th class="px-4 py-2.5 font-semibold">N°</th><th class="px-4 py-2.5 font-semibold">Article</th>
                   <th class="px-4 py-2.5 font-semibold">Catégorie</th>
                   <th class="px-4 py-2.5 font-semibold text-right">Prix achat</th><th class="px-4 py-2.5 font-semibold text-right">Prix vente TTC</th>
@@ -641,9 +675,9 @@ tailwind.config = {
 
 <script>
 /* ================================================================ ÉTAT */
-const S = { user:null, categories:[], departments:[], formes:[], locations:[], suppliers:[], attributes:[], articles:[], requests:[], cart:[], orders:[], budgets:[], dashboard:null, stockLevels:[], loans:[], movements:[] };
+const S = { user:null, categories:[], departments:[], formes:[], locations:[], suppliers:[], attributes:[], articles:[], requests:[], cart:[], orders:[], budgets:[], dashboard:null, stockLevels:[], loans:[], movements:[], selectedArticles: new Set(), seasons:[], currentSeason:null, vatRate:8.1 };
 const REQ_STATUS_LABEL = { pending:'En attente', approved:'Validée', rejected:'Rejetée', ordered:'Commandée', received:'Reçue' };
-const ORDER_STATUS_LABEL = { draft:'Brouillon', sent:'Envoyée', confirmed:'Confirmée', received_partial:'Reçue partiellement', received_total:'Reçue totalement' };
+const ORDER_STATUS_LABEL = { draft:'Brouillon', sent:'Envoyée', confirmed:'Confirmée', received_partial:'Reçue partiellement', received_total:'Reçue totalement', cancelled:'Annulée' };
 const ICON_EDIT = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>';
 const ICON_DELETE = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
 function btnEdit(onclick, extraClass) { return `<button type="button" onclick='${onclick}' class="text-mute hover:text-ink ${extraClass||''}" title="Modifier" aria-label="Modifier">${ICON_EDIT}</button>`; }
@@ -675,7 +709,7 @@ const initials = n => (n || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2
 const avatarColors = ['bg-blue2-50 text-blue2-600','bg-violet2-50 text-violet2-600','bg-amber2-50 text-amber2-600','bg-brand-50 text-brand-700','bg-rose2-50 text-rose2-600'];
 const avatarC = id => avatarColors[id % avatarColors.length];
 const reqBadge = st => ({pending:'bg-amber2-50 text-amber2-600',approved:'bg-blue2-50 text-blue2-600',rejected:'bg-rose2-50 text-rose2-600',ordered:'bg-violet2-50 text-violet2-600',received:'bg-green2-50 text-green2-600'}[st] || 'bg-slate-100 text-slate-600');
-const orderBadge = st => ({draft:'bg-slate-100 text-slate-600',sent:'bg-blue2-50 text-blue2-600',confirmed:'bg-violet2-50 text-violet2-600',received_partial:'bg-amber2-50 text-amber2-600',received_total:'bg-green2-50 text-green2-600'}[st] || 'bg-slate-100 text-slate-600');
+const orderBadge = st => ({draft:'bg-slate-100 text-slate-600',sent:'bg-blue2-50 text-blue2-600',confirmed:'bg-violet2-50 text-violet2-600',received_partial:'bg-amber2-50 text-amber2-600',received_total:'bg-green2-50 text-green2-600',cancelled:'bg-rose2-50 text-rose2-600'}[st] || 'bg-slate-100 text-slate-600');
 function toast(msg, isErr = false) {
   const box = document.getElementById('toasts');
   const el = document.createElement('div');
@@ -705,7 +739,7 @@ function go(view) {
   document.getElementById('mainScroll').scrollTop = 0;
   const loaders = { dashboard: loadDashboard, demandes: loadRequests, commandes: loadOrders, fournisseurs: loadSuppliers,
                      catalogue: loadArticles, stock: loadStockView, budgets: loadBudgets,
-                     rapports: loadReportFilters, parametres: loadSettingsView };
+                     rapports: loadReportFilters, parametres: loadSettingsView, promos: loadPromoCodes };
   loaders[view]?.();
 }
 document.querySelectorAll('.nav-item[data-view]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.view); }));
@@ -777,10 +811,20 @@ async function startApp(user) {
 
 /* ================================================================ RÉFÉRENTIELS */
 async function loadRefData() {
-  const [cats, deps, formes, locs, sups, attrs] = await Promise.all([api('categories'), api('departments'), api('formes'), api('locations'), api('suppliers'), api('attributes')]);
+  const [cats, deps, formes, locs, sups, attrs, seasons, vat] = await Promise.all([api('categories'), api('departments'), api('formes'), api('locations'), api('suppliers'), api('attributes'), api('seasons_list'), api('vat_rate')]);
   S.categories = cats; S.departments = deps; S.formes = formes; S.locations = locs; S.suppliers = sups; S.attributes = attrs;
+  S.seasons = seasons; S.vatRate = vat.rate;
+  if (!S.currentSeason) S.currentSeason = (seasons.find(s => s.is_current) || seasons[seasons.length - 1] || {}).value;
+  const seasonSel = document.getElementById('seasonSelect');
+  if (seasonSel) seasonSel.innerHTML = seasons.map(s => `<option value="${s.value}" ${s.value === S.currentSeason ? 'selected' : ''}>Saison ${s.label}</option>`).join('');
   const catSel = document.getElementById('articleCat');
   catSel.innerHTML = '<option value="">Toutes catégories</option>' + cats.map(c => `<option value="${c.id}">${c.parent_id ? '— ' : ''}${esc(c.name)}</option>`).join('');
+}
+async function changeSeason(value) {
+  S.currentSeason = value;
+  const view = document.querySelector('.view.active')?.id?.replace('view-', '');
+  if (view === 'dashboard') loadDashboard();
+  else if (view === 'budgets') loadBudgets();
 }
 function categoryTree() {
   const roots = S.categories.filter(c => !c.parent_id);
@@ -796,7 +840,7 @@ function categoryLabel(id) {
 
 /* ================================================================ DASHBOARD */
 async function loadDashboard() {
-  const d = await api('dashboard');
+  const d = await api('dashboard', 'GET', { fiscal_year: S.currentSeason || '' });
   S.dashboard = d;
   document.getElementById('fyTag').textContent = d.fiscal_year;
   document.getElementById('dashFy').textContent = 'Exercice ' + d.fiscal_year;
@@ -827,7 +871,7 @@ async function loadDashboard() {
   document.getElementById('dashBudgets').innerHTML = d.budgets.length ? d.budgets.map(budgetBar).join('') : '<p class="text-[12.5px] text-mute">Aucun budget défini pour cet exercice</p>';
 
   document.getElementById('dashOrders').innerHTML = d.recent_orders.length
-    ? d.recent_orders.map(o => `<div class="flex items-center justify-between px-5 py-2.5"><div><p class="text-[12.5px] font-medium">#${o.id} — ${esc(o.supplier_name)}</p></div><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${orderBadge(o.status)}">${ORDER_STATUS_LABEL[o.status]}</span></div>`).join('')
+    ? d.recent_orders.map(o => `<div class="flex items-center justify-between px-5 py-2.5"><div><p class="text-[12.5px] font-medium">${esc(o.order_number)} — ${esc(o.supplier_name)}</p></div><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${orderBadge(o.status)}">${ORDER_STATUS_LABEL[o.status]}</span></div>`).join('')
     : '<p class="text-[12.5px] text-mute px-5 py-4">Aucune commande</p>';
 }
 function budgetBar(b) {
@@ -862,6 +906,10 @@ function groupRequests(rows) {
         number: reqGroupNumber(r),
         requester_name: r.requester_name,
         requester_email: r.requester_email,
+        requester_phone: r.requester_phone || '',
+        is_shop: r.request_source === 'shop',
+        promo_code: r.cart_id ? (r.cart_promo_code || '') : '',
+        discount_percent: r.cart_id ? (+r.cart_discount_percent || 0) : 0,
         motive: r.cart_id ? (r.cart_motive || '') : (r.motive || ''),
         created_at: r.cart_id ? (r.cart_created_at || r.created_at) : r.created_at,
         lines: [],
@@ -870,7 +918,7 @@ function groupRequests(rows) {
     map.get(key).lines.push(r);
   });
   const groups = [...map.values()];
-  groups.forEach(g => { g.total = reqGroupTotal(g); });
+  groups.forEach(g => { g.total = reqGroupTotal(g); g.discounted_total = g.total * (1 - (g.discount_percent || 0) / 100); });
   return groups;
 }
 function variantLabel(v) {
@@ -914,12 +962,13 @@ function renderReqGroups(groups) {
         <div class="min-w-0 flex items-start gap-3">
           <span class="text-[11px] font-semibold text-mute tnum shrink-0 mt-0.5">${esc(g.number)}</span>
           <div class="min-w-0">
-            <p class="font-semibold text-[13px] truncate">${esc(g.requester_name)}${g.requester_email ? ` <span class="text-mute font-normal">— ${esc(g.requester_email)}</span>` : ''}</p>
-            <p class="text-[11.5px] text-mute truncate">${dateCH(g.created_at)}${g.motive ? ' · Motif : ' + esc(g.motive) : ''}</p>
+            <p class="font-semibold text-[13px] truncate">${esc(g.requester_name)}${g.requester_email ? ` <span class="text-mute font-normal">— ${esc(g.requester_email)}</span>` : ''}${g.requester_phone ? ` <span class="text-mute font-normal">— ${esc(g.requester_phone)}</span>` : ''}${g.is_shop ? ' <span class="text-[10.5px] font-semibold px-1.5 py-0.5 rounded bg-blue2-50 text-blue2-600">Boutique publique</span>' : ''}</p>
+            <p class="text-[11.5px] text-mute truncate">${dateCH(g.created_at)}${g.motive ? ' · Motif : ' + esc(g.motive) : ''}${g.promo_code ? ` · Code promo <b>${esc(g.promo_code)}</b> (-${g.discount_percent}%)` : ''}</p>
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-2.5 shrink-0">
-          <span class="text-[13px] font-bold tnum">${chf(g.total)} CHF</span>
+          ${g.promo_code ? `<span class="text-[12px] text-mute tnum line-through">${chf(g.total)} CHF</span>` : ''}
+          <span class="text-[13px] font-bold tnum">${chf(g.discounted_total)} CHF</span>
           <span class="flex flex-wrap gap-1.5">${groupStatusBadges(g)}</span>
         </div>
       </summary>
@@ -991,13 +1040,20 @@ function pickerSecondaryAttrName(a) {
   for (const v of (a.variants || [])) { const x = (v.attributes || []).find(y => !y.is_primary); if (x) return x.attribute_name; }
   return '';
 }
+/* Ordre d'affichage des valeurs d'attribut : sort_order personnalisé (réglable dans Paramètres), puis
+ * alphabétique pour départager les valeurs sans ordre explicite entre elles. */
+function sortAttrValueEntries(entries) {
+  const byValue = new Map();
+  entries.forEach(x => { if (!byValue.has(x.value)) byValue.set(x.value, x.sort_order || 0); });
+  return [...byValue.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([v]) => v);
+}
 function pickerPrimaryValues(a) {
-  return [...new Set((a.variants || []).flatMap(v => (v.attributes || []).filter(x => x.is_primary).map(x => x.value)))];
+  return sortAttrValueEntries((a.variants || []).flatMap(v => (v.attributes || []).filter(x => x.is_primary)));
 }
 function pickerSecondaryValues(a, primaryValue) {
-  return [...new Set((a.variants || [])
+  return sortAttrValueEntries((a.variants || [])
     .filter(v => (v.attributes || []).some(x => x.is_primary && x.value === primaryValue))
-    .flatMap(v => (v.attributes || []).filter(x => !x.is_primary).map(x => x.value)))];
+    .flatMap(v => (v.attributes || []).filter(x => !x.is_primary)));
 }
 function pickerFindVariant() {
   const { article: a, primaryValue, secondaryValue, hasPrimary, hasSecondary } = pickerState;
@@ -1139,6 +1195,51 @@ async function quickOrder(reqId) {
 }
 
 /* ================================================================ FOURNISSEURS */
+/* ================================================================ CODES PROMO */
+async function loadPromoCodes() {
+  const rows = await api('promo_codes');
+  S.promoCodes = rows;
+  document.getElementById('promoRows').innerHTML = rows.map(p => `
+    <tr>
+      <td class="px-4 py-2.5 font-mono font-semibold">${esc(p.code)}</td>
+      <td class="px-4 py-2.5 text-right tnum">${chf(p.discount_percent)} %</td>
+      <td class="px-4 py-2.5">${p.expires_at ? dateCH(p.expires_at) : '—'}</td>
+      <td class="px-4 py-2.5 text-right tnum">${p.used_count}${p.max_uses != null ? ' / ' + p.max_uses : ''}</td>
+      <td class="px-4 py-2.5"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${p.active ? 'bg-green2-50 text-green2-600' : 'bg-canvas text-mute'}">${p.active ? 'Actif' : 'Inactif'}</span></td>
+      <td class="px-4 py-2.5 text-right space-x-1.5 whitespace-nowrap">
+        ${btnEdit(`modalPromoCode(${JSON.stringify(p).replace(/'/g,"&#39;")})`)}
+        ${btnDelete(`deletePromoCode(${p.id})`)}
+      </td>
+    </tr>`).join('') || '<tr><td colspan="6" class="px-4 py-8 text-center text-mute">Aucun code promo</td></tr>';
+}
+function modalPromoCode(existing) {
+  const p = existing || {};
+  openModal(existing ? 'Modifier le code promo' : 'Nouveau code promo', `
+    <div class="space-y-3.5">
+      <div><label class="lbl">Code</label><input id="promoCode" class="field font-mono uppercase" value="${esc(p.code||'')}" placeholder="EX : PARENTS10"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Rabais (%)</label><input id="promoDiscount" type="number" step="0.1" min="0" max="100" class="field" value="${p.discount_percent||''}"></div>
+        <div><label class="lbl">Nb utilisations max <span class="font-normal text-mute">(optionnel)</span></label><input id="promoMaxUses" type="number" min="1" class="field" value="${p.max_uses ?? ''}"></div>
+      </div>
+      <div><label class="lbl">Expiration <span class="font-normal text-mute">(optionnel)</span></label><input id="promoExpires" type="date" class="field" value="${p.expires_at||''}"></div>
+      <label class="flex items-center gap-2 text-[12.5px]"><input id="promoActive" type="checkbox" ${p.active == null || p.active ? 'checked' : ''}> Actif</label>
+    </div>`, async () => {
+    const payload = {
+      code: document.getElementById('promoCode').value,
+      discount_percent: +document.getElementById('promoDiscount').value,
+      max_uses: document.getElementById('promoMaxUses').value,
+      expires_at: document.getElementById('promoExpires').value,
+      active: document.getElementById('promoActive').checked ? 1 : 0,
+    };
+    if (existing) await api('promo_codes', 'PUT', { id: p.id, ...payload }); else await api('promo_codes', 'POST', payload);
+    closeModal(); toast('Code promo enregistré'); await loadPromoCodes();
+  });
+}
+async function deletePromoCode(id) {
+  if (!confirm('Supprimer ce code promo ?')) return;
+  await api('promo_codes&id=' + id, 'DELETE');
+  toast('Code promo supprimé'); await loadPromoCodes();
+}
 async function loadSuppliers() {
   const rows = await api('suppliers');
   S.suppliers = rows;
@@ -1269,6 +1370,8 @@ function flattenVariants(products) {
     article_number: p.article_number,
     category_id: p.category_id,
     category_name: p.category_name,
+    department_id: p.department_id,
+    department_name: p.department_name,
     unit: p.unit,
     purchase_price: p.purchase_price,
     sale_price_ttc: p.sale_price_ttc,
@@ -1287,10 +1390,15 @@ async function loadArticles() {
 function filterArticles() {
   const q = (document.getElementById('articleSearch').value || '').toLowerCase();
   const cat = document.getElementById('articleCat').value;
-  const rows = S.articles.filter(a => (!q || a.name.toLowerCase().includes(q) || (a.article_number||'').toLowerCase().includes(q) || (a.variants||[]).some(v => (v.barcode||'').includes(q))) && (!cat || String(a.category_id) === cat));
+  // Une catégorie racine sélectionnée doit aussi inclure les articles rangés dans une de ses sous-catégories,
+  // pas uniquement ceux rattachés directement à elle (sinon rien ne s'affiche pour une racine sans article direct).
+  const matchIds = cat ? new Set([+cat, ...S.categories.filter(c => c.parent_id === +cat).map(c => c.id)]) : null;
+  const rows = S.articles.filter(a => (!q || a.name.toLowerCase().includes(q) || (a.article_number||'').toLowerCase().includes(q) || (a.variants||[]).some(v => (v.barcode||'').includes(q))) && (!cat || matchIds.has(a.category_id)));
   document.getElementById('articleCount').textContent = rows.length + ' résultat(s)';
+  window._catalogueVisibleIds = rows.map(a => a.id);
   document.getElementById('articleRows').innerHTML = rows.map(a => `
     <tr class="cursor-pointer hover:bg-canvas/50" onclick="openFicheArticle(${a.id})">
+      <td class="px-4 py-2.5 staff-only" onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleArticleSelect(${a.id})" ${S.selectedArticles.has(a.id) ? 'checked' : ''}></td>
       <td class="px-4 py-2">${a.photo ? `<img src="uploads/${a.photo}" class="w-9 h-9 rounded-lg object-cover border border-line">` : `<div class="w-9 h-9 rounded-lg bg-canvas border border-line grid place-items-center text-mute text-[10px]">—</div>`}</td>
       <td class="px-4 py-2.5 text-mute font-mono text-[11px]">${esc(a.article_number || '—')}</td>
       <td class="px-4 py-2.5 font-medium">${esc(a.name)}</td>
@@ -1300,7 +1408,36 @@ function filterArticles() {
       <td class="px-4 py-2.5 text-right tnum ${a.margin_percent != null && a.margin_percent < 0 ? 'text-rose2-600 font-semibold' : ''}">${a.margin_percent != null ? chf(a.margin_percent) + ' %' : '—'}</td>
       <td class="px-4 py-2.5 text-right tnum ${a.variants.some(v=>v.alert_threshold>0 && v.total_stock<=v.alert_threshold) ? 'text-rose2-600 font-bold':''}">${a.total_stock}</td>
       <td class="px-4 py-2.5"></td>
-    </tr>`).join('') || '<tr><td colspan="9" class="px-4 py-8 text-center text-mute">Aucun article</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="10" class="px-4 py-8 text-center text-mute">Aucun article</td></tr>';
+  updateArticleSelectionUI();
+}
+function toggleArticleSelect(id) {
+  if (S.selectedArticles.has(id)) S.selectedArticles.delete(id); else S.selectedArticles.add(id);
+  updateArticleSelectionUI();
+}
+function toggleAllArticles(checkbox) {
+  const ids = window._catalogueVisibleIds || [];
+  if (checkbox.checked) ids.forEach(id => S.selectedArticles.add(id));
+  else ids.forEach(id => S.selectedArticles.delete(id));
+  filterArticles();
+}
+function updateArticleSelectionUI() {
+  const count = S.selectedArticles.size;
+  document.getElementById('btnExportSelection').classList.toggle('hidden', count === 0);
+  document.getElementById('exportSelectionCount').textContent = count;
+  const ids = window._catalogueVisibleIds || [];
+  const selectAll = document.getElementById('articleSelectAll');
+  if (selectAll && ids.length) {
+    const selectedVisible = ids.filter(id => S.selectedArticles.has(id)).length;
+    selectAll.checked = selectedVisible === ids.length;
+    selectAll.indeterminate = selectedVisible > 0 && selectedVisible < ids.length;
+  }
+}
+function exportSelectedArticles() {
+  const arts = S.articles.filter(a => S.selectedArticles.has(a.id));
+  if (!arts.length) return;
+  downloadXLS('catalogue-articles.xls', articlesToCSVRows(arts));
+  toast(arts.length + ' article(s) exporté(s)');
 }
 function artRootCatId(a) {
   if (!a.category_id) return '';
@@ -1316,6 +1453,11 @@ function artSubOptions(rootId, selectedId) {
 function refreshArtSubcategory() {
   const rootId = +document.getElementById('artCat').value || '';
   document.getElementById('artSubCat').innerHTML = artSubOptions(rootId);
+}
+function refreshArtComputedPurchase() {
+  const catalog = +document.getElementById('artCatalogPrice').value || 0;
+  const discount = +document.getElementById('artDiscount').value || 0;
+  document.getElementById('artPurchaseComputed').value = (catalog * (1 - discount / 100)).toFixed(2);
 }
 function modalArticle(existing) {
   const a = existing || {};
@@ -1333,14 +1475,18 @@ function modalArticle(existing) {
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="lbl">Forme</label><select id="artForme" class="field"><option value="">—</option>${S.formes.map(f=>`<option value="${f.id}" ${a.forme_id==f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></div>
-        <div><label class="lbl">Département <span class="font-normal text-mute">(budget)</span></label><select id="artDept" class="field"><option value="">—</option>${S.departments.map(d=>`<option value="${d.id}" ${a.department_id==d.id?'selected':''}>${esc(d.name)}</option>`).join('')}</select></div>
+        <div><label class="lbl">Département <span class="font-normal text-mute">(pré-remplissage suggéré à la commande)</span></label><select id="artDept" class="field"><option value="">—</option>${S.departments.map(d=>`<option value="${d.id}" ${a.department_id==d.id?'selected':''}>${esc(d.name)}</option>`).join('')}</select></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="lbl">Unité</label><input id="artUnit" class="field" value="${esc(a.unit||'pièce')}"></div>
         <div><label class="lbl">Fournisseur préféré</label><select id="artSupplier" class="field"><option value="">—</option>${S.suppliers.map(s=>`<option value="${s.id}" ${a.supplier_id==s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="lbl">Prix d'achat (CHF)</label><input id="artPurchase" type="number" step="0.01" class="field" value="${a.purchase_price||0}"></div>
+        <div><label class="lbl">Prix catalogue HT (CHF)</label><input id="artCatalogPrice" type="number" step="0.01" class="field" oninput="refreshArtComputedPurchase()" value="${a.catalog_price_ht||0}"></div>
+        <div><label class="lbl">Rabais MFC (%)</label><input id="artDiscount" type="number" step="0.01" class="field" oninput="refreshArtComputedPurchase()" value="${a.discount_percent||0}"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Prix d'achat MFC HT (CHF)</label><input id="artPurchaseComputed" type="number" step="0.01" class="field bg-canvas/60" value="${a.purchase_price||0}" disabled></div>
         <div><label class="lbl">Prix de vente TTC (CHF)</label><input id="artSale" type="number" step="0.01" class="field" value="${a.sale_price_ttc||0}"></div>
       </div>
       <div><label class="lbl">Photo générale</label><input id="artPhoto" type="file" accept="image/*" class="field"></div>
@@ -1356,7 +1502,8 @@ function modalArticle(existing) {
       department_id: +document.getElementById('artDept').value || null,
       unit: document.getElementById('artUnit').value,
       supplier_id: +document.getElementById('artSupplier').value || null,
-      purchase_price: +document.getElementById('artPurchase').value,
+      catalog_price_ht: +document.getElementById('artCatalogPrice').value,
+      discount_percent: +document.getElementById('artDiscount').value,
       sale_price_ttc: +document.getElementById('artSale').value,
     };
     let id = a.id;
@@ -1387,7 +1534,9 @@ async function openFicheArticle(id) {
         <div class="mt-3 text-[12.5px] space-y-1">
           <p>Département : <b>${esc(a.department_name || '—')}</b></p>
           <p>Fournisseur préféré : <b>${esc(a.supplier_name || '—')}</b></p>
-          <p>Prix d'achat : <b>${chf(a.purchase_price)} CHF</b></p>
+          <p>Prix catalogue HT : <b>${chf(a.catalog_price_ht)} CHF</b></p>
+          <p>Rabais MFC : <b>${chf(a.discount_percent)} %</b></p>
+          <p>Prix d'achat MFC HT : <b>${chf(a.purchase_price)} CHF</b></p>
           <p>Prix de vente TTC : <b>${chf(a.sale_price_ttc)} CHF</b></p>
           <p>Stock total (tous attributs) : <b>${a.total_stock ?? '—'}</b></p>
         </div>
@@ -1516,18 +1665,21 @@ function renderVariantGroup(a, title, variants, open) {
 }
 function renderVariantList(a) {
   if (!a.variants.length) return '<p class="text-mute text-[12.5px]">Aucun attribut</p>';
-  const groups = {}; const ungrouped = [];
+  const groups = {}; const groupOrder = {}; const ungrouped = [];
   a.variants.forEach(v => {
     if (v.attributes.length >= 2) {
       const primary = v.attributes.find(x => x.is_primary) || v.attributes[0];
       const key = `${primary.attribute_name} : ${primary.value}`;
       (groups[key] = groups[key] || []).push(v);
+      if (!(key in groupOrder)) groupOrder[key] = primary.sort_order || 0;
     } else if (v.attributes.length === 1) {
       const attrName = v.attributes[0].attribute_name;
       (groups[attrName] = groups[attrName] || []).push(v);
+      if (!(attrName in groupOrder)) groupOrder[attrName] = v.attributes[0].sort_order || 0;
     } else ungrouped.push(v);
   });
-  const entries = Object.entries(groups);
+  // Ordre d'affichage des groupes = sort_order personnalisé de la valeur d'attribut principale (Paramètres).
+  const entries = Object.entries(groups).sort(([ka], [kb]) => groupOrder[ka] - groupOrder[kb] || ka.localeCompare(kb));
   let html = '<div class="space-y-2">';
   if (ungrouped.length) html += renderVariantGroup(a, 'Général', ungrouped, !entries.length);
   entries.forEach(([attrName, variants], i) => { html += renderVariantGroup(a, attrName, variants, i === 0 && !ungrouped.length); });
@@ -1636,16 +1788,19 @@ async function openVariantHistory(variantId) {
   document.getElementById('modalSubmit').textContent = 'Fermer';
 }
 
-/* Une ligne CSV = une variante (SKU) précise, tous les champs communs de l'article + ceux propres à la variante. */
-const ARTICLE_CSV_BASE_HEADERS = ['article_number','name','category','subcategory','forme','unit','supplier','purchase_price','sale_price_ttc','active','variant_label','barcode','alert_threshold'];
-function csvEscape(v) { v = String(v ?? ''); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; }
-function downloadCSV(filename, rows) {
-  const blob = new Blob(['﻿' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+/* Une ligne = une variante (SKU) précise, tous les champs communs de l'article + ceux propres à la variante.
+ * Format .xls tabulé (colonnes séparées par une tabulation, pas une virgule) : s'ouvre nativement dans Excel
+ * en colonnes sans passer par l'assistant "Convertir - texte en colonnes". Ce n'est pas un binaire XLS natif,
+ * Excel affichera un avertissement de format à l'ouverture mais affiche correctement les colonnes. */
+function tsvEscape(v) { return String(v ?? '').replace(/[\t\r\n]/g, ' '); }
+function downloadXLS(filename, rows) {
+  const blob = new Blob(['﻿' + rows.map(r => r.map(tsvEscape).join('\t')).join('\r\n')], { type: 'application/vnd.ms-excel;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
-function downloadBlankTemplate() { downloadCSV('modele-catalogue-vierge.csv', [[...ARTICLE_CSV_BASE_HEADERS, 'Couleur', 'Taille']]); }
+const ARTICLE_CSV_BASE_HEADERS = ['article_number','name','category','subcategory','forme','unit','supplier','purchase_price','sale_price_ttc','active','variant_label','barcode','alert_threshold'];
+function downloadBlankTemplate() { downloadXLS('modele-catalogue-vierge.xls', [[...ARTICLE_CSV_BASE_HEADERS, 'Couleur', 'Taille']]); }
 function articlesToCSVRows(arts) {
   const attrNames = [...new Set(arts.flatMap(a => (a.variants||[]).flatMap(v => (v.attributes||[]).map(x => x.attribute_name))))];
   const headers = [...ARTICLE_CSV_BASE_HEADERS, ...attrNames];
@@ -1664,61 +1819,20 @@ function articlesToCSVRows(arts) {
   }));
   return rows;
 }
-/* Parseur CSV minimal gérant les guillemets (champs avec virgules/retours à la ligne). */
-function parseCSV(text) {
-  const rows = []; let row = []; let field = ''; let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
-      else field += c;
-    } else if (c === '"') inQuotes = true;
-    else if (c === ',') { row.push(field); field = ''; }
-    else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(field); field = ''; rows.push(row); row = [];
-    } else field += c;
-  }
-  if (field !== '' || row.length) { row.push(field); rows.push(row); }
-  return rows.filter(r => r.length > 1 || (r[0] || '').trim() !== '');
-}
-async function modalExportArticles() {
-  await ensureArticles();
-  openModal('Exporter le catalogue', `
-    <div class="space-y-3.5">
-      <div>
-        <label class="lbl">Catégories <span class="font-normal text-mute">(optionnel — laisser vide = toutes)</span></label>
-        <select id="expCats" multiple size="6" class="w-full border border-line rounded-lg text-[12.5px] p-2 outline-none focus:border-brand-500">
-          ${S.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}
-        </select>
-      </div>
-      <div>
-        <label class="lbl">Articles précis <span class="font-normal text-mute">(optionnel — laisser vide = tous ceux des catégories choisies)</span></label>
-        <select id="expArts" multiple size="8" class="w-full border border-line rounded-lg text-[12.5px] p-2 outline-none focus:border-brand-500">
-          ${S.articles.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}
-        </select>
-      </div>
-    </div>`, async () => {
-    const catIds = [...document.getElementById('expCats').selectedOptions].map(o => +o.value);
-    const artIds = [...document.getElementById('expArts').selectedOptions].map(o => +o.value);
-    let arts = S.articles;
-    if (catIds.length) arts = arts.filter(a => catIds.includes(a.category_id));
-    if (artIds.length) arts = arts.filter(a => artIds.includes(a.id));
-    if (!arts.length) throw new Error('Aucun article ne correspond à cette sélection');
-    downloadCSV('catalogue-articles.csv', articlesToCSVRows(arts));
-    closeModal(); toast(arts.length + ' article(s) exporté(s)');
-  });
+/* Parseur tabulé minimal (une cellule = un champ entre tabulations, une ligne = un enregistrement). */
+function parseTSV(text) {
+  return text.split(/\r\n|\n|\r/).map(line => line.split('\t')).filter(r => r.length > 1 || (r[0] || '').trim() !== '');
 }
 async function modalImport() {
   openModal('Importer un catalogue', `
-    <p class="text-[12.5px] text-mute mb-3">Fichier CSV — une ligne par variante (SKU). Colonnes : ${ARTICLE_CSV_BASE_HEADERS.join(', ')}, + une colonne par attribut utilisé (ex. Couleur, Taille). Si l'article existe déjà (par numéro ou nom), ses champs communs sont mis à jour ; la variante est ajoutée ou mise à jour (par code-barres, sinon par combinaison d'attributs).</p>
-    <button type="button" onclick="downloadBlankTemplate()" class="text-[12px] font-semibold text-brand-600 hover:underline mb-3">Télécharger le modèle vierge (CSV)</button>
-    <input id="importFile" type="file" accept=".csv" class="field">
+    <p class="text-[12.5px] text-mute mb-3">Fichier .xls (colonnes séparées par tabulation) — une ligne par variante (SKU). Colonnes : ${ARTICLE_CSV_BASE_HEADERS.join(', ')}, + une colonne par attribut utilisé (ex. Couleur, Taille). Si l'article existe déjà (par numéro ou nom), ses champs communs sont mis à jour ; la variante est ajoutée ou mise à jour (par code-barres, sinon par combinaison d'attributs).</p>
+    <button type="button" onclick="downloadBlankTemplate()" class="text-[12px] font-semibold text-brand-600 hover:underline mb-3">Télécharger le modèle vierge (.xls)</button>
+    <input id="importFile" type="file" accept=".xls" class="field">
   `, async () => {
     const file = document.getElementById('importFile').files[0];
-    if (!file) throw new Error('Choisir un fichier CSV');
+    if (!file) throw new Error('Choisir un fichier .xls');
     const text = await file.text();
-    const table = parseCSV(text.replace(/^﻿/, ''));
+    const table = parseTSV(text.replace(/^﻿/, ''));
     if (table.length < 2) throw new Error('Fichier vide ou sans données');
     const headers = table[0].map(h => h.trim());
     const rows = table.slice(1).filter(r => r.some(c => (c || '').trim() !== '')).map(cells => {
@@ -1797,6 +1911,10 @@ document.addEventListener('click', e => {
     const prefix = box.id.replace('VariantResults', '');
     const input = document.getElementById(prefix + 'VariantSearch');
     if (input && !input.contains(e.target) && !box.contains(e.target)) box.classList.add('hidden');
+  });
+  document.querySelectorAll('.ol-results').forEach(box => {
+    const row = box.closest('.ord-line');
+    if (row && !row.contains(e.target)) box.classList.add('hidden');
   });
 });
 
@@ -1988,30 +2106,49 @@ async function loadOrders() {
   document.getElementById('ordersSub').textContent = rows.length + ' commande(s)';
   document.getElementById('orderRows').innerHTML = rows.map(o => `
     <tr class="cursor-pointer hover:bg-canvas/50" onclick="openFicheCommande(${o.id})">
-      <td class="px-4 py-2.5 font-medium">#${o.id}</td>
+      <td class="px-4 py-2.5 font-medium">${esc(o.order_number)}</td>
       <td class="px-4 py-2.5">${esc(o.supplier_name)}</td>
       <td class="px-4 py-2.5"><span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${orderBadge(o.status)}">${ORDER_STATUS_LABEL[o.status]}</span></td>
+      <td class="px-4 py-2.5 text-mute">${dateCH(o.order_date)}</td>
       <td class="px-4 py-2.5 text-mute">${dateCH(o.expected_date)}</td>
       <td class="px-4 py-2.5 text-right tnum">${chf(o.total)}</td>
       <td class="px-4 py-2.5"></td>
-    </tr>`).join('') || '<tr><td colspan="6" class="px-4 py-8 text-center text-mute">Aucune commande</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="7" class="px-4 py-8 text-center text-mute">Aucune commande</td></tr>';
 }
 async function modalOrder(existing) {
   await ensureVariants();
-  openModal(existing ? `Modifier la commande #${existing.id}` : 'Nouvelle commande fournisseur', `
+  openModal(existing ? `Modifier la commande ${existing.order_number}` : 'Nouvelle commande fournisseur', `
     <div class="space-y-3.5">
       <div><label class="lbl">Fournisseur</label><select id="ordSupplier" class="field">${S.suppliers.map(s=>`<option value="${s.id}" ${existing && +existing.supplier_id === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div>
-      <div><label class="lbl">Livraison prévue</label><input id="ordExpected" type="date" class="field" value="${existing ? (existing.expected_date || '').slice(0,10) : ''}"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">Date de commande</label><input id="ordDate" type="date" class="field" value="${existing ? (existing.order_date || '').slice(0,10) : new Date().toISOString().slice(0,10)}"></div>
+        <div><label class="lbl">Livraison prévue</label><input id="ordExpected" type="date" class="field" value="${existing ? (existing.expected_date || '').slice(0,10) : ''}"></div>
+      </div>
       <div>
         <label class="lbl">Lignes</label>
         <div id="ordLines" class="space-y-2"></div>
         <button type="button" onclick="addOrderLine()" class="text-[12px] font-semibold text-brand-600 hover:underline mt-1">+ Ajouter une ligne</button>
       </div>
+      <div class="border-t border-line pt-3">
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="lbl mb-0">Répartition budgétaire <span class="font-normal text-mute normal-case">(TTC)</span></label>
+          <button type="button" onclick="suggestAllocations()" class="text-[11.5px] font-semibold text-brand-600 hover:underline">Suggérer selon le catalogue</button>
+        </div>
+        <div id="ordAllocRows" class="space-y-2"></div>
+        <button type="button" onclick="addAllocRow()" class="text-[12px] font-semibold text-brand-600 hover:underline mt-1.5">+ Ajouter un département</button>
+        <p class="text-[12px] mt-2 font-medium" id="ordAllocSummary"></p>
+      </div>
       <div><label class="lbl">Notes</label><textarea id="ordNotes" class="field" rows="2">${existing ? esc(existing.notes || '') : ''}</textarea></div>
     </div>`, async () => {
     const lines = [...document.querySelectorAll('#ordLines .ord-line')].map(row => ({ variant_id: +row.querySelector('.ol-art').value, quantity: +row.querySelector('.ol-qty').value, unit_price: +row.querySelector('.ol-price').value })).filter(l => l.variant_id && l.quantity > 0);
     if (!lines.length) throw new Error('Au moins une ligne requise');
-    const payload = { supplier_id: +document.getElementById('ordSupplier').value, expected_date: document.getElementById('ordExpected').value, notes: document.getElementById('ordNotes').value, lines };
+    const allocations = [...document.querySelectorAll('#ordAllocRows .ord-alloc')].map(row => ({ department_id: +row.querySelector('.oa-dept').value, amount: +row.querySelector('.oa-amount').value })).filter(a => a.department_id && a.amount > 0);
+    if (!allocations.length) throw new Error('Répartition budgétaire requise (au moins un département)');
+    const total = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0) * (1 + (S.vatRate || 0) / 100);
+    const allocated = allocations.reduce((s, a) => s + a.amount, 0);
+    if (Math.abs(allocated - total) > 0.01) throw new Error(`La répartition (${chf(allocated)} CHF) ne correspond pas au total TTC de la commande (${chf(total)} CHF)`);
+    const payload = { supplier_id: +document.getElementById('ordSupplier').value, order_date: document.getElementById('ordDate').value, expected_date: document.getElementById('ordExpected').value, notes: document.getElementById('ordNotes').value, lines, allocations };
+    if (!existing) payload.season = S.currentSeason || '';
     if (existing) {
       await api('orders', 'PUT', { id: existing.id, ...payload });
       closeModal(); toast('Commande modifiée'); openFicheCommande(existing.id);
@@ -2025,26 +2162,153 @@ async function modalOrder(existing) {
   } else {
     addOrderLine();
   }
+  if (existing && existing.budget_allocations && existing.budget_allocations.length) {
+    existing.budget_allocations.forEach(a => addAllocRow(a));
+  } else {
+    suggestAllocations();
+  }
+  updateAllocSummary();
 }
+/* Ligne de commande : recherche par nom, code-barres ou référence article (au lieu d'un long <select> à
+ * parcourir), même principe que productSearchField mais avec plusieurs instances possibles par formulaire
+ * (une par ligne), d'où une implémentation dédiée plutôt que la fonction partagée à préfixe fixe. */
 function addOrderLine(preset) {
   const wrap = document.getElementById('ordLines');
   const variants = flattenVariants(S.articles);
   const row = document.createElement('div');
-  row.className = 'ord-line flex gap-2';
-  row.innerHTML = `<select class="ol-art field">${variants.map(v=>`<option value="${v.id}" data-price="${v.purchase_price}">${esc(v.display_name)}${v.article_number ? ' (' + esc(v.article_number) + ')' : ''}</option>`).join('')}</select>
-    <input class="ol-qty field w-20" type="number" min="1" value="1">
-    <input class="ol-price field w-24" type="number" step="0.01" placeholder="Prix">
-    <button type="button" onclick="this.parentElement.remove()" class="text-mute hover:text-rose2-600 px-1">✕</button>`;
+  row.className = 'ord-line flex gap-2 items-start';
+  row.innerHTML = `
+    <div class="relative flex-1">
+      <input class="ol-search field" placeholder="Nom, code-barres ou référence…" autocomplete="off">
+      <input type="hidden" class="ol-art">
+      <div class="ol-results hidden absolute z-20 mt-1 w-full bg-white border border-line rounded-lg shadow-pop max-h-56 overflow-auto"></div>
+    </div>
+    <input class="ol-qty field w-20 shrink-0" type="number" min="1" value="${preset ? preset.quantity_ordered : 1}">
+    <input class="ol-price field w-24 shrink-0" type="number" step="0.01" placeholder="Prix" value="${preset ? preset.unit_price : ''}">
+    <button type="button" onclick="this.parentElement.remove(); updateAllocSummary();" class="text-mute hover:text-rose2-600 px-1 shrink-0">✕</button>`;
   wrap.appendChild(row);
-  const sel = row.querySelector('.ol-art'), qty = row.querySelector('.ol-qty'), price = row.querySelector('.ol-price');
-  const setPrice = () => price.value = sel.selectedOptions[0]?.dataset.price || 0;
+  const search = row.querySelector('.ol-search'), hidden = row.querySelector('.ol-art'), results = row.querySelector('.ol-results');
+  const qty = row.querySelector('.ol-qty'), price = row.querySelector('.ol-price');
+  const renderResults = () => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) { results.classList.add('hidden'); results.innerHTML = ''; return; }
+    const matches = variants.filter(v => v.display_name.toLowerCase().includes(q) || (v.barcode || '').toLowerCase().includes(q) || (v.article_number || '').toLowerCase().includes(q)).slice(0, 15);
+    results.innerHTML = matches.map(v => `<div class="px-3 py-2 text-[12.5px] hover:bg-canvas cursor-pointer" data-vid="${v.id}">${esc(v.display_name)}${v.article_number ? ` <span class="text-mute">— ${esc(v.article_number)}</span>` : ''}${v.barcode ? ` <span class="text-mute">— ${esc(v.barcode)}</span>` : ''}</div>`).join('') || '<div class="px-3 py-2 text-[12.5px] text-mute">Aucun résultat</div>';
+    results.classList.remove('hidden');
+  };
+  search.addEventListener('input', renderResults);
+  search.addEventListener('focus', renderResults);
+  results.addEventListener('mousedown', e => {
+    const el = e.target.closest('[data-vid]'); if (!el) return;
+    e.preventDefault();
+    const v = variants.find(x => x.id === +el.dataset.vid);
+    hidden.value = v.id; search.value = v.display_name; if (!preset) price.value = v.purchase_price;
+    results.classList.add('hidden');
+    updateAllocSummary();
+  });
   if (preset) {
-    sel.value = preset.variant_id;
-    qty.value = preset.quantity_ordered;
-    price.value = preset.unit_price;
-  } else {
-    sel.addEventListener('change', setPrice); setPrice();
+    hidden.value = preset.variant_id;
+    const v = variants.find(x => x.id === preset.variant_id);
+    if (v) search.value = v.display_name;
   }
+  [search, qty, price].forEach(el => el.addEventListener('input', updateAllocSummary));
+}
+
+/* ---- Répartition budgétaire d'une commande entre départements (TVA incluse, voir S.vatRate) ---- */
+function orderLinesTotal() {
+  return [...document.querySelectorAll('#ordLines .ord-line')].reduce((s, row) => s + (+row.querySelector('.ol-qty').value || 0) * (+row.querySelector('.ol-price').value || 0), 0);
+}
+function orderLinesTotalTtc() {
+  return orderLinesTotal() * (1 + (S.vatRate || 0) / 100);
+}
+function addAllocRow(preset) {
+  const wrap = document.getElementById('ordAllocRows');
+  const row = document.createElement('div');
+  row.className = 'ord-alloc flex gap-2 items-center';
+  row.innerHTML = `<select class="oa-dept field">${S.departments.map(d=>`<option value="${d.id}" ${preset && +preset.department_id === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>
+    <input class="oa-amount field w-28" type="number" step="0.01" placeholder="Montant" value="${preset ? (+preset.amount).toFixed(2) : ''}">
+    <button type="button" onclick="this.parentElement.remove(); updateAllocSummary();" class="text-mute hover:text-rose2-600 px-1">✕</button>`;
+  wrap.appendChild(row);
+  row.querySelectorAll('.oa-dept, .oa-amount').forEach(el => el.addEventListener('input', updateAllocSummary));
+  updateAllocSummary();
+}
+function suggestAllocations() {
+  document.getElementById('ordAllocRows').innerHTML = '';
+  const variants = flattenVariants(S.articles);
+  const vatMult = 1 + (S.vatRate || 0) / 100;
+  const byDept = {};
+  document.querySelectorAll('#ordLines .ord-line').forEach(row => {
+    const vid = +row.querySelector('.ol-art').value;
+    const v = variants.find(x => x.id === vid);
+    const depId = v?.department_id;
+    const amt = (+row.querySelector('.ol-qty').value || 0) * (+row.querySelector('.ol-price').value || 0) * vatMult;
+    if (!depId || amt <= 0) return;
+    byDept[depId] = (byDept[depId] || 0) + amt;
+  });
+  Object.entries(byDept).forEach(([depId, amount]) => addAllocRow({ department_id: +depId, amount }));
+  updateAllocSummary();
+}
+function updateAllocSummary() {
+  const el = document.getElementById('ordAllocSummary');
+  if (!el) return;
+  const total = orderLinesTotalTtc();
+  const allocated = [...document.querySelectorAll('#ordAllocRows .oa-amount')].reduce((s, i) => s + (+i.value || 0), 0);
+  const ok = Math.abs(allocated - total) <= 0.01;
+  el.className = 'text-[12px] mt-2 font-medium ' + (ok ? 'text-green2-600' : 'text-rose2-600');
+  el.textContent = `Réparti : ${chf(allocated)} CHF / Total commande : ${chf(total)} CHF`;
+}
+
+async function changeOrderStatusManually(id, status) {
+  if (!status) return;
+  if (!confirm(`Forcer le statut de cette commande à « ${ORDER_STATUS_LABEL[status]} » ? À utiliser uniquement pour corriger une erreur : ce changement direct ne déclenche ni réception de stock ni sa reversion (contrairement aux boutons dédiés).`)) { openFicheCommande(id); return; }
+  try { await api('orders', 'PUT', { id, status }); toast('Statut corrigé'); openFicheCommande(id); }
+  catch (e) { toast(e.message, true); openFicheCommande(id); }
+}
+async function changeOrderSeason(id, value) {
+  try { await api('orders', 'PUT', { id, season: value }); toast('Saison mise à jour'); openFicheCommande(id); }
+  catch (e) { toast(e.message, true); openFicheCommande(id); }
+}
+
+/* ---- Répartition budgétaire, éditée directement dans la colonne Détails (TTC, voir S.vatRate) ---- */
+function detAllocTotal() { return window._currentOrder ? window._currentOrder.total_ttc : 0; }
+function renderDetAllocations(o) {
+  const rows = (o.budget_allocations && o.budget_allocations.length) ? o.budget_allocations : [];
+  return `
+    <div id="detAllocRows" class="space-y-1.5 mb-2">${rows.map(a => detAllocRowHtml(a)).join('') || detAllocRowHtml()}</div>
+    <button type="button" onclick="addDetAllocRow()" class="text-[11.5px] font-semibold text-brand-600 hover:underline">+ Département</button>
+    <p class="text-[11.5px] mt-1.5 font-medium" id="detAllocSummary"></p>
+    <button type="button" onclick="saveDetAllocations(${o.id})" class="w-full h-8 mt-2 rounded-lg bg-brand-600 text-[#15140F] text-[11.5px] font-semibold hover:bg-brand-700 transition">Enregistrer la répartition</button>`;
+}
+function detAllocRowHtml(preset) {
+  return `<div class="det-alloc flex gap-1.5 items-center">
+    <select class="da-dept field !h-8 text-[12px]">${S.departments.map(d=>`<option value="${d.id}" ${preset && +preset.department_id === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>
+    <input class="da-amount field !h-8 w-24 text-[12px]" type="number" step="0.01" placeholder="Montant" value="${preset ? (+preset.amount).toFixed(2) : ''}">
+    <button type="button" onclick="this.parentElement.remove(); updateDetAllocSummary();" class="text-mute hover:text-rose2-600 shrink-0">✕</button>
+  </div>`;
+}
+function addDetAllocRow() {
+  document.getElementById('detAllocRows').insertAdjacentHTML('beforeend', detAllocRowHtml());
+  const rows = document.querySelectorAll('#detAllocRows .det-alloc');
+  rows[rows.length - 1].querySelectorAll('.da-dept, .da-amount').forEach(el => el.addEventListener('input', updateDetAllocSummary));
+  updateDetAllocSummary();
+}
+function updateDetAllocSummary() {
+  const el = document.getElementById('detAllocSummary');
+  if (!el) return;
+  const total = detAllocTotal();
+  const allocated = [...document.querySelectorAll('#detAllocRows .da-amount')].reduce((s, i) => s + (+i.value || 0), 0);
+  const ok = Math.abs(allocated - total) <= 0.01;
+  el.className = 'text-[11.5px] mt-1.5 font-medium ' + (ok ? 'text-green2-600' : 'text-rose2-600');
+  el.textContent = `Réparti : ${chf(allocated)} CHF / Total TTC : ${chf(total)} CHF`;
+}
+async function saveDetAllocations(id) {
+  const allocations = [...document.querySelectorAll('#detAllocRows .det-alloc')].map(row => ({ department_id: +row.querySelector('.da-dept').value, amount: +row.querySelector('.da-amount').value })).filter(a => a.department_id && a.amount > 0);
+  if (!allocations.length) return toast('Répartition requise (au moins un département)', true);
+  const total = detAllocTotal();
+  const allocated = allocations.reduce((s, a) => s + a.amount, 0);
+  if (Math.abs(allocated - total) > 0.01) return toast(`La répartition (${chf(allocated)} CHF) ne correspond pas au total TTC (${chf(total)} CHF)`, true);
+  try { await api('orders', 'PUT', { id, allocations }); toast('Répartition mise à jour'); openFicheCommande(id); }
+  catch (e) { toast(e.message, true); }
 }
 
 async function openFicheCommande(id) {
@@ -2052,13 +2316,21 @@ async function openFicheCommande(id) {
   const o = await api('orders', 'GET', { id });
   document.getElementById('ficheCommandeContent').innerHTML = `
     <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
-      <div><h1 class="font-display text-[20px] font-bold">Commande #${o.id} — ${esc(o.supplier_name)}</h1>
-        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${orderBadge(o.status)}">${ORDER_STATUS_LABEL[o.status]}</span></div>
+      <div><h1 class="font-display text-[20px] font-bold">Commande ${esc(o.order_number)} — ${esc(o.supplier_name)}</h1>
+        <div class="flex items-center gap-2 mt-1">
+          <span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${orderBadge(o.status)}">${ORDER_STATUS_LABEL[o.status]}</span>
+          <select onchange="changeOrderStatusManually(${o.id}, this.value)" class="staff-only h-6 px-1.5 rounded-md border border-line bg-white text-[10.5px] text-mute outline-none" title="Corriger le statut manuellement">
+            <option value="">Corriger le statut…</option>
+            ${Object.keys(ORDER_STATUS_LABEL).map(s => `<option value="${s}" ${s===o.status?'selected':''}>${ORDER_STATUS_LABEL[s]}</option>`).join('')}
+          </select>
+        </div>
+      </div>
       <div class="flex flex-wrap gap-2 staff-only">
         ${o.status==='draft' ? `<button onclick="modalOrder(window._currentOrder)" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Modifier</button>` : ''}
         ${o.status==='draft' ? `<button onclick="setOrderStatus(${o.id},'sent')" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Marquer envoyée</button>` : ''}
         ${o.status==='sent' ? `<button onclick="setOrderStatus(${o.id},'confirmed')" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Marquer confirmée</button>` : ''}
         ${['sent','confirmed','received_partial'].includes(o.status) ? `<button onclick="modalReceive(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Réceptionner</button>` : ''}
+        ${['draft','sent','confirmed','received_partial','received_total'].includes(o.status) ? `<button onclick="cancelOrder(${o.id}, ${['received_partial','received_total'].includes(o.status)})" class="h-9 px-3 rounded-lg border border-rose2-600 text-rose2-600 bg-white text-[12.5px] font-medium hover:bg-rose2-50">Annuler la commande</button>` : ''}
         <button onclick="downloadOrderCsv(${o.id})" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Télécharger le bon de commande</button>
         <button onclick="printOrder(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Imprimer</button>
         <button onclick="modalInvoice(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">+ Facture</button>
@@ -2079,16 +2351,27 @@ async function openFicheCommande(id) {
       </div>
       <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
         <h2 class="font-semibold text-[14.5px] mb-2">Détails</h2>
-        <p class="text-[12.5px] text-mute">Livraison prévue : <b class="text-ink">${dateCH(o.expected_date)}</b></p>
+        <div class="mb-2">
+          <label class="lbl">Saison</label>
+          <select onchange="changeOrderSeason(${o.id}, this.value)" class="field staff-only">${S.seasons.map(s => `<option value="${s.value}" ${s.value===o.season?'selected':''}>Saison ${s.label}</option>`).join('')}</select>
+        </div>
+        <p class="text-[12.5px] text-mute">Date de commande : <b class="text-ink">${dateCH(o.order_date)}</b></p>
+        <p class="text-[12.5px] text-mute mt-1">Livraison prévue : <b class="text-ink">${dateCH(o.expected_date)}</b></p>
         <p class="text-[12.5px] text-mute mt-1">Fournisseur : <b class="text-ink">${esc(o.supplier_name)}</b></p>
         <p class="text-[12.5px] text-mute mt-1">${esc(o.supplier_email||'')}</p>
         <p class="text-[12.5px] text-mute">${esc(o.supplier_phone||'')}</p>
         <p class="text-[12.5px] text-mute mt-1 whitespace-pre-line">${esc(o.supplier_address||'')}</p>
         ${o.notes ? `<p class="text-[12.5px] mt-3 pt-3 border-t border-line">${esc(o.notes)}</p>` : ''}
+        <div class="mt-3 pt-3 border-t border-line staff-only">
+          <h3 class="font-semibold text-[12.5px] mb-1.5">Répartition budgétaire <span class="font-normal text-mute">(TTC)</span></h3>
+          ${renderDetAllocations(o)}
+        </div>
       </div>
     </div>`;
   applyRoleVisibility();
   window._currentOrder = o;
+  document.querySelectorAll('#detAllocRows .det-alloc').forEach(row => row.querySelectorAll('.da-dept, .da-amount').forEach(el => el.addEventListener('input', updateDetAllocSummary)));
+  updateDetAllocSummary();
 }
 const INVOICE_STATUS_LABEL = { a_controler: 'À contrôler', approuvee: 'Approuvée', en_attente_paiement: 'En attente de paiement', payee: 'Payée' };
 function renderInvoice(f, orderId) {
@@ -2123,6 +2406,14 @@ async function resolveAnomaly(id, orderId) { await api('invoice_anomaly', 'PUT',
 function downloadOrderCsv(id) { window.location.href = 'api.php?action=order_export_csv&id=' + id; }
 function lineName(l) { return l.article_name + (l.variant_label && l.variant_label !== 'Standard' ? ' — ' + l.variant_label : ''); }
 async function setOrderStatus(id, status) { await api('orders', 'PUT', { id, status }); toast('Commande mise à jour'); openFicheCommande(id); }
+async function cancelOrder(id, wasReceived) {
+  const msg = wasReceived
+    ? 'Annuler cette commande ? Le stock entré lors de sa réception sera retiré (mouvement de sortie miroir). Si une partie a déjà été vendue ou dispatchée ailleurs, l\'annulation sera refusée tant que le stock n\'est pas régularisé.'
+    : 'Annuler cette commande ? Les demandes qui lui étaient liées redeviennent disponibles pour une nouvelle commande.';
+  if (!confirm(msg)) return;
+  try { await api('orders', 'PUT', { id, status: 'cancelled' }); toast('Commande annulée'); openFicheCommande(id); }
+  catch (e) { toast(e.message, true); }
+}
 // Accumule, pour la session de réception en cours (scans + validation finale), les quantités reçues par
 // variante afin de proposer automatiquement l'aperçu d'impression des étiquettes une fois la réception validée.
 function receiveSessionAdd(orderId, variantId, qty, display_name, barcode, sale_price_ttc) {
@@ -2222,10 +2513,11 @@ function printOrder(id) {
   document.getElementById('printZone').innerHTML = `
     <div style="font-family:Inter,sans-serif;padding:32px;max-width:720px;margin:0 auto;">
       <div style="display:flex;justify-content:space-between;border-bottom:2px solid #15140F;padding-bottom:16px;margin-bottom:24px;">
-        <div><h1 style="font-family:Sora,sans-serif;font-size:20px;margin:0;">Bon de commande #${o.id}</h1><p style="color:#6E6C61;font-size:12px;">Meyrin FC</p></div>
+        <div><h1 style="font-family:Sora,sans-serif;font-size:20px;margin:0;">Bon de commande ${esc(o.order_number)}</h1><p style="color:#6E6C61;font-size:12px;">Meyrin FC</p></div>
         <div style="text-align:right;font-size:12px;color:#6E6C61;">Édité le ${new Date().toLocaleDateString('fr-CH')}</div>
       </div>
       <p style="font-size:13px;"><b>Fournisseur :</b> ${esc(o.supplier_name)}<br>${esc(o.supplier_address||'')}<br>${esc(o.supplier_email||'')} ${esc(o.supplier_phone||'')}</p>
+      <p style="font-size:13px;"><b>Date de commande :</b> ${dateCH(o.order_date)}</p>
       <p style="font-size:13px;"><b>Livraison souhaitée :</b> ${dateCH(o.expected_date)}</p>
       <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;">
         <thead><tr style="background:#ffdd00;"><th style="padding:6px;text-align:left;">Article</th><th style="padding:6px;text-align:right;">Qté</th><th style="padding:6px;text-align:right;">Prix</th><th style="padding:6px;text-align:right;">Total (CHF)</th></tr></thead>
@@ -2325,7 +2617,7 @@ function modalPrintLabelsArticle(articleId) {
 
 /* ================================================================ BUDGETS */
 async function loadBudgets() {
-  const d = await api('budgets');
+  const d = await api('budgets', 'GET', { fiscal_year: S.currentSeason || '' });
   S.budgets = d.budgets;
   document.getElementById('budgetsSub').textContent = 'Exercice ' + d.fiscal_year;
   document.getElementById('budgetCards').innerHTML = d.budgets.map(b => `
@@ -2343,7 +2635,7 @@ function modalBudget(existing) {
       <div><label class="lbl">Montant alloué (CHF)</label><input id="budAmount" type="number" step="0.01" class="field" value="${b.amount_allocated||0}"></div>
     </div>`, async () => {
     if (existing) await api('budgets', 'PUT', { id: b.id, amount_allocated: +document.getElementById('budAmount').value });
-    else await api('budgets', 'POST', { department_id: +document.getElementById('budDep').value, amount_allocated: +document.getElementById('budAmount').value });
+    else await api('budgets', 'POST', { department_id: +document.getElementById('budDep').value, amount_allocated: +document.getElementById('budAmount').value, fiscal_year: S.currentSeason || '' });
     closeModal(); toast('Budget enregistré'); loadBudgets();
   });
 }
@@ -2555,12 +2847,17 @@ function renderAttributeValuesBody(attr) {
   return `
     <p class="text-[12px] text-mute mb-3">Valeurs possibles pour <b class="text-ink">${esc(attr.name)}</b> (ex. XS, S, M, L…), proposées ensuite en liste déroulante sur chaque article. Un code couleur (facultatif) permet de distinguer visuellement chaque valeur.</p>
     <div class="space-y-1.5 mb-3" id="attrValuesList">
-      ${attr.values.length ? attr.values.map(v => `<div class="flex items-center gap-2 text-[12.5px] bg-canvas rounded-lg px-3 py-1.5">
+      ${attr.values.length ? attr.values.map((v, idx) => `<div class="flex items-center gap-2 text-[12.5px] bg-canvas rounded-lg px-3 py-1.5">
+        <div class="flex flex-col shrink-0 leading-none">
+          <button type="button" onclick="moveAttributeValue(${attr.id}, ${idx}, -1)" ${idx===0?'disabled':''} class="text-mute hover:text-ink disabled:opacity-25 text-[9px]">▲</button>
+          <button type="button" onclick="moveAttributeValue(${attr.id}, ${idx}, 1)" ${idx===attr.values.length-1?'disabled':''} class="text-mute hover:text-ink disabled:opacity-25 text-[9px]">▼</button>
+        </div>
         <input type="color" class="w-6 h-6 rounded border border-line cursor-pointer shrink-0 p-0" value="${esc(v.color_code || '#cccccc')}" title="Code couleur" onchange="updateAttributeValueColor(${attr.id}, ${v.id}, this.value)">
         <span class="flex-1">${esc(v.value)}</span>
         <button onclick="deleteAttributeValue(${attr.id}, ${v.id})" class="text-mute hover:text-rose2-600">✕</button>
       </div>`).join('') : '<p class="text-mute text-[12.5px]">Aucune valeur pour l\'instant</p>'}
     </div>
+    <p class="text-[11px] text-mute mb-3">Les flèches définissent l'ordre d'affichage de ces valeurs (catalogue, sélecteur de variante) — par défaut alphabétique.</p>
     <div class="flex gap-2">
       <input type="color" id="newAttrValueColor" class="w-9 h-9 rounded-lg border border-line cursor-pointer shrink-0 p-0" value="#cccccc" title="Code couleur (facultatif)">
       <input id="newAttrValue" class="field" placeholder="Nouvelle valeur…" onkeydown="if(event.key==='Enter'){event.preventDefault();addAttributeValue(${attr.id})}">
@@ -2592,6 +2889,15 @@ async function addAttributeValue(attrId) {
 async function deleteAttributeValue(attrId, valueId) {
   await api('attribute_values&id=' + valueId, 'DELETE');
   await refreshAttributeValuesModal(attrId);
+}
+async function moveAttributeValue(attrId, idx, dir) {
+  const attr = S.attributes.find(a => a.id === attrId);
+  const values = [...attr.values];
+  const target = idx + dir;
+  if (target < 0 || target >= values.length) return;
+  [values[idx], values[target]] = [values[target], values[idx]];
+  try { await api('attribute_values_reorder', 'POST', { ids: values.map(v => v.id) }); await refreshAttributeValuesModal(attrId); }
+  catch (e) { toast(e.message, true); }
 }
 function modalUser() {
   openModal('Inviter un membre', `

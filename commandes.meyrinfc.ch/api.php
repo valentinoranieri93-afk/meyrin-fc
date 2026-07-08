@@ -144,6 +144,46 @@ function migrate_supplier_contacts_addresses(PDO $pdo): void {
                  ON CONFLICT(key) DO UPDATE SET value = '1'")->execute();
 }
 
+/** Migre une seule fois les commandes existantes (créées avant l'introduction de la répartition budgétaire
+ *  manuelle) vers purchase_order_budget_allocations, en se basant sur le département alors renseigné sur
+ *  chaque article commandé (au mieux : les lignes dont l'article n'a aucun département restent non réparties,
+ *  à corriger manuellement si besoin). Les commandes créées après cette migration passent obligatoirement
+ *  par la répartition manuelle (voir case 'orders' POST/PUT), donc jamais concernées par ce backfill. */
+function migrate_order_budget_allocations(PDO $pdo): void {
+  $done = $pdo->query("SELECT value FROM settings WHERE key = 'order_budget_allocations_migrated'")->fetchColumn();
+  if ($done === '1') return;
+  $pdo->exec("
+    INSERT OR IGNORE INTO purchase_order_budget_allocations (order_id, department_id, amount)
+    SELECT pol.order_id, a.department_id, SUM(pol.quantity_ordered * pol.unit_price)
+    FROM purchase_order_lines pol
+    JOIN article_variants v ON v.id = pol.variant_id
+    JOIN articles a ON a.id = v.article_id
+    WHERE a.department_id IS NOT NULL
+    GROUP BY pol.order_id, a.department_id
+  ");
+  $pdo->prepare("INSERT INTO settings (key, value) VALUES ('order_budget_allocations_migrated', '1')
+                 ON CONFLICT(key) DO UPDATE SET value = '1'")->execute();
+}
+
+/** Migre une seule fois les commandes existantes (créées avant l'introduction de la saison/numérotation)
+ *  vers season/order_seq, déduits de leur date de commande (ou création) via fiscal_year(), numérotées dans
+ *  l'ordre chronologique au sein de chaque saison. Nécessite fiscal_year(), définie plus bas dans ce fichier
+ *  mais déjà chargée à l'exécution de cette fonction (appelée après la définition complète des fonctions). */
+function migrate_order_seasons(PDO $pdo): void {
+  $done = $pdo->query("SELECT value FROM settings WHERE key = 'order_seasons_migrated'")->fetchColumn();
+  if ($done === '1') return;
+  $orders = $pdo->query("SELECT id, order_date, created_at FROM purchase_orders WHERE season IS NULL ORDER BY created_at ASC")->fetchAll();
+  $seqBySeason = [];
+  $upd = $pdo->prepare('UPDATE purchase_orders SET season = ?, order_seq = ? WHERE id = ?');
+  foreach ($orders as $o) {
+    $season = fiscal_year($o['order_date'] ?: $o['created_at']);
+    $seqBySeason[$season] = ($seqBySeason[$season] ?? 0) + 1;
+    $upd->execute([$season, $seqBySeason[$season], $o['id']]);
+  }
+  $pdo->prepare("INSERT INTO settings (key, value) VALUES ('order_seasons_migrated', '1')
+                 ON CONFLICT(key) DO UPDATE SET value = '1'")->execute();
+}
+
 function init_schema(PDO $pdo): void {
   $pdo->exec("
   CREATE TABLE IF NOT EXISTS users (
@@ -222,6 +262,8 @@ function init_schema(PDO $pdo): void {
     unit TEXT DEFAULT 'pièce',
     photo TEXT DEFAULT '',
     supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL,
+    catalog_price_ht REAL NOT NULL DEFAULT 0,
+    discount_percent REAL NOT NULL DEFAULT 0,
     purchase_price REAL NOT NULL DEFAULT 0,
     sale_price_ttc REAL NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
@@ -327,10 +369,29 @@ function init_schema(PDO $pdo): void {
     motive TEXT DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  -- Colonnes guest_* : identité déclarée par un visiteur non connecté via la boutique publique (/shop). Le panier
+  -- reste techniquement rattaché au compte système réservé 'guest_user_id()' (requester_id), l'identité réelle
+  -- (nom/prénom/e-mail/téléphone, obligatoires côté /shop) est stockée ici pour l'affichage staff et le contact.
+  -- Codes promo : utilisables pour l'instant uniquement depuis la boutique publique (/shop). discount_percent
+  -- s'applique au total du panier (calculé côté client, jamais figé en base — voir commentaire sur requests).
+  CREATE TABLE IF NOT EXISTS promo_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    discount_percent REAL NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    expires_at TEXT DEFAULT NULL,
+    max_uses INTEGER DEFAULT NULL,
+    used_count INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE TABLE IF NOT EXISTS purchase_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
     status TEXT NOT NULL DEFAULT 'draft', -- draft | sent | confirmed | received_partial | received_total
+    order_date TEXT DEFAULT NULL, -- date de commande (distincte de created_at, modifiable tant que la commande est en brouillon)
+    season TEXT DEFAULT NULL, -- exercice club (format 2026-2027) auquel la commande est affiliée, modifiable en tout temps
+    order_seq INTEGER DEFAULT NULL, -- numéro de séquence au sein de la saison (voir assign_order_season())
     expected_date TEXT DEFAULT NULL,
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     sent_at TEXT DEFAULT NULL,
@@ -344,6 +405,17 @@ function init_schema(PDO $pdo): void {
     quantity_ordered REAL NOT NULL DEFAULT 1,
     quantity_received REAL NOT NULL DEFAULT 0,
     unit_price REAL NOT NULL DEFAULT 0
+  );
+  -- Répartition budgétaire d'une commande entre un ou plusieurs départements, saisie manuellement sur la
+  -- commande (remplace le rattachement automatique via articles.department_id, trop rigide : un même article
+  -- peut être commandé une fois pour un département puis une autre fois pour un autre). La somme des montants
+  -- doit correspondre au total HT de la commande (contrôle applicatif, pas de contrainte SQL).
+  CREATE TABLE IF NOT EXISTS purchase_order_budget_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    amount REAL NOT NULL DEFAULT 0,
+    UNIQUE(order_id, department_id)
   );
   CREATE TABLE IF NOT EXISTS purchase_order_requests (
     order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
@@ -397,6 +469,24 @@ function init_schema(PDO $pdo): void {
   // Migrations additives (colonnes ajoutées après le déploiement initial)
   ensure_column($pdo, 'articles', 'purchase_price', 'REAL NOT NULL DEFAULT 0');
   ensure_column($pdo, 'articles', 'sale_price_ttc', 'REAL NOT NULL DEFAULT 0');
+  // Prix catalogue HT (fournisseur) + rabais MFC en % : le prix d'achat MFC HT (purchase_price) est
+  // recalculé automatiquement à partir de ces deux valeurs à chaque création/modification d'article.
+  ensure_column($pdo, 'articles', 'catalog_price_ht', 'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'articles', 'discount_percent', 'REAL NOT NULL DEFAULT 0');
+  // Boutique publique (/shop, sans compte) : identité du visiteur + jeton d'annulation self-service.
+  ensure_column($pdo, 'request_carts', 'guest_first_name', "TEXT DEFAULT ''");
+  ensure_column($pdo, 'request_carts', 'guest_last_name', "TEXT DEFAULT ''");
+  ensure_column($pdo, 'request_carts', 'guest_email', "TEXT DEFAULT ''");
+  ensure_column($pdo, 'request_carts', 'guest_phone', "TEXT DEFAULT ''");
+  ensure_column($pdo, 'request_carts', 'cancel_token', "TEXT DEFAULT ''");
+  ensure_column($pdo, 'request_carts', 'source', "TEXT NOT NULL DEFAULT 'app'");
+  ensure_column($pdo, 'request_carts', 'promo_code', "TEXT DEFAULT ''");
+  ensure_column($pdo, 'request_carts', 'discount_percent', 'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'purchase_orders', 'order_date', 'TEXT DEFAULT NULL');
+  ensure_column($pdo, 'purchase_orders', 'season', 'TEXT DEFAULT NULL');
+  ensure_column($pdo, 'purchase_orders', 'order_seq', 'INTEGER DEFAULT NULL');
+  // Backfill : commandes existantes sans date de commande explicite -> date de leur création.
+  $pdo->exec("UPDATE purchase_orders SET order_date = date(created_at) WHERE order_date IS NULL");
   ensure_column($pdo, 'variant_attributes', 'is_primary', 'INTEGER NOT NULL DEFAULT 1');
   ensure_column($pdo, 'categories', 'parent_id', 'INTEGER REFERENCES categories(id) ON DELETE CASCADE');
   ensure_column($pdo, 'articles', 'article_number', "TEXT DEFAULT ''");
@@ -406,6 +496,10 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'stock_movements', 'usage', "TEXT NOT NULL DEFAULT 'boutique'");
   ensure_column($pdo, 'invoices', 'status', "TEXT NOT NULL DEFAULT 'a_controler'");
   ensure_column($pdo, 'attribute_values', 'color_code', "TEXT DEFAULT ''");
+  // Ordre d'affichage personnalisé des valeurs (ex. S, M, L, XL plutôt que l'ordre alphabétique), réglable
+  // dans Paramètres. Les valeurs sans ordre explicite (0, celles créées avant cette fonctionnalité ou à la
+  // volée par un import) restent triées alphabétiquement entre elles, à la suite des valeurs déjà ordonnées.
+  ensure_column($pdo, 'attribute_values', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
   // Rattachement d'une demande à un panier (regroupement de plusieurs lignes soumises ensemble). Nullable : compat anciennes demandes.
   ensure_column($pdo, 'requests', 'cart_id', 'INTEGER REFERENCES request_carts(id) ON DELETE CASCADE');
 
@@ -413,6 +507,8 @@ function init_schema(PDO $pdo): void {
   migrate_stock_levels_usage($pdo);
   migrate_budgets_department($pdo);
   migrate_supplier_contacts_addresses($pdo);
+  migrate_order_budget_allocations($pdo);
+  migrate_order_seasons($pdo);
 
   // Numéro d'article rétroactif pour les articles créés avant l'introduction du champ
   $pdo->exec("UPDATE articles SET article_number = 'ART-' || substr('0000' || id, -4, 4) WHERE article_number = '' OR article_number IS NULL");
@@ -481,6 +577,54 @@ function require_role(array $u, string $level): void {
   if (!$ok) fail('Droits insuffisants pour cette action', 403);
 }
 
+/** Id du compte système réservé aux demandes de la boutique publique (/shop, sans authentification).
+ *  Ce compte est créé au premier besoin, désactivé (active=0, mot de passe aléatoire inutilisable) : il ne sert
+ *  qu'à satisfaire la contrainte NOT NULL de requests.requester_id, jamais à une connexion. L'identité réelle du
+ *  visiteur est portée par les colonnes guest_* de request_carts. */
+function guest_user_id(): int {
+  $pdo = db();
+  $email = 'boutique-publique@commandes.meyrinfc.ch';
+  $st = $pdo->prepare('SELECT id FROM users WHERE email = ?');
+  $st->execute([$email]);
+  $id = $st->fetchColumn();
+  if ($id !== false) return (int) $id;
+  $pdo->prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?,?,?,?,0)')
+      ->execute(['Boutique publique', $email, password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT), 'demandeur']);
+  return (int) $pdo->lastInsertId();
+}
+
+/** Retourne le code promo actif et valide (non expiré, quota non atteint), ou null. Comparaison
+ *  insensible à la casse, code normalisé en majuscules à la création (voir case 'promo_codes'). */
+function validate_promo_code(string $code): ?array {
+  $code = strtoupper(trim($code));
+  if ($code === '') return null;
+  $st = db()->prepare('SELECT * FROM promo_codes WHERE code = ? AND active = 1');
+  $st->execute([$code]);
+  $p = $st->fetch();
+  if (!$p) return null;
+  if ($p['expires_at'] && $p['expires_at'] < date('Y-m-d')) return null;
+  if ($p['max_uses'] !== null && (int)$p['used_count'] >= (int)$p['max_uses']) return null;
+  return $p;
+}
+
+/** Valide la répartition budgétaire d'une commande : au moins un département, montants positifs, somme
+ *  égale au total (tolérance de 1 centime pour les arrondis flottants). Termine la requête (fail()) si invalide. */
+function validate_allocations(array $allocations, float $total): array {
+  $clean = []; $sum = 0.0;
+  foreach ($allocations as $a) {
+    $depId = (int)($a['department_id'] ?? 0);
+    $amt = (float)($a['amount'] ?? 0);
+    if (!$depId || $amt <= 0) continue;
+    $clean[] = ['department_id' => $depId, 'amount' => $amt];
+    $sum += $amt;
+  }
+  if (!count($clean)) fail('Répartition budgétaire requise (au moins un département)');
+  if (abs($sum - $total) > 0.01) {
+    fail('La répartition budgétaire (' . number_format($sum, 2, '.', '') . ' CHF) ne correspond pas au total de la commande (' . number_format($total, 2, '.', '') . ' CHF)');
+  }
+  return $clean;
+}
+
 function log_activity(?int $uid, string $action, string $detail = ''): void {
   $st = db()->prepare('INSERT INTO activity (user_id, action, detail) VALUES (?,?,?)');
   $st->execute([$uid, $action, $detail]);
@@ -517,6 +661,47 @@ function fiscal_year_range(string $fy): array {
   $start = sprintf('%04d-%02d-01', $y1, $startMonth);
   $end = (new DateTime(sprintf('%04d-%02d-01', $y2, $startMonth)))->modify('-1 day')->format('Y-m-d');
   return [$start, $end];
+}
+
+/** Forme courte "26-27" d'un exercice "2026-2027", utilisée dans le numéro de commande et l'UI. */
+function fiscal_year_short(string $fy): string {
+  $parts = explode('-', $fy);
+  if (count($parts) !== 2) return $fy;
+  return substr($parts[0], -2) . '-' . substr($parts[1], -2);
+}
+
+/** Liste de saisons candidates pour les sélecteurs (3 précédentes, la courante, la suivante). */
+function seasons_list(): array {
+  $current = fiscal_year();
+  $y1 = (int) explode('-', $current)[0];
+  $out = [];
+  for ($i = -3; $i <= 1; $i++) {
+    $fy = ($y1 + $i) . '-' . ($y1 + $i + 1);
+    $out[] = ['value' => $fy, 'label' => fiscal_year_short($fy), 'is_current' => $fy === $current];
+  }
+  return $out;
+}
+
+/** Affilie une commande à une saison (explicite si fournie et valide "YYYY-YYYY", sinon déduite de $dateForAuto
+ *  via fiscal_year()) et lui attribue le prochain numéro de séquence de cette saison (1, 2, 3...). Appelée à la
+ *  création d'une commande et à chaque changement manuel de saison (voir case 'orders' POST/PUT) : dans ce
+ *  second cas, le numéro de commande affiché change de préfixe de saison et reprend une suite propre à la
+ *  saison cible, plutôt que de garder un numéro figé qui ne correspondrait plus à sa saison affichée. */
+function assign_order_season(PDO $pdo, int $orderId, string $seasonInput, string $dateForAuto): array {
+  $season = (preg_match('/^\d{4}-\d{4}$/', $seasonInput) && (int)substr($seasonInput,5,4) === (int)substr($seasonInput,0,4)+1)
+    ? $seasonInput : fiscal_year($dateForAuto);
+  $st = $pdo->prepare('SELECT COALESCE(MAX(order_seq),0)+1 FROM purchase_orders WHERE season = ? AND id != ?');
+  $st->execute([$season, $orderId]);
+  $seq = (int) $st->fetchColumn();
+  $pdo->prepare('UPDATE purchase_orders SET season = ?, order_seq = ? WHERE id = ?')->execute([$season, $seq, $orderId]);
+  return [$season, $seq];
+}
+
+/** Numéro de commande affiché "26-27/001" à partir des colonnes season/order_seq (peuvent être NULL sur une
+ *  commande jamais passée par assign_order_season, en théorie impossible après migration). */
+function format_order_number(?string $season, ?int $seq): string {
+  if (!$season || !$seq) return '—';
+  return fiscal_year_short($season) . '/' . str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
 }
 
 /** Delta appliqué à stock_levels.quantity pour un type de mouvement donné (entry/adjustment : +qty, exit : -qty). */
@@ -839,7 +1024,7 @@ switch ($action) {
     if ($method === 'GET') {
       require_role($u, 'view');
       $rows = db()->query('SELECT * FROM attributes ORDER BY name COLLATE NOCASE')->fetchAll();
-      $values = db()->query('SELECT * FROM attribute_values ORDER BY value COLLATE NOCASE')->fetchAll();
+      $values = db()->query('SELECT * FROM attribute_values ORDER BY sort_order, value COLLATE NOCASE')->fetchAll();
       $byAttr = [];
       foreach ($values as $v) { $byAttr[$v['attribute_id']][] = $v; }
       foreach ($rows as &$r) { $r['values'] = $byAttr[$r['id']] ?? []; }
@@ -884,6 +1069,19 @@ switch ($action) {
       out(['ok' => true]);
     }
     fail('Méthode non supportée', 405);
+  }
+
+  /* Réordonnancement complet des valeurs d'un attribut depuis Paramètres : reçoit les ids dans l'ordre
+   * d'affichage souhaité, le rang dans le tableau devient le sort_order (0, 1, 2...). */
+  case 'attribute_values_reorder': {
+    $u = require_auth();
+    require_role($u, 'edit');
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $ids = $b['ids'] ?? [];
+    if (!is_array($ids) || !count($ids)) fail('Liste ordonnée requise');
+    $st = db()->prepare('UPDATE attribute_values SET sort_order = ? WHERE id = ?');
+    foreach ($ids as $idx => $id) $st->execute([$idx, (int) $id]);
+    out(['ok' => true]);
   }
 
   /* ============ LIEUX DE STOCKAGE ============ */
@@ -1029,7 +1227,7 @@ switch ($action) {
                             ORDER BY a.name COLLATE NOCASE')->fetchAll();
       $variants = db()->query('SELECT * FROM article_variants ORDER BY label COLLATE NOCASE')->fetchAll();
       $levels = db()->query('SELECT sl.variant_id, sl.location_id, sl.quantity, loc.name AS location_name FROM stock_levels sl JOIN locations loc ON loc.id = sl.location_id')->fetchAll();
-      $vAttrs = db()->query('SELECT va.variant_id, va.attribute_id, va.value, va.is_primary, at.name AS attribute_name, av.color_code
+      $vAttrs = db()->query('SELECT va.variant_id, va.attribute_id, va.value, va.is_primary, at.name AS attribute_name, av.color_code, av.sort_order
                              FROM variant_attributes va
                              JOIN attributes at ON at.id = va.attribute_id
                              LEFT JOIN attribute_values av ON av.attribute_id = va.attribute_id AND av.value = va.value
@@ -1061,10 +1259,13 @@ switch ($action) {
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Le nom de l\'article est requis');
       $pdo = db();
+      $catalogPriceHt = n($b, 'catalog_price_ht');
+      $discountPercent = n($b, 'discount_percent');
+      $purchasePrice = $catalogPriceHt * (1 - $discountPercent / 100);
       $pdo->beginTransaction();
       try {
-        $pdo->prepare('INSERT INTO articles (name, category_id, forme_id, department_id, unit, supplier_id, purchase_price, sale_price_ttc) VALUES (?,?,?,?,?,?,?,?)')
-            ->execute([$name, i($b,'category_id') ?: null, i($b,'forme_id') ?: null, i($b,'department_id') ?: null, s($b,'unit','pièce'), i($b,'supplier_id') ?: null, n($b,'purchase_price'), n($b,'sale_price_ttc')]);
+        $pdo->prepare('INSERT INTO articles (name, category_id, forme_id, department_id, unit, supplier_id, catalog_price_ht, discount_percent, purchase_price, sale_price_ttc) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            ->execute([$name, i($b,'category_id') ?: null, i($b,'forme_id') ?: null, i($b,'department_id') ?: null, s($b,'unit','pièce'), i($b,'supplier_id') ?: null, $catalogPriceHt, $discountPercent, $purchasePrice, n($b,'sale_price_ttc')]);
         $articleId = (int) $pdo->lastInsertId();
         $articleNumber = trim((string) s($b, 'article_number'));
         if ($articleNumber !== '') {
@@ -1095,8 +1296,11 @@ switch ($action) {
       } else {
         $articleNumber = 'ART-' . str_pad((string)$articleId, 4, '0', STR_PAD_LEFT);
       }
-      db()->prepare('UPDATE articles SET name=?, article_number=?, category_id=?, forme_id=?, department_id=?, unit=?, supplier_id=?, purchase_price=?, sale_price_ttc=?, active=? WHERE id=?')
-          ->execute([s($b,'name'), $articleNumber, i($b,'category_id') ?: null, i($b,'forme_id') ?: null, i($b,'department_id') ?: null, s($b,'unit','pièce'), i($b,'supplier_id') ?: null, n($b,'purchase_price'), n($b,'sale_price_ttc'), i($b,'active',1), $articleId]);
+      $catalogPriceHt = n($b, 'catalog_price_ht');
+      $discountPercent = n($b, 'discount_percent');
+      $purchasePrice = $catalogPriceHt * (1 - $discountPercent / 100);
+      db()->prepare('UPDATE articles SET name=?, article_number=?, category_id=?, forme_id=?, department_id=?, unit=?, supplier_id=?, catalog_price_ht=?, discount_percent=?, purchase_price=?, sale_price_ttc=?, active=? WHERE id=?')
+          ->execute([s($b,'name'), $articleNumber, i($b,'category_id') ?: null, i($b,'forme_id') ?: null, i($b,'department_id') ?: null, s($b,'unit','pièce'), i($b,'supplier_id') ?: null, $catalogPriceHt, $discountPercent, $purchasePrice, n($b,'sale_price_ttc'), i($b,'active',1), $articleId]);
       log_activity($u['id'], 'Article modifié', s($b,'name'));
       out(['ok' => true]);
     }
@@ -1746,7 +1950,10 @@ switch ($action) {
                      (SELECT GROUP_CONCAT(value, ' / ') FROM (
                         SELECT value FROM variant_attributes WHERE variant_id = r.variant_id ORDER BY is_primary DESC, attribute_id
                       )) AS variant_attrs,
-                     req.name AS requester_name, req.email AS requester_email,
+                     COALESCE(NULLIF(TRIM(rc.guest_first_name || ' ' || rc.guest_last_name), ''), req.name) AS requester_name,
+                     COALESCE(NULLIF(rc.guest_email, ''), req.email) AS requester_email,
+                     rc.guest_phone AS requester_phone, rc.source AS request_source,
+                     rc.promo_code AS cart_promo_code, rc.discount_percent AS cart_discount_percent,
                      rev.name AS reviewer_name,
                      rc.motive AS cart_motive, rc.created_at AS cart_created_at
               FROM requests r
@@ -1830,6 +2037,168 @@ switch ($action) {
     out(['ok' => true, 'cart_id' => $cartId, 'count' => $count]);
   }
 
+  /* ============ CODES PROMO (gestion staff) ============ */
+
+  case 'promo_codes': {
+    $u = require_auth();
+    require_role($u, 'edit');
+    if ($method === 'GET') {
+      out(db()->query('SELECT * FROM promo_codes ORDER BY created_at DESC')->fetchAll());
+    }
+    if ($method === 'POST') {
+      $code = strtoupper(trim(s($b, 'code')));
+      if (!$code) fail('Code requis');
+      $discount = n($b, 'discount_percent');
+      if ($discount <= 0 || $discount > 100) fail('Rabais invalide (entre 0 et 100 %)');
+      $dup = db()->prepare('SELECT id FROM promo_codes WHERE code = ?'); $dup->execute([$code]);
+      if ($dup->fetch()) fail('Ce code existe déjà');
+      db()->prepare('INSERT INTO promo_codes (code, discount_percent, active, expires_at, max_uses, created_by) VALUES (?,?,?,?,?,?)')
+          ->execute([$code, $discount, i($b,'active',1), s($b,'expires_at') ?: null, isset($b['max_uses']) && $b['max_uses'] !== '' ? i($b,'max_uses') : null, $u['id']]);
+      log_activity($u['id'], 'Code promo créé', $code);
+      out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
+    }
+    if ($method === 'PUT') {
+      $id = i($b, 'id');
+      $code = strtoupper(trim(s($b, 'code')));
+      if (!$code) fail('Code requis');
+      $discount = n($b, 'discount_percent');
+      if ($discount <= 0 || $discount > 100) fail('Rabais invalide (entre 0 et 100 %)');
+      $dup = db()->prepare('SELECT id FROM promo_codes WHERE code = ? AND id != ?'); $dup->execute([$code, $id]);
+      if ($dup->fetch()) fail('Ce code existe déjà');
+      db()->prepare('UPDATE promo_codes SET code=?, discount_percent=?, active=?, expires_at=?, max_uses=? WHERE id=?')
+          ->execute([$code, $discount, i($b,'active',1), s($b,'expires_at') ?: null, isset($b['max_uses']) && $b['max_uses'] !== '' ? i($b,'max_uses') : null, $id]);
+      log_activity($u['id'], 'Code promo modifié', $code);
+      out(['ok' => true]);
+    }
+    if ($method === 'DELETE') {
+      db()->prepare('DELETE FROM promo_codes WHERE id = ?')->execute([i($_GET, 'id')]);
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  /* ============ BOUTIQUE PUBLIQUE (/shop, sans authentification) ============
+     Trois actions volontairement en dehors de require_auth()/require_role() : elles doivent rester
+     accessibles à n'importe quel visiteur muni du lien public. Toute écriture y est strictement limitée
+     (validation serveur des variantes/quantités, jamais de champ libre injecté tel quel en SQL). */
+
+  case 'shop_catalog': {
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $products = db()->query("SELECT a.id, a.name, a.article_number, a.photo, a.unit, a.sale_price_ttc,
+                                     a.category_id, c.name AS category_name, c.parent_id AS category_parent_id, pc.name AS parent_category_name
+                              FROM articles a
+                              LEFT JOIN categories c ON c.id = a.category_id
+                              LEFT JOIN categories pc ON pc.id = c.parent_id
+                              WHERE a.active = 1
+                              ORDER BY a.name COLLATE NOCASE")->fetchAll();
+    $variants = db()->query("SELECT v.id, v.article_id, v.label, v.barcode
+                              FROM article_variants v JOIN articles a ON a.id = v.article_id
+                              WHERE v.active = 1 AND a.active = 1 ORDER BY v.label COLLATE NOCASE")->fetchAll();
+    $levels = db()->query("SELECT variant_id, SUM(quantity) AS qty FROM stock_levels WHERE usage = 'boutique' GROUP BY variant_id")->fetchAll();
+    $vAttrs = db()->query('SELECT va.variant_id, va.attribute_id, va.value, va.is_primary, at.name AS attribute_name, av.color_code, av.sort_order
+                           FROM variant_attributes va
+                           JOIN attributes at ON at.id = va.attribute_id
+                           LEFT JOIN attribute_values av ON av.attribute_id = va.attribute_id AND av.value = va.value
+                           ORDER BY va.is_primary DESC')->fetchAll();
+    $colorPhotos = db()->query('SELECT * FROM article_color_photos')->fetchAll();
+    $stockByVariant = []; foreach ($levels as $l) $stockByVariant[$l['variant_id']] = (float) $l['qty'];
+    $attrsByVariant = []; foreach ($vAttrs as $va) $attrsByVariant[$va['variant_id']][] = $va;
+    $colorsByArticle = []; foreach ($colorPhotos as $cp) $colorsByArticle[$cp['article_id']][] = $cp;
+    $variantsByArticle = [];
+    foreach ($variants as &$v) {
+      $v['total_stock'] = $stockByVariant[$v['id']] ?? 0;
+      $v['attributes'] = $attrsByVariant[$v['id']] ?? [];
+      $variantsByArticle[$v['article_id']][] = $v;
+    }
+    foreach ($products as &$p) {
+      $p['variants'] = $variantsByArticle[$p['id']] ?? [];
+      $p['color_photos'] = $colorsByArticle[$p['id']] ?? [];
+    }
+    $products = array_values(array_filter($products, fn($p) => count($p['variants']) > 0));
+    out($products);
+  }
+
+  /* Validation à la volée pendant la saisie côté /shop (avant soumission finale, revalidée dans shop_request). */
+  case 'shop_validate_promo': {
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $promo = validate_promo_code(s($_GET, 'code'));
+    if (!$promo) fail('Code promo invalide ou expiré', 404);
+    out(['valid' => true, 'code' => $promo['code'], 'discount_percent' => (float) $promo['discount_percent']]);
+  }
+
+  /* Même principe que 'request_cart' (panier groupé) mais pour un visiteur non authentifié : l'identité
+     (nom, prénom, e-mail, téléphone — tous obligatoires) est saisie librement et stockée sur request_carts,
+     le panier est rattaché au compte système guest_user_id(). Un jeton d'annulation à usage unique est
+     renvoyé au visiteur pour lui permettre d'annuler sa demande tant qu'elle est en attente (voir shop_cancel). */
+  case 'shop_request': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $firstName = s($b, 'first_name'); $lastName = s($b, 'last_name');
+    $email = strtolower(s($b, 'email')); $phone = s($b, 'phone');
+    if (!$firstName || !$lastName) fail('Nom et prénom requis');
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('E-mail valide requis');
+    if (!$phone) fail('Numéro de téléphone requis');
+    $items = $b['items'] ?? [];
+    if (!is_array($items) || !count($items)) fail('Le panier est vide');
+    $motive = s($b, 'motive');
+    $promoCodeInput = s($b, 'promo_code');
+    $promo = $promoCodeInput !== '' ? validate_promo_code($promoCodeInput) : null;
+    if ($promoCodeInput !== '' && !$promo) fail('Code promo invalide ou expiré');
+    $discountPercent = $promo ? (float) $promo['discount_percent'] : 0;
+    $guestId = guest_user_id();
+    $token = bin2hex(random_bytes(16));
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+      $pdo->prepare('INSERT INTO request_carts (requester_id, motive, guest_first_name, guest_last_name, guest_email, guest_phone, cancel_token, source, promo_code, discount_percent) VALUES (?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$guestId, $motive, $firstName, $lastName, $email, $phone, $token, 'shop', $promo ? $promo['code'] : '', $discountPercent]);
+      $cartId = (int) $pdo->lastInsertId();
+      if ($promo) {
+        $pdo->prepare('UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?')->execute([$promo['id']]);
+      }
+      $insReq = $pdo->prepare('INSERT INTO requests (variant_id, quantity, requester_id, motive, cart_id) VALUES (?,?,?,?,?)');
+      $count = 0;
+      foreach ($items as $item) {
+        $variantId = (int)($item['variant_id'] ?? 0);
+        $qty = (float)($item['quantity'] ?? 0);
+        if (!$variantId || $qty <= 0) continue;
+        // Vérifie que la variante existe bien et appartient à un article actif (id forgé sinon ignoré).
+        $ok = $pdo->prepare('SELECT v.id FROM article_variants v JOIN articles a ON a.id = v.article_id WHERE v.id = ? AND v.active = 1 AND a.active = 1');
+        $ok->execute([$variantId]);
+        if (!$ok->fetchColumn()) continue;
+        $insReq->execute([$variantId, $qty, $guestId, $motive, $cartId]);
+        $count++;
+      }
+      if (!$count) { $pdo->rollBack(); fail('Aucune ligne valide dans le panier'); }
+      $pdo->commit();
+    } catch (Throwable $e) {
+      if ($pdo->inTransaction()) $pdo->rollBack();
+      fail('Envoi de la demande impossible : ' . $e->getMessage(), 500);
+    }
+    log_activity(null, 'Demande boutique publique créée', "$firstName $lastName ($email) — panier $cartId ($count article(s))");
+    out(['ok' => true, 'cart_id' => $cartId, 'cancel_token' => $token]);
+  }
+
+  /* Annulation self-service par le visiteur, authentifiée par le jeton reçu à la soumission (pas de compte).
+     Refusée si le staff a déjà commencé à traiter une des lignes (statut != pending). */
+  case 'shop_cancel': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $cartId = i($b, 'cart_id'); $token = s($b, 'token');
+    if (!$cartId || !$token) fail('Requête invalide');
+    $st = db()->prepare("SELECT * FROM request_carts WHERE id = ? AND source = 'shop'");
+    $st->execute([$cartId]);
+    $cart = $st->fetch();
+    if (!$cart || $cart['cancel_token'] === '' || !hash_equals((string) $cart['cancel_token'], $token)) fail('Demande introuvable', 404);
+    $pending = db()->prepare("SELECT COUNT(*) FROM requests WHERE cart_id = ? AND status != 'pending'");
+    $pending->execute([$cartId]);
+    if ((int) $pending->fetchColumn() > 0) fail('Cette demande est déjà en cours de traitement, contactez le club pour l\'annuler', 409);
+    db()->prepare('DELETE FROM requests WHERE cart_id = ?')->execute([$cartId]);
+    if ($cart['promo_code']) {
+      db()->prepare('UPDATE promo_codes SET used_count = MAX(0, used_count - 1) WHERE code = ?')->execute([$cart['promo_code']]);
+    }
+    log_activity(null, 'Demande boutique publique annulée', "Panier $cartId (" . $cart['guest_first_name'] . ' ' . $cart['guest_last_name'] . ')');
+    out(['ok' => true]);
+  }
+
   /* Vue staff, ligne 'pending' avec stock boutique suffisant : décrémente le stock et clôt la demande directement
      en 'received' (équivalent à approbation + traitement en un clic, remplace l'ancien double flux approve->order
      pour ce cas). Si le stock est réparti sur plusieurs lieux, consomme lieu par lieu (du plus fourni au moins
@@ -1880,7 +2249,7 @@ switch ($action) {
     $r = db()->query("SELECT * FROM requests WHERE id=$reqId")->fetch();
     if (!$r) fail('Demande introuvable', 404);
     if ($r['status'] !== 'pending') fail('Cette demande n\'est plus en attente');
-    $v = db()->query("SELECT v.id AS variant_id, a.supplier_id, a.purchase_price FROM article_variants v JOIN articles a ON a.id = v.article_id WHERE v.id={$r['variant_id']}")->fetch();
+    $v = db()->query("SELECT v.id AS variant_id, a.supplier_id, a.purchase_price, a.department_id FROM article_variants v JOIN articles a ON a.id = v.article_id WHERE v.id={$r['variant_id']}")->fetch();
     if (!$v || !$v['supplier_id']) fail('L\'article n\'a pas de fournisseur préféré défini');
     $pdo = db();
     $pdo->beginTransaction();
@@ -1889,8 +2258,10 @@ switch ($action) {
       if ($draft) {
         $orderId = (int) $draft['id'];
       } else {
-        $pdo->prepare('INSERT INTO purchase_orders (supplier_id, created_by) VALUES (?,?)')->execute([$v['supplier_id'], $u['id']]);
+        $orderDate = date('Y-m-d');
+        $pdo->prepare('INSERT INTO purchase_orders (supplier_id, order_date, created_by) VALUES (?,?,?)')->execute([$v['supplier_id'], $orderDate, $u['id']]);
         $orderId = (int) $pdo->lastInsertId();
+        assign_order_season($pdo, $orderId, '', $orderDate);
       }
       $existingLine = $pdo->query("SELECT id FROM purchase_order_lines WHERE order_id=$orderId AND variant_id={$v['variant_id']}")->fetch();
       if ($existingLine) {
@@ -1899,6 +2270,16 @@ switch ($action) {
       } else {
         $pdo->prepare('INSERT INTO purchase_order_lines (order_id, variant_id, quantity_ordered, unit_price) VALUES (?,?,?,?)')
             ->execute([$orderId, $v['variant_id'], $r['quantity'], $v['purchase_price']]);
+      }
+      // Pré-répartition budgétaire automatique (best-effort, TVA incluse) sur le département de l'article,
+      // ajustable ensuite depuis la fiche commande. Sans département sur l'article, la commande reste
+      // incomplète et sa sortie de brouillon sera bloquée tant qu'elle n'est pas répartie manuellement.
+      if ($v['department_id']) {
+        $vatRate = (float) setting('vat_rate', '8.1');
+        $amountTtc = round($r['quantity'] * $v['purchase_price'] * (1 + $vatRate / 100), 2);
+        $pdo->prepare('INSERT INTO purchase_order_budget_allocations (order_id, department_id, amount) VALUES (?,?,?)
+                       ON CONFLICT(order_id, department_id) DO UPDATE SET amount = amount + excluded.amount')
+            ->execute([$orderId, $v['department_id'], $amountTtc]);
       }
       $pdo->prepare('INSERT OR IGNORE INTO purchase_order_requests (order_id, request_id) VALUES (?,?)')->execute([$orderId, $reqId]);
       $pdo->prepare("UPDATE requests SET status='ordered', reviewed_by=?, reviewed_at=datetime('now') WHERE id=?")->execute([$u['id'], $reqId]);
@@ -1936,6 +2317,7 @@ switch ($action) {
                                     JOIN articles a ON a.id = v.article_id
                                     WHERE pol.order_id=$id")->fetchAll();
         $o['requests'] = db()->query("SELECT r.* FROM purchase_order_requests por JOIN requests r ON r.id = por.request_id WHERE por.order_id=$id")->fetchAll();
+        $o['budget_allocations'] = db()->query("SELECT poba.*, d.name AS department_name FROM purchase_order_budget_allocations poba JOIN departments d ON d.id = poba.department_id WHERE poba.order_id=$id")->fetchAll();
         $o['invoices'] = db()->query("SELECT * FROM invoices WHERE order_id=$id ORDER BY created_at DESC")->fetchAll();
         foreach ($o['invoices'] as &$inv) {
           $inv['lines'] = db()->query("SELECT il.*, a.name AS article_name, a.article_number, v.label AS variant_label
@@ -1957,11 +2339,13 @@ switch ($action) {
         $o['vat_rate'] = $vatRate;
         $o['vat_amount'] = round($totalHt * $vatRate / 100, 2);
         $o['total_ttc'] = round($totalHt + $o['vat_amount'], 2);
+        $o['order_number'] = format_order_number($o['season'], $o['order_seq']);
         out($o);
       }
       $rows = db()->query('SELECT po.*, s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id ORDER BY po.created_at DESC')->fetchAll();
       foreach ($rows as &$r) {
         $r['total'] = (float) db()->query("SELECT COALESCE(SUM(quantity_ordered * unit_price),0) FROM purchase_order_lines WHERE order_id={$r['id']}")->fetchColumn();
+        $r['order_number'] = format_order_number($r['season'], $r['order_seq']);
       }
       out($rows);
     }
@@ -1969,18 +2353,33 @@ switch ($action) {
     if ($method === 'POST') {
       $supplierId = i($b, 'supplier_id'); $lines = $b['lines'] ?? [];
       if (!$supplierId || !is_array($lines) || !count($lines)) fail('Fournisseur et au moins une ligne requis');
+      // Validé avant l'ouverture de la transaction : fail() termine la requête immédiatement (exit), on ne veut
+      // pas planter avec une transaction SQLite ouverte.
+      $totalHt = 0.0;
+      foreach ($lines as $l) {
+        $qty = (float)($l['quantity'] ?? 0);
+        if ((int)($l['variant_id'] ?? 0) && $qty > 0) $totalHt += $qty * (float)($l['unit_price'] ?? 0);
+      }
+      // La répartition budgétaire porte sur le total TTC (TVA incluse), pas le HT des lignes.
+      $vatRate = (float) setting('vat_rate', '8.1');
+      $totalTtc = round($totalHt * (1 + $vatRate / 100), 2);
+      $allocations = validate_allocations(is_array($b['allocations'] ?? null) ? $b['allocations'] : [], $totalTtc);
+      $orderDate = s($b, 'order_date') ?: date('Y-m-d');
       $pdo = db();
       $pdo->beginTransaction();
       try {
-        $pdo->prepare('INSERT INTO purchase_orders (supplier_id, expected_date, created_by, notes) VALUES (?,?,?,?)')
-            ->execute([$supplierId, s($b, 'expected_date') ?: null, $u['id'], s($b, 'notes')]);
+        $pdo->prepare('INSERT INTO purchase_orders (supplier_id, order_date, expected_date, created_by, notes) VALUES (?,?,?,?,?)')
+            ->execute([$supplierId, $orderDate, s($b, 'expected_date') ?: null, $u['id'], s($b, 'notes')]);
         $orderId = (int) $pdo->lastInsertId();
+        assign_order_season($pdo, $orderId, s($b, 'season'), $orderDate);
         $insLine = $pdo->prepare('INSERT INTO purchase_order_lines (order_id, variant_id, quantity_ordered, unit_price) VALUES (?,?,?,?)');
         foreach ($lines as $l) {
           $vid = (int)($l['variant_id'] ?? 0); $qty = (float)($l['quantity'] ?? 0);
           if (!$vid || $qty <= 0) continue;
           $insLine->execute([$orderId, $vid, $qty, (float)($l['unit_price'] ?? 0)]);
         }
+        $insAlloc = $pdo->prepare('INSERT INTO purchase_order_budget_allocations (order_id, department_id, amount) VALUES (?,?,?)');
+        foreach ($allocations as $a) $insAlloc->execute([$orderId, $a['department_id'], $a['amount']]);
         $reqIds = $b['request_ids'] ?? [];
         if (is_array($reqIds)) {
           $linkReq = $pdo->prepare('INSERT OR IGNORE INTO purchase_order_requests (order_id, request_id) VALUES (?,?)');
@@ -1997,20 +2396,67 @@ switch ($action) {
     }
     if ($method === 'PUT') {
       $id = i($b, 'id'); $status = s($b, 'status');
-      $current = db()->query("SELECT status FROM purchase_orders WHERE id=$id")->fetch();
+      $vatRate = (float) setting('vat_rate', '8.1');
+      $current = db()->query("SELECT status, order_date, created_at FROM purchase_orders WHERE id=$id")->fetch();
       if (!$current) fail('Commande introuvable', 404);
       // Édition du contenu (lignes, dates, notes, fournisseur) : uniquement tant que la commande est en brouillon.
       // Le changement de statut lui-même (draft -> sent -> ...) reste toujours autorisé indépendamment.
-      $contentEdit = isset($b['expected_date']) || isset($b['notes']) || isset($b['supplier_id']) || isset($b['lines']);
+      $contentEdit = isset($b['order_date']) || isset($b['expected_date']) || isset($b['notes']) || isset($b['supplier_id']) || isset($b['lines']);
       if ($contentEdit && $current['status'] !== 'draft') {
         fail('Seule une commande en brouillon peut être modifiée');
       }
       $fields = []; $vals = [];
       if ($status) {
-        if (!in_array($status, ['draft', 'sent', 'confirmed', 'received_partial', 'received_total'], true)) fail('Statut invalide');
+        if (!in_array($status, ['draft', 'sent', 'confirmed', 'received_partial', 'received_total', 'cancelled'], true)) fail('Statut invalide');
+        // Une commande créée automatiquement (depuis une demande, sans passer par le formulaire) peut encore
+        // n'avoir aucune répartition budgétaire : on bloque la sortie du brouillon tant qu'elle n'est pas complète,
+        // plutôt que de laisser une commande envoyée disparaître silencieusement du suivi budgétaire. L'annulation
+        // reste toujours possible même incomplète, puisqu'elle sort la commande du suivi budgétaire (voir requête
+        // 'spent' : les commandes annulées sont exclues comme les brouillons).
+        if ($status !== 'draft' && $status !== 'cancelled' && $current['status'] === 'draft' && !isset($b['lines'])) {
+          $totalHt = (float) db()->query("SELECT COALESCE(SUM(quantity_ordered * unit_price),0) FROM purchase_order_lines WHERE order_id=$id")->fetchColumn();
+          $totalTtc = round($totalHt * (1 + $vatRate / 100), 2);
+          $allocated = (float) db()->query("SELECT COALESCE(SUM(amount),0) FROM purchase_order_budget_allocations WHERE order_id=$id")->fetchColumn();
+          if (abs($allocated - $totalTtc) > 0.01) fail('Complète la répartition budgétaire de cette commande (colonne de droite) avant de l\'envoyer');
+        }
+        if ($status === 'cancelled') {
+          // Annulation : gérée intégralement dans sa propre transaction (statut + reversion du stock si la
+          // commande avait déjà été réceptionnée), donc pas ajoutée à $fields comme les autres champs qui,
+          // eux, partagent une même UPDATE non transactionnelle plus bas.
+          $pdo = db();
+          $pdo->beginTransaction();
+          try {
+            if (in_array($current['status'], ['received_partial', 'received_total'], true)) {
+              // Reversion : une sortie de stock miroir pour chaque entrée créée par la réception de cette
+              // commande (voir orders_receive / orders_receive_scan, ref_type='reception'), regroupée par
+              // variante/lieu/usage. Échoue (fail → 409) si une partie de ce stock a déjà été consommée
+              // ailleurs (vente, dispatch...) : l'annulation est alors bloquée plutôt que de faire passer le
+              // stock en négatif, il faut d'abord régulariser le stock manuellement.
+              $movs = $pdo->query("SELECT variant_id, location_id, usage, SUM(quantity) AS qty FROM stock_movements
+                                    WHERE ref_type = 'reception' AND ref_id = $id AND type = 'entry'
+                                    GROUP BY variant_id, location_id, usage")->fetchAll();
+              foreach ($movs as $m) {
+                apply_stock_movement((int)$m['variant_id'], (int)$m['location_id'], 'exit', (float)$m['qty'], 'Annulation commande', 'order_cancel', $id, (int)$u['id'], $m['usage']);
+              }
+              $pdo->exec("UPDATE purchase_order_lines SET quantity_received = 0 WHERE order_id = $id");
+            }
+            // Les demandes liées repassent en 'approved' : elles restent validées par le staff mais redeviennent
+            // éligibles à une nouvelle commande (bouton Commander), plutôt que de rester bloquées en 'ordered'
+            // sans commande active derrière elles.
+            $pdo->prepare("UPDATE requests SET status='approved' WHERE status='ordered' AND id IN (SELECT request_id FROM purchase_order_requests WHERE order_id=?)")->execute([$id]);
+            $pdo->prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?")->execute([$id]);
+            $pdo->commit();
+          } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            fail('Annulation impossible : ' . $e->getMessage(), 500);
+          }
+          log_activity($u['id'], 'Commande annulée', "ID $id");
+          out(['ok' => true]); // statut déjà appliqué et committé ci-dessus, on s'arrête là
+        }
         $fields[] = 'status = ?'; $vals[] = $status;
         if ($status === 'sent') { $fields[] = "sent_at = datetime('now')"; }
       }
+      if (isset($b['order_date'])) { $fields[] = 'order_date = ?'; $vals[] = s($b, 'order_date') ?: null; }
       if (isset($b['expected_date'])) { $fields[] = 'expected_date = ?'; $vals[] = s($b, 'expected_date') ?: null; }
       if (isset($b['notes'])) { $fields[] = 'notes = ?'; $vals[] = s($b, 'notes'); }
       if (isset($b['supplier_id'])) { $fields[] = 'supplier_id = ?'; $vals[] = i($b, 'supplier_id'); }
@@ -2019,6 +2465,17 @@ switch ($action) {
         db()->prepare('UPDATE purchase_orders SET ' . implode(', ', $fields) . ' WHERE id = ?')->execute($vals);
       }
       if (isset($b['lines']) && is_array($b['lines'])) {
+        // La répartition budgétaire doit être fournie avec les lignes (le formulaire commande envoie toujours
+        // les deux ensemble) : sinon une répartition existante pourrait ne plus correspondre au nouveau total.
+        if (!isset($b['allocations'])) fail('Répartition budgétaire requise');
+        // Validé avant l'ouverture de la transaction : fail() termine la requête immédiatement (exit).
+        $totalHt = 0.0;
+        foreach ($b['lines'] as $l) {
+          $qty = (float)($l['quantity'] ?? $l['quantity_ordered'] ?? 0);
+          if ((int)($l['variant_id'] ?? 0) && $qty > 0) $totalHt += $qty * (float)($l['unit_price'] ?? 0);
+        }
+        $totalTtc = round($totalHt * (1 + $vatRate / 100), 2);
+        $allocations = validate_allocations(is_array($b['allocations']) ? $b['allocations'] : [], $totalTtc);
         $pdo = db();
         $pdo->beginTransaction();
         try {
@@ -2029,13 +2486,39 @@ switch ($action) {
             if (!$vid || $qty <= 0) continue;
             $insLine->execute([$id, $vid, $qty, (float)($l['unit_price'] ?? 0)]);
           }
+          $pdo->prepare('DELETE FROM purchase_order_budget_allocations WHERE order_id = ?')->execute([$id]);
+          $insAlloc = $pdo->prepare('INSERT INTO purchase_order_budget_allocations (order_id, department_id, amount) VALUES (?,?,?)');
+          foreach ($allocations as $a) $insAlloc->execute([$id, $a['department_id'], $a['amount']]);
           $pdo->commit();
         } catch (Exception $e) {
-          $pdo->rollBack();
+          if ($pdo->inTransaction()) $pdo->rollBack();
           fail('Modification des lignes impossible : ' . $e->getMessage(), 500);
         }
       }
-      if (!$fields && !isset($b['lines'])) fail('Rien à modifier');
+      // Répartition budgétaire seule (sans toucher aux lignes) : autorisée quel que soit le statut de la
+      // commande, contrairement au reste du contenu — utile pour corriger l'attribution après envoi.
+      if (isset($b['allocations']) && !isset($b['lines'])) {
+        $totalHt = (float) db()->query("SELECT COALESCE(SUM(quantity_ordered * unit_price),0) FROM purchase_order_lines WHERE order_id=$id")->fetchColumn();
+        $totalTtc = round($totalHt * (1 + $vatRate / 100), 2);
+        $allocations = validate_allocations(is_array($b['allocations']) ? $b['allocations'] : [], $totalTtc);
+        $pdo = db();
+        $pdo->beginTransaction();
+        try {
+          $pdo->prepare('DELETE FROM purchase_order_budget_allocations WHERE order_id = ?')->execute([$id]);
+          $insAlloc = $pdo->prepare('INSERT INTO purchase_order_budget_allocations (order_id, department_id, amount) VALUES (?,?,?)');
+          foreach ($allocations as $a) $insAlloc->execute([$id, $a['department_id'], $a['amount']]);
+          $pdo->commit();
+        } catch (Exception $e) {
+          if ($pdo->inTransaction()) $pdo->rollBack();
+          fail('Modification de la répartition impossible : ' . $e->getMessage(), 500);
+        }
+      }
+      // Saison seule (colonne de droite, comme la répartition) : autorisée quel que soit le statut. Reprend
+      // un nouveau numéro de séquence dans la saison cible (voir assign_order_season()).
+      if (isset($b['season']) && !isset($b['lines'])) {
+        assign_order_season(db(), $id, s($b, 'season'), $current['order_date'] ?: $current['created_at']);
+      }
+      if (!$fields && !isset($b['lines']) && !isset($b['allocations']) && !isset($b['season'])) fail('Rien à modifier');
       log_activity($u['id'], 'Commande modifiée', "ID $id");
       out(['ok' => true]);
     }
@@ -2053,15 +2536,24 @@ switch ($action) {
     $reqId = i($b, 'request_id');
     $r = db()->query("SELECT * FROM requests WHERE id=$reqId")->fetch();
     if (!$r) fail('Demande introuvable', 404);
-    $v = db()->query("SELECT v.*, a.supplier_id, a.purchase_price FROM article_variants v JOIN articles a ON a.id = v.article_id WHERE v.id={$r['variant_id']}")->fetch();
+    $v = db()->query("SELECT v.*, a.supplier_id, a.purchase_price, a.department_id FROM article_variants v JOIN articles a ON a.id = v.article_id WHERE v.id={$r['variant_id']}")->fetch();
     if (!$v || !$v['supplier_id']) fail('L\'article n\'a pas de fournisseur préféré défini');
     $pdo = db();
     $pdo->beginTransaction();
     try {
-      $pdo->prepare('INSERT INTO purchase_orders (supplier_id, created_by) VALUES (?,?)')->execute([$v['supplier_id'], $u['id']]);
+      $orderDate = date('Y-m-d');
+      $pdo->prepare('INSERT INTO purchase_orders (supplier_id, order_date, created_by) VALUES (?,?,?)')->execute([$v['supplier_id'], $orderDate, $u['id']]);
       $orderId = (int) $pdo->lastInsertId();
+      assign_order_season($pdo, $orderId, '', $orderDate);
       $pdo->prepare('INSERT INTO purchase_order_lines (order_id, variant_id, quantity_ordered, unit_price) VALUES (?,?,?,?)')
           ->execute([$orderId, $v['id'], $r['quantity'], $v['purchase_price']]);
+      // Pré-répartition budgétaire automatique (best-effort, TVA incluse), voir commentaire équivalent dans request_to_order.
+      if ($v['department_id']) {
+        $vatRate = (float) setting('vat_rate', '8.1');
+        $amountTtc = round($r['quantity'] * $v['purchase_price'] * (1 + $vatRate / 100), 2);
+        $pdo->prepare('INSERT INTO purchase_order_budget_allocations (order_id, department_id, amount) VALUES (?,?,?)')
+            ->execute([$orderId, $v['department_id'], $amountTtc]);
+      }
       $pdo->prepare('INSERT INTO purchase_order_requests (order_id, request_id) VALUES (?,?)')->execute([$orderId, $reqId]);
       $pdo->prepare("UPDATE requests SET status='ordered' WHERE id=?")->execute([$reqId]);
       $pdo->commit();
@@ -2182,12 +2674,13 @@ switch ($action) {
                            WHERE pol.order_id=$id")->fetchAll();
     header_remove('Content-Type');
     header('Content-Type: text/csv; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="bon-commande-' . $id . '.csv"');
+    $orderNumber = format_order_number($o['season'], $o['order_seq']);
+    header('Content-Disposition: attachment; filename="bon-commande-' . str_replace('/', '-', $orderNumber) . '.csv"');
     echo "\xEF\xBB\xBF"; // BOM UTF-8 pour Excel
     $fh = fopen('php://output', 'w');
-    fputcsv($fh, ['Bon de commande #' . $o['id']], ';');
+    fputcsv($fh, ['Bon de commande ' . $orderNumber], ';');
     fputcsv($fh, ['Fournisseur', $o['supplier_name']], ';');
-    fputcsv($fh, ['Date', date('d.m.Y')], ';');
+    fputcsv($fh, ['Date de commande', $o['order_date'] ? date('d.m.Y', strtotime($o['order_date'])) : date('d.m.Y')], ';');
     fputcsv($fh, ['Livraison prévue', $o['expected_date'] ?? ''], ';');
     fputcsv($fh, [], ';');
     fputcsv($fh, ['Référence article', 'Désignation', 'Variante', 'Code-barres', 'Quantité commandée', 'Prix unitaire HT', 'Total HT'], ';');
@@ -2323,16 +2816,16 @@ switch ($action) {
     if ($method === 'GET') {
       require_role($u, 'view');
       $fy = s($_GET, 'fiscal_year') ?: fiscal_year();
-      [$fyStart, $fyEnd] = fiscal_year_range($fy);
       $rows = db()->query("SELECT b.*, d.name AS department_name FROM budgets b JOIN departments d ON d.id = b.department_id WHERE b.fiscal_year = '$fy'")->fetchAll();
       foreach ($rows as &$r) {
-        $st = db()->prepare("SELECT COALESCE(SUM(pol.quantity_ordered * pol.unit_price),0)
-                              FROM purchase_order_lines pol
-                              JOIN article_variants v ON v.id = pol.variant_id
-                              JOIN articles a ON a.id = v.article_id
-                              JOIN purchase_orders po ON po.id = pol.order_id
-                              WHERE a.department_id = ? AND po.status != 'draft' AND date(po.created_at) BETWEEN ? AND ?");
-        $st->execute([$r['department_id'], $fyStart, $fyEnd]);
+        // Dépensé = somme des répartitions budgétaires (saisies sur chaque commande, voir case 'orders'), des
+        // commandes explicitement affiliées à cette saison (po.season), pas d'une plage de dates : une commande
+        // peut être ré-affiliée manuellement à une autre saison que celle déduite de sa date (colonne de droite).
+        $st = db()->prepare("SELECT COALESCE(SUM(poba.amount),0)
+                              FROM purchase_order_budget_allocations poba
+                              JOIN purchase_orders po ON po.id = poba.order_id
+                              WHERE poba.department_id = ? AND po.status NOT IN ('draft','cancelled') AND po.season = ?");
+        $st->execute([$r['department_id'], $fy]);
         $r['spent'] = (float) $st->fetchColumn();
       }
       out(['fiscal_year' => $fy, 'budgets' => $rows]);
@@ -2380,7 +2873,7 @@ switch ($action) {
             JOIN article_variants v ON v.id = pol.variant_id
             JOIN articles a ON a.id = v.article_id
             LEFT JOIN categories c ON c.id = a.category_id
-            WHERE po.status != 'draft' AND date(po.created_at) BETWEEN ? AND ?";
+            WHERE po.status NOT IN ('draft','cancelled') AND date(po.created_at) BETWEEN ? AND ?";
     $params = [$from, $to];
     // category_id peut désigner une catégorie racine (on inclut alors ses sous-catégories) ou une sous-catégorie précise.
     if ($catId) { $sql .= ' AND (c.id = ? OR c.parent_id = ?)'; $params[] = $catId; $params[] = $catId; }
@@ -2453,27 +2946,25 @@ switch ($action) {
     $u = require_auth();
     require_role($u, 'view');
     $pdo = db();
-    $fy = fiscal_year();
+    $fy = s($_GET, 'fiscal_year') ?: fiscal_year();
     $requestStaleDays = (int) setting('request_stale_days', '5');
     $orderForgottenDays = (int) setting('order_forgotten_days', '7');
 
-    [$fyStart, $fyEnd] = fiscal_year_range($fy);
     $budgets = $pdo->query("SELECT b.*, d.name AS department_name FROM budgets b JOIN departments d ON d.id = b.department_id WHERE b.fiscal_year = '$fy'")->fetchAll();
     foreach ($budgets as &$bud) {
-      $st = $pdo->prepare("SELECT COALESCE(SUM(pol.quantity_ordered * pol.unit_price),0)
-                            FROM purchase_order_lines pol
-                            JOIN article_variants v ON v.id = pol.variant_id
-                            JOIN articles a ON a.id = v.article_id
-                            JOIN purchase_orders po ON po.id = pol.order_id
-                            WHERE a.department_id = ? AND po.status != 'draft' AND date(po.created_at) BETWEEN ? AND ?");
-      $st->execute([$bud['department_id'], $fyStart, $fyEnd]);
+      $st = $pdo->prepare("SELECT COALESCE(SUM(poba.amount),0)
+                            FROM purchase_order_budget_allocations poba
+                            JOIN purchase_orders po ON po.id = poba.order_id
+                            WHERE poba.department_id = ? AND po.status NOT IN ('draft','cancelled') AND po.season = ?");
+      $st->execute([$bud['department_id'], $fy]);
       $bud['spent'] = (float) $st->fetchColumn();
     }
 
     $alerts = [];
-    foreach ($pdo->query("SELECT po.id, po.expected_date, s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id
+    foreach ($pdo->query("SELECT po.id, po.season, po.order_seq, po.expected_date, s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id
                            WHERE po.status IN ('sent','confirmed') AND po.expected_date IS NOT NULL AND date(po.expected_date) < date('now')") as $o) {
-      $alerts[] = ['type' => 'reception_retard', 'label' => "Réception en retard — commande #{$o['id']} ({$o['supplier_name']})", 'ref_id' => $o['id']];
+      $orderNumber = format_order_number($o['season'], $o['order_seq']);
+      $alerts[] = ['type' => 'reception_retard', 'label' => "Réception en retard — commande $orderNumber ({$o['supplier_name']})", 'ref_id' => $o['id']];
     }
     foreach ($pdo->query("SELECT r.id, r.variant_id, a.name AS article_name FROM requests r
                            JOIN article_variants v ON v.id = r.variant_id JOIN articles a ON a.id = v.article_id
@@ -2498,6 +2989,8 @@ switch ($action) {
                               WHERE v.active=1 AND v.alert_threshold > 0
                               GROUP BY v.id HAVING total <= v.alert_threshold")->fetchAll();
 
+    $recentOrders = $pdo->query('SELECT po.*, s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id ORDER BY po.created_at DESC LIMIT 5')->fetchAll();
+    foreach ($recentOrders as &$ro) $ro['order_number'] = format_order_number($ro['season'], $ro['order_seq']);
     out([
       'fiscal_year' => $fy,
       'pending_requests' => (int) $pdo->query("SELECT COUNT(*) FROM requests WHERE status='pending'")->fetchColumn(),
@@ -2505,8 +2998,21 @@ switch ($action) {
       'budgets' => $budgets,
       'alerts' => $alerts,
       'low_stock' => $lowStock,
-      'recent_orders' => $pdo->query('SELECT po.*, s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id ORDER BY po.created_at DESC LIMIT 5')->fetchAll(),
+      'recent_orders' => $recentOrders,
     ]);
+  }
+
+  case 'seasons_list': {
+    require_auth();
+    out(seasons_list());
+  }
+
+  /* Taux de TVA seul, accessible à tout le staff (pas seulement admin, contrairement à 'settings') : nécessaire
+   * côté client pour calculer le total TTC d'une commande en cours de saisie, avant tout envoi au serveur. */
+  case 'vat_rate': {
+    $u = require_auth();
+    require_role($u, 'view');
+    out(['rate' => (float) setting('vat_rate', '8.1')]);
   }
 
   /* ============ INTÉGRATION CAISSE ============ */
