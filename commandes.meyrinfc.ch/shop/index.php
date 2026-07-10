@@ -178,16 +178,11 @@ function attrName(a, primary) {
   for (const v of (a.variants || [])) { const x = (v.attributes || []).find(y => !!y.is_primary === primary); if (x) return x.attribute_name; }
   return '';
 }
-function sortAttrValueEntries(entries) {
-  const byValue = new Map();
-  entries.forEach(x => { if (!byValue.has(x.value)) byValue.set(x.value, x.sort_order || 0); });
-  return [...byValue.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([v]) => v);
-}
-function primaryValues(a) { return sortAttrValueEntries((a.variants || []).flatMap(v => (v.attributes || []).filter(x => x.is_primary))); }
+function primaryValues(a) { return [...new Set((a.variants || []).flatMap(v => (v.attributes || []).filter(x => x.is_primary).map(x => x.value)))]; }
 function secondaryValues(a, pv) {
-  return sortAttrValueEntries((a.variants || [])
+  return [...new Set((a.variants || [])
     .filter(v => (v.attributes || []).some(x => x.is_primary && x.value === pv))
-    .flatMap(v => (v.attributes || []).filter(x => !x.is_primary)));
+    .flatMap(v => (v.attributes || []).filter(x => !x.is_primary).map(x => x.value)))];
 }
 function findVariant() {
   const { article: a, primaryValue, secondaryValue, hasPrimary, hasSecondary } = pickerState;

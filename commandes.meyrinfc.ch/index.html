@@ -1641,6 +1641,9 @@ function renderVariantRow(a, v) {
       <span class="font-medium w-28 shrink-0 truncate">${esc(rowLabel)}${!v.active ? ' <span class="text-mute font-normal">(inactive)</span>' : ''}</span>
       <span class="text-mute w-28 shrink-0 truncate">${esc(v.barcode || '—')}</span>
       <span class="tnum font-semibold w-12 text-right shrink-0 ${low ? 'text-rose2-600' : ''}">${v.total_stock}</span>
+      <label class="inline-flex items-center gap-1 text-[10.5px] text-mute shrink-0 staff-only" title="Visible sur la boutique publique (/shop)">
+        <input type="checkbox" class="variant-shop-check" data-variant="${v.id}" onchange="toggleVariantShopVisible(${v.id}, this)" ${v.shop_visible ? 'checked' : ''}> Shop
+      </label>
       <div class="ml-auto flex items-center gap-2.5 shrink-0 staff-only">
         <button type="button" onclick="openVariantHistory(${v.id})" class="font-semibold text-mute hover:text-ink text-[11.5px]">Historique</button>
         ${btnEdit(`modalVariantEdit(${a.id}, ${JSON.stringify(v).replace(/'/g,"&#39;")})`)}
@@ -1651,17 +1654,55 @@ function renderVariantRow(a, v) {
 function renderVariantGroup(a, title, variants, open) {
   const stock = variants.reduce((s, v) => s + v.total_stock, 0);
   const ids = variants.map(v => v.id).join(',');
+  const allShopVisible = variants.every(v => v.shop_visible);
   return `
     <details class="border border-line rounded-xl overflow-hidden" ${open ? 'open' : ''}>
       <summary class="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3.5 py-2 bg-canvas/60 hover:bg-canvas transition">
         <span class="text-[11px] font-semibold uppercase tracking-[.06em] text-mute">${esc(title)} <span class="text-ink normal-case font-normal">(${variants.length})</span></span>
         <span class="flex items-center gap-3">
           <span class="text-[12px] font-bold tnum">${stock}</span>
+          <button type="button" onclick="event.preventDefault();event.stopPropagation();toggleGroupShopVisibility(this, [${ids}], ${allShopVisible ? 0 : 1})" class="group-shop-toggle text-[10.5px] font-semibold text-mute hover:text-ink staff-only px-1.5 py-0.5 rounded border border-line" title="Afficher/masquer tout ce groupe sur la boutique publique (/shop)">${allShopVisible ? 'Shop : masquer tout' : 'Shop : afficher tout'}</button>
           <button type="button" onclick="event.preventDefault();event.stopPropagation();deleteVariantGroup(${a.id}, [${ids}])" class="text-mute hover:text-rose2-600 staff-only" title="Supprimer le groupe" aria-label="Supprimer le groupe">${ICON_DELETE}</button>
         </span>
       </summary>
       <div class="divide-y divide-line border-t border-line">${variants.map(v => renderVariantRow(a, v)).join('')}</div>
     </details>`;
+}
+/* Bascule "Shop" (ligne ou groupe) : met à jour l'état local + le DOM ciblé plutôt que de recharger toute la
+ * fiche article (openFicheArticle), ce qui refermerait tous les groupes <details> déjà ouverts par l'utilisateur. */
+function findVariantOwner(variantId) {
+  const a = S.articles.find(art => (art.variants || []).some(v => v.id === variantId));
+  return a ? { article: a, variant: a.variants.find(v => v.id === variantId) } : null;
+}
+function refreshGroupToggleButton(detailsEl) {
+  const btn = detailsEl.querySelector('.group-shop-toggle');
+  if (!btn) return;
+  const boxes = [...detailsEl.querySelectorAll('.variant-shop-check')];
+  const allVisible = boxes.length > 0 && boxes.every(c => c.checked);
+  btn.textContent = allVisible ? 'Shop : masquer tout' : 'Shop : afficher tout';
+  btn.setAttribute('onclick', `event.preventDefault();event.stopPropagation();toggleGroupShopVisibility(this, [${boxes.map(c=>c.dataset.variant).join(',')}], ${allVisible ? 0 : 1})`);
+}
+async function toggleVariantShopVisible(variantId, checkboxEl) {
+  const checked = checkboxEl.checked;
+  try {
+    await api('variants_shop_visibility', 'POST', { ids: [variantId], visible: checked ? 1 : 0 });
+    const owner = findVariantOwner(variantId);
+    if (owner) owner.variant.shop_visible = checked ? 1 : 0;
+    refreshGroupToggleButton(checkboxEl.closest('details'));
+  } catch (e) {
+    checkboxEl.checked = !checked;
+    toast(e.message, true);
+  }
+}
+async function toggleGroupShopVisibility(btnEl, ids, visible) {
+  const details = btnEl.closest('details');
+  try {
+    await api('variants_shop_visibility', 'POST', { ids, visible });
+    ids.forEach(id => { const owner = findVariantOwner(id); if (owner) owner.variant.shop_visible = visible; });
+    details.querySelectorAll('.variant-shop-check').forEach(c => c.checked = !!visible);
+    refreshGroupToggleButton(details);
+    toast(visible ? 'Groupe affiché sur le shop' : 'Groupe masqué du shop');
+  } catch (e) { toast(e.message, true); }
 }
 function renderVariantList(a) {
   if (!a.variants.length) return '<p class="text-mute text-[12.5px]">Aucun attribut</p>';
@@ -1767,8 +1808,9 @@ function modalVariantEdit(articleId, v) {
       <div><label class="lbl">Code-barres</label><input id="varBarcode" class="field" value="${esc(v.barcode||'')}"></div>
       <div><label class="lbl">Seuil d'alerte</label><input id="varThreshold" type="number" min="0" class="field" value="${v.alert_threshold||0}"></div>
       <div><label class="lbl">Statut</label><select id="varActive" class="field"><option value="1" ${v.active?'selected':''}>Active</option><option value="0" ${!v.active?'selected':''}>Inactive</option></select></div>
+      <label class="flex items-center gap-2 text-[12.5px]"><input id="varShopVisible" type="checkbox" ${v.shop_visible?'checked':''}> Visible sur la boutique publique (/shop)</label>
     </div>`, async () => {
-    await api('variants', 'PUT', { id: v.id, barcode: document.getElementById('varBarcode').value, alert_threshold: +document.getElementById('varThreshold').value, active: +document.getElementById('varActive').value });
+    await api('variants', 'PUT', { id: v.id, barcode: document.getElementById('varBarcode').value, alert_threshold: +document.getElementById('varThreshold').value, active: +document.getElementById('varActive').value, shop_visible: document.getElementById('varShopVisible').checked ? 1 : 0 });
     closeModal(); toast('Modifié'); openFicheArticle(articleId);
   });
 }

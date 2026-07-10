@@ -502,6 +502,11 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'attribute_values', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
   // Rattachement d'une demande à un panier (regroupement de plusieurs lignes soumises ensemble). Nullable : compat anciennes demandes.
   ensure_column($pdo, 'requests', 'cart_id', 'INTEGER REFERENCES request_carts(id) ON DELETE CASCADE');
+  // Visibilité sur la boutique publique (/shop) : par variante (pas par article entier), pour pouvoir réserver
+  // certaines couleurs/déclinaisons à une catégorie de personnes tout en gardant les mêmes tailles ouvertes sur
+  // d'autres couleurs. Défaut 0 (masqué) : chaque variante existante ou nouvelle doit être ouverte explicitement,
+  // rien n'apparaît sur /shop tant que le staff ne l'a pas décidé.
+  ensure_column($pdo, 'article_variants', 'shop_visible', 'INTEGER NOT NULL DEFAULT 0');
 
   // Reconstructions de tables (contraintes UNIQUE/FK non modifiables par simple ALTER en SQLite)
   migrate_stock_levels_usage($pdo);
@@ -1366,8 +1371,8 @@ switch ($action) {
     if ($method === 'PUT') {
       $id = i($b, 'id');
       try {
-        db()->prepare('UPDATE article_variants SET barcode=?, alert_threshold=?, active=? WHERE id=?')
-            ->execute([s($b,'barcode'), i($b,'alert_threshold'), i($b,'active',1), $id]);
+        db()->prepare('UPDATE article_variants SET barcode=?, alert_threshold=?, active=?, shop_visible=? WHERE id=?')
+            ->execute([s($b,'barcode'), i($b,'alert_threshold'), i($b,'active',1), i($b,'shop_visible',0), $id]);
       } catch (PDOException $e) { fail('Ce code-barres est déjà utilisé par une autre variante'); }
       log_activity($u['id'], 'Variante modifiée', "ID $id");
       out(['ok' => true]);
@@ -1377,6 +1382,21 @@ switch ($action) {
       out(['ok' => true]);
     }
     fail('Méthode non supportée', 405);
+  }
+
+  /* Bascule groupée de la visibilité shop (voir shop_visible) pour un lot de variantes en un clic, typiquement
+   * toutes les variantes d'une même couleur (mêmes tailles réparties sur des couleurs, certaines réservées). */
+  case 'variants_shop_visibility': {
+    $u = require_auth();
+    require_role($u, 'edit');
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $ids = $b['ids'] ?? [];
+    if (!is_array($ids) || !count($ids)) fail('Liste de variantes requise');
+    $visible = i($b, 'visible', 0) ? 1 : 0;
+    $st = db()->prepare('UPDATE article_variants SET shop_visible = ? WHERE id = ?');
+    foreach ($ids as $id) $st->execute([$visible, (int) $id]);
+    log_activity($u['id'], $visible ? 'Variantes affichées sur le shop' : 'Variantes masquées du shop', implode(',', $ids));
+    out(['ok' => true]);
   }
 
   case 'article_lookup': {
@@ -2093,7 +2113,7 @@ switch ($action) {
                               ORDER BY a.name COLLATE NOCASE")->fetchAll();
     $variants = db()->query("SELECT v.id, v.article_id, v.label, v.barcode
                               FROM article_variants v JOIN articles a ON a.id = v.article_id
-                              WHERE v.active = 1 AND a.active = 1 ORDER BY v.label COLLATE NOCASE")->fetchAll();
+                              WHERE v.active = 1 AND a.active = 1 AND v.shop_visible = 1 ORDER BY v.label COLLATE NOCASE")->fetchAll();
     $levels = db()->query("SELECT variant_id, SUM(quantity) AS qty FROM stock_levels WHERE usage = 'boutique' GROUP BY variant_id")->fetchAll();
     $vAttrs = db()->query('SELECT va.variant_id, va.attribute_id, va.value, va.is_primary, at.name AS attribute_name, av.color_code, av.sort_order
                            FROM variant_attributes va
@@ -2161,8 +2181,9 @@ switch ($action) {
         $variantId = (int)($item['variant_id'] ?? 0);
         $qty = (float)($item['quantity'] ?? 0);
         if (!$variantId || $qty <= 0) continue;
-        // Vérifie que la variante existe bien et appartient à un article actif (id forgé sinon ignoré).
-        $ok = $pdo->prepare('SELECT v.id FROM article_variants v JOIN articles a ON a.id = v.article_id WHERE v.id = ? AND v.active = 1 AND a.active = 1');
+        // Vérifie que la variante existe, appartient à un article actif et est bien ouverte à la boutique
+        // publique (id forgé ou variante réservée envoyée directement à l'API, en dehors du catalogue affiché : ignoré).
+        $ok = $pdo->prepare('SELECT v.id FROM article_variants v JOIN articles a ON a.id = v.article_id WHERE v.id = ? AND v.active = 1 AND a.active = 1 AND v.shop_visible = 1');
         $ok->execute([$variantId]);
         if (!$ok->fetchColumn()) continue;
         $insReq->execute([$variantId, $qty, $guestId, $motive, $cartId]);
@@ -2343,8 +2364,11 @@ switch ($action) {
         out($o);
       }
       $rows = db()->query('SELECT po.*, s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id ORDER BY po.created_at DESC')->fetchAll();
+      $vatRateList = (float) setting('vat_rate', '8.1');
       foreach ($rows as &$r) {
-        $r['total'] = (float) db()->query("SELECT COALESCE(SUM(quantity_ordered * unit_price),0) FROM purchase_order_lines WHERE order_id={$r['id']}")->fetchColumn();
+        $totalHt = (float) db()->query("SELECT COALESCE(SUM(quantity_ordered * unit_price),0) FROM purchase_order_lines WHERE order_id={$r['id']}")->fetchColumn();
+        // Total TTC affiché dans la liste, cohérent avec la fiche détail (o.total_ttc) et la répartition budgétaire.
+        $r['total'] = round($totalHt * (1 + $vatRateList / 100), 2);
         $r['order_number'] = format_order_number($r['season'], $r['order_seq']);
       }
       out($rows);
