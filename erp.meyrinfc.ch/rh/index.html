@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Meyrin FC · RH</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --jaune:#ffdd00;--jaune-fonce:#c5a900;--jaune-soft:#FFF3C4;
+  --noir:#15140F;--noir-2:#211F18;--noir-3:#2C2A21;--encre:#1A1915;
+  --gris:#6E6C61;--gris-2:#9A988C;--ligne:#E9E6DC;--ligne-2:#F0EDE4;--ligne-dark:#28261E;
+  --bg:#F6F4ED;--carte:#FFFFFF;
+  --vert:#1F9D5B;--vert-bg:#E4F4EA;
+  --rouge:#D8463A;--rouge-bg:#FBE7E4;
+  --orange:#E8902A;--orange-bg:#FCEEDB;
+  --bleu:#3B6FE0;--bleu-bg:#E6EDFB;
+  --violet:#7B59D8;--violet-bg:#EEE8FB;
+  --ombre-s:0 1px 2px rgba(20,18,10,.05);
+  --ombre:0 1px 2px rgba(20,18,10,.04),0 6px 20px rgba(20,18,10,.06);
+  --ombre-l:0 10px 40px rgba(20,18,10,.14);
+  --r:14px;--r-s:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{font-family:"Inter",-apple-system,sans-serif;background:var(--bg);color:var(--encre);font-size:14px;line-height:1.5}
+h1,h2,h3,.sora{font-family:"Sora","Inter",sans-serif}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:14px;outline:none}
+table{border-collapse:collapse;width:100%}
+
+.app{display:flex;min-height:100vh}
+.sidebar{width:252px;flex-shrink:0;background:var(--noir);color:#C9C7BD;display:flex;flex-direction:column;border-right:1px solid var(--ligne-dark);position:sticky;top:0;height:100vh}
+.sb-head{padding:22px 20px 18px;border-bottom:1px solid var(--ligne-dark)}
+.sb-back{display:flex;align-items:center;gap:6px;font-size:12px;color:#8C897C;margin-bottom:12px;font-weight:600}
+.sb-back:hover{color:#fff}
+.sb-name{font-family:"Sora";font-weight:800;font-size:15px;color:#fff}
+.sb-sub{font-size:10.5px;color:#8C897C;margin-top:2px}
+.sb-nav{flex:1;padding:16px 12px;overflow-y:auto}
+.sb-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;font-size:13.5px;font-weight:600;color:#C9C7BD;margin-bottom:2px;transition:background .15s,color .15s}
+.sb-item svg{width:16px;height:16px;flex-shrink:0;opacity:.75}
+.sb-item:hover{background:#211F18;color:#fff}
+.sb-item.active{background:var(--jaune);color:var(--noir)}
+.sb-item.active svg{opacity:1}
+.sb-foot{padding:14px 16px;border-top:1px solid var(--ligne-dark)}
+.sb-user{font-size:12.5px;color:#C9C7BD;font-weight:600;margin-bottom:8px}
+.sb-logout{display:block;text-align:center;padding:8px;background:rgba(255,255,255,.06);border-radius:8px;font-size:12px;color:#9A988C;font-weight:600}
+.sb-logout:hover{background:rgba(255,255,255,.12);color:#fff}
+
+.main{flex:1;min-width:0}
+.topbar{background:#fff;border-bottom:1px solid var(--ligne);min-height:64px;display:flex;align-items:center;justify-content:space-between;padding:12px 28px;position:sticky;top:0;z-index:10;gap:14px;flex-wrap:wrap}
+.topbar h1{font-size:18px;font-weight:800;color:var(--noir)}
+.content{padding:26px 28px 60px;max-width:1220px}
+
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:22px}
+.stat-card{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r);padding:18px 20px;box-shadow:var(--ombre-s)}
+.stat-label{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--gris-2);margin-bottom:8px}
+.stat-value{font-family:"Sora";font-size:24px;font-weight:800;color:var(--noir)}
+.stat-sub{font-size:12px;color:var(--gris);margin-top:4px}
+
+.card{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r);box-shadow:var(--ombre-s);margin-bottom:20px}
+.card-head{padding:16px 20px;border-bottom:1px solid var(--ligne-2);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.card-head h3{font-size:14.5px;font-weight:700;color:var(--noir)}
+.card-body{padding:18px 20px}
+.card-body.pad0{padding:0}
+
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700}
+.badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+.alert-list{list-style:none}
+.alert-list li{display:flex;gap:8px;padding:9px 0;border-bottom:1px solid var(--ligne-2);font-size:13px;color:var(--noir-3)}
+.alert-list li:last-child{border-bottom:none}
+.alert-list li::before{content:'⚠';color:var(--orange)}
+
+th{text-align:left;padding:10px 14px;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--gris-2);background:#FAFAF7;border-bottom:1px solid var(--ligne)}
+td{padding:10px 14px;border-bottom:1px solid var(--ligne-2);font-size:13.5px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#FAFAF7}
+.tbl-actions{display:flex;gap:6px;justify-content:flex-end}
+.icon-btn{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--gris)}
+.icon-btn:hover{background:var(--ligne-2);color:var(--noir)}
+.icon-btn svg{width:14px;height:14px}
+
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:700;font-family:"Sora";transition:background .15s;white-space:nowrap}
+.btn-primary{background:var(--jaune);color:var(--noir)}
+.btn-primary:hover{background:var(--jaune-fonce)}
+.btn-dark{background:var(--noir);color:#fff}
+.btn-dark:hover{background:var(--noir-3)}
+.btn-ghost{background:var(--bg);color:var(--noir-3);border:1px solid var(--ligne)}
+.btn-ghost:hover{background:var(--ligne-2)}
+.btn-sm{padding:6px 12px;font-size:12px}
+.btn svg{width:14px;height:14px}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--noir-3);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;padding:9px 12px;border:1.5px solid var(--ligne);border-radius:10px;background:#fff}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--jaune);box-shadow:0 0 0 4px rgba(255,221,0,.2)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.check-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--noir-3)}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--ligne);margin-bottom:18px;flex-wrap:wrap}
+.tab{padding:9px 16px;font-size:13px;font-weight:700;color:var(--gris);border-bottom:2px solid transparent}
+.tab.active{color:var(--noir);border-bottom-color:var(--jaune)}
+.tab:hover{color:var(--noir)}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(20,18,10,.5);align-items:center;justify-content:center;z-index:1000;padding:20px}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:26px;width:100%;max-width:460px;box-shadow:var(--ombre-l);max-height:88vh;overflow-y:auto}
+.modal.wide{max-width:760px}
+.modal h3{font-size:16px;font-weight:800;margin-bottom:18px;color:var(--noir)}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
+.modal-error{background:var(--rouge-bg);color:var(--rouge);padding:9px 12px;border-radius:8px;font-size:12.5px;margin-bottom:14px;display:none}
+
+.empty{text-align:center;padding:40px 20px;color:var(--gris-2);font-size:13.5px}
+.month-picker{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--ligne);border-radius:10px;padding:5px 8px}
+.month-picker input{border:none;background:none;padding:4px;width:130px}
+.search-bar{display:flex;gap:8px;align-items:center;flex:1;min-width:220px}
+.search-bar input{padding:9px 12px;border:1.5px solid var(--ligne);border-radius:10px;background:#fff;flex:1}
+.search-bar select{padding:9px 12px;border:1.5px solid var(--ligne);border-radius:10px;background:#fff;min-width:160px}
+.pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,0,0,.15);border-top-color:var(--noir);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hint{font-size:12px;color:var(--gris);margin-top:4px}
+.dropzone{border:2px dashed var(--ligne);border-radius:12px;padding:24px;text-align:center;color:var(--gris);font-size:13px;cursor:pointer;transition:border-color .15s,background .15s}
+.dropzone:hover{border-color:var(--jaune-fonce);background:var(--jaune-soft)}
+.review-match{border:1px solid var(--ligne);border-radius:12px;padding:14px;margin-bottom:12px}
+.review-match-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.review-player-row{display:grid;grid-template-columns:1fr 140px 100px;gap:8px;align-items:center;padding:6px 0}
+.score-low{color:var(--rouge)}
+
+.matrix-wrap{overflow-x:auto}
+.matrix-table th, .matrix-table td{white-space:nowrap}
+.matrix-table input.cell-amount{width:90px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;text-align:right}
+.matrix-total{font-weight:800;color:var(--noir)}
+.matrix-col-head{display:flex;flex-direction:column;gap:2px}
+.matrix-col-head .d{font-weight:700;font-size:12.5px}
+.matrix-col-head .a{font-size:11px;color:var(--gris);font-weight:500;text-transform:none;letter-spacing:0}
+.import-inline{border:1px solid var(--ligne);border-radius:10px;padding:14px;margin-top:10px;background:var(--bg)}
+</style>
+</head>
+<body>
+<div id="app" class="app"></div>
+<div class="modal-overlay" id="modal"></div>
+
+<script>
+const API = 'api.php';
+let STATE = { user: null, page: 'dashboard', month: new Date().toISOString().slice(0,7),
+  teams: [], categories: [], postes: [], employees: [], players: [], bareme: [] };
+
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function chf(n){ return (Number(n)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+async function api(action, opts = {}) {
+  const method = opts.method || 'GET';
+  const params = opts.params ? '&' + new URLSearchParams(opts.params).toString() : '';
+  const fetchOpts = { method, headers: {} };
+  if (opts.form) { fetchOpts.body = opts.form; }
+  else if (opts.body) { fetchOpts.headers['Content-Type'] = 'application/json'; fetchOpts.body = JSON.stringify(opts.body); }
+  const res = await fetch(`${API}?action=${action}${params}`, fetchOpts);
+  if (action === 'export_compta') return res.blob();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Erreur serveur');
+  return data;
+}
+
+const ICONS = {
+  dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  teams: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
+  employees: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/>',
+  players: '<path d="M12 2l2.4 4.8 5.3.8-3.8 3.7.9 5.3-4.8-2.5-4.8 2.5.9-5.3-3.8-3.7 5.3-.8z"/>',
+  primes: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.23.5.5.8 1.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/>',
+  back: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
+  upload: '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+};
+function ic(name){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
+
+const NAV = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { id: 'teams', label: 'Équipes', icon: 'teams' },
+  { id: 'employees', label: 'Employés', icon: 'employees' },
+  { id: 'players', label: 'Joueurs (1ère équipe)', icon: 'players' },
+  { id: 'primes', label: 'Primes de match', icon: 'primes' },
+  { id: 'settings', label: 'Paramètres', icon: 'settings' },
+];
+
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="sidebar">
+      <div class="sb-head">
+        <a href="https://erp.meyrinfc.ch" class="sb-back">${ic('back')} Retour à l'ERP</a>
+        <div class="sb-name">Ressources Humaines</div>
+        <div class="sb-sub">Meyrin FC</div>
+      </div>
+      <div class="sb-nav">
+        ${NAV.map(n => `<div class="sb-item ${STATE.page===n.id?'active':''}" onclick="goTo('${n.id}')">${ic(n.icon)}<span>${n.label}</span></div>`).join('')}
+      </div>
+      <div class="sb-foot">
+        <div class="sb-user">${esc(STATE.user?.name || '')}</div>
+        <a class="sb-logout" href="https://erp.meyrinfc.ch/logout.php">Déconnexion</a>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar"><h1 id="page-title"></h1><div id="topbar-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"></div></div>
+      <div class="content" id="content"></div>
+    </div>
+  `;
+  renderPage();
+}
+function goTo(page){ location.hash = page; }
+window.addEventListener('hashchange', () => {
+  const p = (location.hash || '').replace('#', '');
+  if (NAV.some(n => n.id === p) && p !== STATE.page) { STATE.page = p; render(); }
+});
+async function renderPage() {
+  const y = window.scrollY;
+  document.getElementById('page-title').textContent = NAV.find(n => n.id === STATE.page)?.label || '';
+  const c = document.getElementById('content');
+  const pages = { dashboard: renderDashboard, teams: renderTeams, employees: renderEmployees, players: renderPlayers, primes: renderPrimes, settings: renderSettings };
+  await (pages[STATE.page] || renderDashboard)(c);
+  window.scrollTo(0, y);
+}
+
+/* ============================================================ MODAL HELPERS */
+
+function openModal(html, wide=false){
+  const m = document.getElementById('modal');
+  m.innerHTML = `<div class="modal ${wide?'wide':''}">${html}</div>`;
+  m.classList.add('open');
+  m.onclick = e => { if (e.target === m) closeModal(); };
+}
+function closeModal(){ document.getElementById('modal').classList.remove('open'); }
+function modalErr(msg){ const e = document.querySelector('.modal-error'); if(e){ e.textContent = msg; e.style.display = 'block'; } }
+
+async function loadRefData(){
+  [STATE.teams, STATE.categories, STATE.postes] = await Promise.all([api('teams'), api('team_categories'), api('postes')]);
+}
+
+/* ============================================================ DASHBOARD */
+
+async function renderDashboard(c) {
+  document.getElementById('topbar-actions').innerHTML = `
+    <div class="month-picker"><input type="month" id="dash-month" value="${STATE.month}"></div>
+    <button class="btn btn-dark btn-sm" onclick="exportCompta()">Export compta (CSV)</button>`;
+  document.getElementById('dash-month').onchange = e => { STATE.month = e.target.value; renderPage(); };
+
+  c.innerHTML = `<div class="empty"><span class="spinner"></span> Chargement…</div>`;
+  let d;
+  try { d = await api('dashboard', { params: { month: STATE.month } }); }
+  catch (e) { c.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+
+  c.innerHTML = `
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Indemnités employés</div><div class="stat-value">${chf(d.totaux.indemnites_employes)} CHF</div></div>
+      <div class="stat-card"><div class="stat-label">Salaires joueurs</div><div class="stat-value">${chf(d.totaux.salaires_joueurs)} CHF</div></div>
+      <div class="stat-card"><div class="stat-label">Primes de match</div><div class="stat-value">${chf(d.totaux.primes_joueurs)} CHF</div></div>
+      <div class="stat-card"><div class="stat-label">Total masse RH du mois</div><div class="stat-value">${chf(d.totaux.total_general)} CHF</div></div>
+    </div>
+    ${d.alerts.length ? `<div class="card"><div class="card-head"><h3>Alertes</h3></div><div class="card-body"><ul class="alert-list">${d.alerts.map(a=>`<li>${esc(a)}</li>`).join('')}</ul></div></div>` : ''}
+    <div class="card">
+      <div class="card-head"><h3>Indemnités par employé</h3></div>
+      <div class="card-body pad0">
+        ${d.employes.length ? `<table><thead><tr><th>Employé</th><th>Détail</th><th>Total</th></tr></thead><tbody>
+          ${d.employes.map(ee => `<tr><td>${esc(ee.name)}</td><td style="color:var(--gris);font-size:12.5px">${ee.lignes.map(l=>esc(l.label)+' ('+chf(l.montant)+')').join(', ')}</td><td><strong>${chf(ee.total)} CHF</strong></td></tr>`).join('')}
+        </tbody></table>` : `<div class="empty">Aucune affectation d'employé.</div>`}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Salaires & primes joueurs</h3></div>
+      <div class="card-body pad0">
+        ${d.joueurs.length ? `<table><thead><tr><th>Joueur</th><th>Salaire</th><th>Primes</th><th>Total</th></tr></thead><tbody>
+          ${d.joueurs.map(p => `<tr><td>${esc(p.name)}</td><td>${chf(p.salaire)} CHF</td><td>${chf(p.primes)} CHF</td><td><strong>${chf(p.total)} CHF</strong></td></tr>`).join('')}
+        </tbody></table>` : `<div class="empty">Aucun joueur enregistré.</div>`}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Répartition par équipe</h3></div>
+      <div class="card-body pad0">
+        <table><thead><tr><th>Équipe</th><th>Catégorie</th><th>Employés affectés</th></tr></thead><tbody>
+          ${d.par_equipe.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.category_name||'—')}</td><td>${t.employes}</td></tr>`).join('')}
+        </tbody></table>
+      </div>
+    </div>
+  `;
+}
+async function exportCompta(){
+  const blob = await api('export_compta', { params: { month: STATE.month } });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `rh-meyrinfc-${STATE.month}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ============================================================ ÉQUIPES */
+
+let EXPANDED_CATS = new Set();
+let EXPANDED_TEAMS = new Set();
+let TEAM_SLOTS_CACHE = {};
+let TEAM_TOTALS = {};
+
+async function renderTeams(c){
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="teamModal()">+ Nouvelle équipe</button>`;
+  c.innerHTML = `<div class="empty"><span class="spinner"></span></div>`;
+  await loadRefData();
+  STATE.employees = await api('employees');
+  const totalsRows = await api('team_totals');
+  TEAM_TOTALS = {};
+  totalsRows.forEach(r => { TEAM_TOTALS[r.team_id] = r.total; });
+
+  if (!STATE.categories.length) {
+    c.innerHTML = `<div class="empty">Crée d'abord une catégorie dans Paramètres avant de pouvoir ajouter des équipes.</div>`;
+    return;
+  }
+  renderTeamsTree(c);
+}
+
+/** Total mensuel d'une équipe : priorité au cache local (à jour après une édition), sinon valeur chargée en bloc. */
+function teamTotal(teamId){
+  if (TEAM_SLOTS_CACHE[teamId]) {
+    return TEAM_SLOTS_CACHE[teamId].reduce((s, sl) => s + (sl.periodicite === 'annuel' ? sl.montant / 12 : sl.montant), 0);
+  }
+  return TEAM_TOTALS[teamId] || 0;
+}
+function categoryTotal(teams){
+  return teams.reduce((s, t) => s + teamTotal(t.id), 0);
+}
+
+function renderTeamsTree(c){
+  const el = c || document.getElementById('content');
+  const y = window.scrollY;
+  const byCategory = {};
+  STATE.teams.forEach(t => { (byCategory[t.category_id] = byCategory[t.category_id] || []).push(t); });
+
+  el.innerHTML = `
+    <datalist id="employee-options">
+      ${STATE.employees.map(e=>`<option value="${esc(e.first_name + ' ' + e.last_name)}"></option>`).join('')}
+    </datalist>
+    <div class="card"><div class="card-body pad0">
+      ${STATE.categories.map(cat => catNode(cat, byCategory[cat.id]||[])).join('')}
+    </div></div>
+  `;
+  window.scrollTo(0, y);
+}
+
+function catNode(cat, teams){
+  const open = EXPANDED_CATS.has(cat.id);
+  return `<div style="border-bottom:1px solid var(--ligne-2)">
+    <div onclick="toggleCat(${cat.id})" style="display:flex;align-items:center;gap:10px;padding:14px 18px;cursor:pointer;font-weight:700;font-size:14px;background:#FAFAF7;color:var(--noir)">
+      <span style="display:inline-block;width:12px;transition:transform .15s;transform:rotate(${open?90:0}deg)">▸</span>
+      ${esc(cat.name)}
+      <span class="pill" style="background:var(--jaune-soft);color:#7A6000">${chf(categoryTotal(teams))} CHF/mois</span>
+      <span style="margin-left:auto;font-weight:500;font-size:12px;color:var(--gris)">${teams.length} équipe${teams.length>1?'s':''}</span>
+    </div>
+    ${open ? `<div>${teams.length ? teams.map(t => teamNode(t)).join('') : `<div class="empty" style="padding:14px 18px">Aucune équipe dans cette catégorie.</div>`}</div>` : ''}
+  </div>`;
+}
+
+function teamNode(t){
+  const open = EXPANDED_TEAMS.has(t.id);
+  return `<div style="border-bottom:1px solid var(--ligne-2);background:#fff">
+    <div style="display:flex;align-items:center;gap:8px;padding:11px 18px 11px 36px">
+      <span onclick="toggleTeam(${t.id})" style="cursor:pointer;display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+        <span style="display:inline-block;width:11px;font-size:12px;transition:transform .15s;transform:rotate(${open?90:0}deg)">▸</span>
+        <span style="font-size:13.5px;font-weight:600">${esc(t.name)}</span>
+        <span class="pill" style="background:var(--bleu-bg);color:var(--bleu)">${chf(teamTotal(t.id))} CHF/mois</span>
+      </span>
+      <select onchange="quickChangeCategory(${t.id}, this.value)" style="font-size:11px;padding:4px 6px;border:1px solid var(--ligne);border-radius:6px">
+        ${STATE.categories.map(c=>`<option value="${c.id}" ${c.id===t.category_id?'selected':''}>${esc(c.name)}</option>`).join('')}
+      </select>
+      <button class="icon-btn" data-obj="${esc(JSON.stringify(t))}" onclick="teamModal(JSON.parse(this.dataset.obj))" title="Modifier">✎</button>
+      <button class="icon-btn" onclick="deleteTeam(${t.id})" title="Supprimer">✕</button>
+    </div>
+    ${open ? `<div style="padding:4px 18px 16px 60px">${teamSlotsBlock(t)}</div>` : ''}
+  </div>`;
+}
+
+function teamSlotsBlock(t){
+  const slots = TEAM_SLOTS_CACHE[t.id] || [];
+  return `
+    ${slots.length ? slots.map(sl => slotRow(sl)).join('') : `<div class="empty" style="padding:10px 0">Aucun poste pour cette équipe.</div>`}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:10px">
+      <select id="ns-poste-${t.id}" style="flex:1;min-width:140px;padding:7px 8px;border:1.5px solid var(--ligne);border-radius:8px">
+        ${STATE.postes.map(p=>`<option value="${p.id}">${esc(p.label)}</option>`).join('')}
+      </select>
+      <input id="ns-montant-${t.id}" type="number" step="0.05" placeholder="Montant CHF" style="width:110px;padding:7px 8px;border:1.5px solid var(--ligne);border-radius:8px">
+      <select id="ns-periodicite-${t.id}" style="padding:7px 8px;border:1.5px solid var(--ligne);border-radius:8px">
+        <option value="mensuel">Mensuel</option><option value="annuel">Annuel</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="addSlot(${t.id})">+ Ajouter un poste</button>
+    </div>
+  `;
+}
+
+function toggleCat(id){
+  if (EXPANDED_CATS.has(id)) EXPANDED_CATS.delete(id); else EXPANDED_CATS.add(id);
+  renderTeamsTree();
+}
+async function toggleTeam(id){
+  if (EXPANDED_TEAMS.has(id)) { EXPANDED_TEAMS.delete(id); renderTeamsTree(); return; }
+  EXPANDED_TEAMS.add(id);
+  if (!TEAM_SLOTS_CACHE[id]) TEAM_SLOTS_CACHE[id] = await api('employee_assignments', { params: { team_id: id } });
+  renderTeamsTree();
+}
+async function refreshTeamSlots(teamId){
+  TEAM_SLOTS_CACHE[teamId] = await api('employee_assignments', { params: { team_id: teamId } });
+  renderTeamsTree();
+}
+async function quickChangeCategory(teamId, categoryId){
+  const t = STATE.teams.find(x => x.id === teamId);
+  await api('teams', { method: 'PUT', body: { id: teamId, name: t.name, category_id: Number(categoryId), active: t.active == 1 } });
+  renderPage();
+}
+
+function teamModal(t){
+  if (!STATE.categories.length) { alert("Crée d'abord une catégorie dans Paramètres."); return; }
+  openModal(`
+    <h3>${t ? 'Modifier' : 'Nouvelle'} équipe</h3>
+    <div class="modal-error"></div>
+    <div class="field"><label>Nom</label><input id="tm-name" value="${t?esc(t.name):''}" placeholder="Ex: Première équipe"></div>
+    <div class="field"><label>Catégorie</label><select id="tm-category">
+      ${STATE.categories.map(c=>`<option value="${c.id}" ${t?(t.category_id==c.id?'selected':''):''}>${esc(c.name)}</option>`).join('')}
+    </select></div>
+    ${t ? `<div class="field check-row"><input type="checkbox" id="tm-active" ${t.active==1?'checked':''}><label style="margin:0" for="tm-active">Équipe active</label></div>` : ''}
+    <div class="modal-actions">
+      ${t ? `<button class="btn btn-ghost" onclick="deleteTeam(${t.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveTeam(${t?t.id:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveTeam(id){
+  const name = document.getElementById('tm-name').value.trim();
+  const category_id = Number(document.getElementById('tm-category').value);
+  if (!name) return modalErr('Le nom est requis.');
+  try {
+    if (id) { const active = document.getElementById('tm-active').checked; await api('teams', { method: 'PUT', body: { id, name, category_id, active } }); }
+    else { await api('teams', { method: 'POST', body: { name, category_id } }); }
+    closeModal(); renderPage();
+  } catch (e) { modalErr(e.message); }
+}
+async function deleteTeam(id){
+  if (!confirm('Supprimer cette équipe ? Tous ses postes seront aussi supprimés.')) return;
+  try { await api('teams', { method: 'DELETE', params: { id } }); closeModal(); renderPage(); }
+  catch (e) { alert(e.message); }
+}
+
+/* ---- Postes d'une équipe : rôle, employé (recherche), montant, périodicité ---- */
+
+function findSlot(teamId, slotId){ return (TEAM_SLOTS_CACHE[teamId]||[]).find(s => s.id === slotId); }
+
+function slotRow(sl){
+  const currentName = sl.employee_id ? `${sl.first_name} ${sl.last_name}` : '';
+  return `<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--ligne-2);flex-wrap:wrap">
+    <span style="flex:1;min-width:110px;font-size:13px;font-weight:600">${esc(sl.poste_label)}</span>
+    <input list="employee-options" value="${esc(currentName)}" placeholder="Employé (facultatif)…" style="width:170px;padding:7px 8px;border:1.5px solid var(--ligne);border-radius:8px" onchange="updateSlotEmployee(${sl.id},${sl.team_id},this.value)">
+    <input type="number" step="0.05" value="${sl.montant}" style="width:95px;padding:7px 8px;border:1.5px solid var(--ligne);border-radius:8px" onchange="updateSlotAmount(${sl.id},${sl.team_id},this.value)">
+    <select style="padding:7px 8px;border:1.5px solid var(--ligne);border-radius:8px" onchange="updateSlotPeriod(${sl.id},${sl.team_id},this.value)">
+      <option value="mensuel" ${sl.periodicite==='mensuel'?'selected':''}>Mensuel</option>
+      <option value="annuel" ${sl.periodicite==='annuel'?'selected':''}>Annuel</option>
+    </select>
+    <button class="icon-btn" onclick="deleteSlot(${sl.id},${sl.team_id})" title="Retirer ce poste">✕</button>
+  </div>`;
+}
+async function updateSlotEmployee(slotId, teamId, name){
+  const sl = findSlot(teamId, slotId);
+  const match = STATE.employees.find(e => normalizeFr(`${e.first_name} ${e.last_name}`) === normalizeFr(name));
+  await api('employee_assignments', { method: 'PUT', body: { id: slotId, poste_id: sl.poste_id, employee_id: match ? match.id : null, montant: sl.montant, periodicite: sl.periodicite } });
+  refreshTeamSlots(teamId);
+}
+async function updateSlotAmount(slotId, teamId, value){
+  const sl = findSlot(teamId, slotId);
+  await api('employee_assignments', { method: 'PUT', body: { id: slotId, poste_id: sl.poste_id, employee_id: sl.employee_id, montant: Number(value)||0, periodicite: sl.periodicite } });
+  refreshTeamSlots(teamId);
+}
+async function updateSlotPeriod(slotId, teamId, value){
+  const sl = findSlot(teamId, slotId);
+  await api('employee_assignments', { method: 'PUT', body: { id: slotId, poste_id: sl.poste_id, employee_id: sl.employee_id, montant: sl.montant, periodicite: value } });
+  refreshTeamSlots(teamId);
+}
+async function deleteSlot(slotId, teamId){
+  if (!confirm('Retirer ce poste de cette équipe ?')) return;
+  await api('employee_assignments', { method: 'DELETE', params: { id: slotId } });
+  refreshTeamSlots(teamId);
+}
+async function addSlot(teamId){
+  const poste_id = Number(document.getElementById(`ns-poste-${teamId}`).value);
+  const montant = Number(document.getElementById(`ns-montant-${teamId}`).value) || 0;
+  const periodicite = document.getElementById(`ns-periodicite-${teamId}`).value;
+  try {
+    await api('employee_assignments', { method: 'POST', body: { team_id: teamId, poste_id, montant, periodicite } });
+    refreshTeamSlots(teamId);
+  } catch (e) { alert(e.message); }
+}
+
+async function importFile(action, file, onDone){
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const res = await api(action, { method: 'POST', form: fd });
+    let msg = `Import terminé : ${res.created} employé(s) créé(s), ${res.updated} mis à jour, ${res.skipped} ignoré(s)`;
+    if (res.assignments !== undefined) msg += `, ${res.assignments} affectation(s)`;
+    if (res.players_created !== undefined) msg += `. Joueurs : ${res.players_created} créé(s), ${res.players_updated} mis à jour`;
+    alert(msg + '.');
+    onDone();
+  } catch (e) { alert('Échec de l\'import : ' + e.message); }
+}
+
+/* ============================================================ EMPLOYÉS */
+
+let EMP_FILTER = { search: '', poste: '' };
+
+async function renderEmployees(c){
+  document.getElementById('topbar-actions').innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('emp-import-file').click()">${ic('upload')} Importer Excel/CSV</button>
+    <input type="file" id="emp-import-file" accept=".xlsx,.csv" style="display:none">
+    <button class="btn btn-primary" onclick="employeeModal()">+ Nouvel employé</button>`;
+  document.getElementById('emp-import-file').onchange = e => { if (e.target.files[0]) importFile('import_employees_file', e.target.files[0], renderPage); };
+
+  c.innerHTML = `<div class="empty"><span class="spinner"></span></div>`;
+  await loadRefData();
+  STATE.employees = await api('employees');
+
+  c.innerHTML = `
+    <div class="card-head" style="background:none;border:none;padding:0 0 16px">
+      <div class="search-bar">
+        <input type="text" id="emp-search" placeholder="Rechercher un nom, un e-mail…" value="${esc(EMP_FILTER.search)}">
+        <select id="emp-poste-filter">
+          <option value="">Tous les postes</option>
+          ${STATE.postes.map(p=>`<option value="${p.id}" ${EMP_FILTER.poste==p.id?'selected':''}>${esc(p.label)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="card"><div class="card-body pad0" id="emp-table"></div></div>
+  `;
+  document.getElementById('emp-search').oninput = e => { EMP_FILTER.search = e.target.value; renderEmployeeTable(); };
+  document.getElementById('emp-poste-filter').onchange = e => { EMP_FILTER.poste = e.target.value; renderEmployeeTable(); };
+  renderEmployeeTable();
+}
+
+function renderEmployeeTable(){
+  const el = document.getElementById('emp-table');
+  const q = normalizeFr(EMP_FILTER.search);
+  const list = STATE.employees.filter(e => {
+    if (EMP_FILTER.poste && !e.assignments.some(a => String(a.poste_id) === String(EMP_FILTER.poste))) return false;
+    if (!q) return true;
+    const hay = normalizeFr(`${e.first_name} ${e.last_name} ${e.email}`);
+    return hay.includes(q);
+  });
+  el.innerHTML = list.length ? `<table><thead><tr><th>Nom</th><th>Affectation</th><th>E-mail</th><th>Téléphone</th><th>Indemnités / mois</th><th></th></tr></thead><tbody>
+    ${list.map(ee => `<tr>
+      <td><strong>${esc(ee.first_name)} ${esc(ee.last_name)}</strong>${ee.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactif</span>':''}</td>
+      <td>${ee.assignments.length ? ee.assignments.map(a=>`<span class="pill" style="background:var(--bleu-bg);color:var(--bleu);margin:0 4px 4px 0;display:inline-flex;align-items:center;gap:4px">${esc(a.poste_label)}${a.team_name?' · '+esc(a.team_name):''}</span>`).join('') : '<span style="color:var(--gris-2)">—</span>'}
+        <div class="hint" style="margin-top:2px">Gérer les postes depuis la fiche de l'équipe</div>
+      </td>
+      <td style="font-size:12.5px;color:var(--gris)">${esc(ee.email)}</td>
+      <td style="font-size:12.5px;color:var(--gris)">${esc(ee.phone)}</td>
+      <td><strong>${chf(ee.total_indemnites)} CHF</strong></td>
+      <td><div class="tbl-actions">
+        <button class="icon-btn" data-obj="${esc(JSON.stringify(ee))}" onclick="employeeModal(JSON.parse(this.dataset.obj))">✎</button>
+        <button class="icon-btn" onclick="indemniteModal(${ee.id})" title="Indemnité personnalisée">CHF</button>
+        <button class="icon-btn" onclick="deleteEmployee(${ee.id})">✕</button>
+      </div></td>
+    </tr>`).join('')}
+  </tbody></table>` : `<div class="empty">Aucun employé ne correspond.</div>`;
+}
+function normalizeFr(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+
+function employeeModal(ee){
+  openModal(`
+    <h3>${ee ? 'Modifier' : 'Nouvel'} employé</h3>
+    <div class="modal-error"></div>
+    <div class="field-row">
+      <div class="field"><label>Prénom</label><input id="em-first" value="${ee?esc(ee.first_name):''}"></div>
+      <div class="field"><label>Nom</label><input id="em-last" value="${ee?esc(ee.last_name):''}"></div>
+    </div>
+    <div class="field"><label>E-mail</label><input id="em-email" value="${ee?esc(ee.email):''}"></div>
+    <div class="field-row">
+      <div class="field"><label>Téléphone</label><input id="em-phone" value="${ee?esc(ee.phone):''}"></div>
+      <div class="field"><label>IBAN</label><input id="em-iban" value="${ee?esc(ee.iban):''}"></div>
+    </div>
+    ${ee ? `<div class="field check-row"><input type="checkbox" id="em-active" ${ee.active==1?'checked':''}><label style="margin:0" for="em-active">Employé actif</label></div>` : ''}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveEmployee(${ee?ee.id:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveEmployee(id){
+  const first_name = document.getElementById('em-first').value.trim();
+  const last_name = document.getElementById('em-last').value.trim();
+  if (!last_name) return modalErr('Le nom est requis.');
+  const payload = { first_name, last_name, email: document.getElementById('em-email').value.trim(),
+    phone: document.getElementById('em-phone').value.trim(), iban: document.getElementById('em-iban').value.trim() };
+  try {
+    if (id) { payload.id = id; payload.active = document.getElementById('em-active').checked; await api('employees', { method: 'PUT', body: payload }); }
+    else { await api('employees', { method: 'POST', body: payload }); }
+    closeModal(); renderPage();
+  } catch (e) { modalErr(e.message); }
+}
+async function deleteEmployee(id){
+  if (!confirm('Supprimer cet employé ?')) return;
+  await api('employees', { method: 'DELETE', params: { id } }); renderPage();
+}
+
+
+function indemniteModal(employee_id){
+  openModal(`
+    <h3>Indemnité personnalisée</h3>
+    <div class="modal-error"></div>
+    <div class="field"><label>Libellé</label><input id="im-label" placeholder="Ex: Camp d'été juillet"></div>
+    <div class="field-row">
+      <div class="field"><label>Montant CHF</label><input id="im-montant" type="number" step="0.05"></div>
+      <div class="field"><label>Mois</label><input id="im-month" type="month" value="${STATE.month}"></div>
+    </div>
+    <div class="field check-row"><input type="checkbox" id="im-recurring"><label style="margin:0" for="im-recurring">Récurrente (appliquée chaque mois à partir de celui-ci)</label></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveIndemnite(${employee_id})">Ajouter</button>
+    </div>
+  `);
+}
+async function saveIndemnite(employee_id){
+  const label = document.getElementById('im-label').value.trim();
+  const montant = Number(document.getElementById('im-montant').value);
+  const month = document.getElementById('im-month').value;
+  const recurring = document.getElementById('im-recurring').checked;
+  if (!label || !month) return modalErr('Libellé et mois requis.');
+  try { await api('indemnites_custom', { method: 'POST', body: { employee_id, label, montant, month, recurring } }); closeModal(); renderPage(); }
+  catch (e) { modalErr(e.message); }
+}
+
+/* ============================================================ JOUEURS */
+
+async function renderPlayers(c){
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="playerModal()">+ Nouveau joueur</button>`;
+  c.innerHTML = `<div class="empty"><span class="spinner"></span></div>`;
+  STATE.players = await api('players');
+  c.innerHTML = `<div class="card"><div class="card-body pad0">
+    ${STATE.players.length ? `<table><thead><tr><th>Joueur</th><th>Salaire mensuel</th><th>Contact</th><th>Statut</th><th></th></tr></thead><tbody>
+      ${STATE.players.map(p => `<tr>
+        <td><strong>${esc(p.first_name)} ${esc(p.last_name)}</strong></td>
+        <td>${chf(p.salaire_mensuel)} CHF</td>
+        <td style="font-size:12.5px;color:var(--gris)">${esc(p.email)}${p.email&&p.phone?' · ':''}${esc(p.phone)}</td>
+        <td>${p.active==1 ? `<span class="badge" style="background:var(--vert-bg);color:var(--vert)"><span class="badge-dot"></span>Actif</span>` : `<span class="badge" style="background:var(--rouge-bg);color:var(--rouge)"><span class="badge-dot"></span>Inactif</span>`}</td>
+        <td><div class="tbl-actions">
+          <button class="icon-btn" data-obj="${esc(JSON.stringify(p))}" onclick="playerModal(JSON.parse(this.dataset.obj))">✎</button>
+          <button class="icon-btn" onclick="deletePlayer(${p.id})">✕</button>
+        </div></td>
+      </tr>`).join('')}
+    </tbody></table>` : `<div class="empty">Aucun joueur salarié enregistré.</div>`}
+  </div></div>`;
+}
+function playerModal(p){
+  openModal(`
+    <h3>${p ? 'Modifier' : 'Nouveau'} joueur</h3>
+    <div class="modal-error"></div>
+    <div class="field-row">
+      <div class="field"><label>Prénom</label><input id="pm-first" value="${p?esc(p.first_name):''}"></div>
+      <div class="field"><label>Nom</label><input id="pm-last" value="${p?esc(p.last_name):''}"></div>
+    </div>
+    <div class="field"><label>Salaire mensuel CHF</label><input id="pm-salaire" type="number" step="0.05" value="${p?p.salaire_mensuel:''}"></div>
+    <div class="field"><label>E-mail</label><input id="pm-email" value="${p?esc(p.email):''}"></div>
+    <div class="field-row">
+      <div class="field"><label>Téléphone</label><input id="pm-phone" value="${p?esc(p.phone):''}"></div>
+      <div class="field"><label>IBAN</label><input id="pm-iban" value="${p?esc(p.iban):''}"></div>
+    </div>
+    ${p ? `<div class="field check-row"><input type="checkbox" id="pm-active" ${p.active==1?'checked':''}><label style="margin:0" for="pm-active">Joueur actif</label></div>` : ''}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="savePlayer(${p?p.id:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function savePlayer(id){
+  const first_name = document.getElementById('pm-first').value.trim();
+  const last_name = document.getElementById('pm-last').value.trim();
+  if (!last_name) return modalErr('Le nom est requis.');
+  const payload = { first_name, last_name, salaire_mensuel: Number(document.getElementById('pm-salaire').value)||0,
+    email: document.getElementById('pm-email').value.trim(), phone: document.getElementById('pm-phone').value.trim(), iban: document.getElementById('pm-iban').value.trim() };
+  try {
+    if (id) { payload.id = id; payload.active = document.getElementById('pm-active').checked; await api('players', { method: 'PUT', body: payload }); }
+    else { await api('players', { method: 'POST', body: payload }); }
+    closeModal(); renderPage();
+  } catch (e) { modalErr(e.message); }
+}
+async function deletePlayer(id){
+  if (!confirm('Supprimer ce joueur ?')) return;
+  await api('players', { method: 'DELETE', params: { id } }); renderPage();
+}
+
+/* ============================================================ PRIMES DE MATCH (tableau dynamique) */
+
+async function renderPrimes(c){
+  document.getElementById('topbar-actions').innerHTML = `<div class="month-picker"><input type="month" id="primes-month" value="${STATE.month}"></div>`;
+  c.innerHTML = `
+    <div class="tabs">
+      <div class="tab active" data-pt="matrix" onclick="switchPrimeTab('matrix')">Tableau des primes</div>
+      <div class="tab" data-pt="import" onclick="switchPrimeTab('import')">Importer une feuille</div>
+    </div>
+    <div id="prime-tab-matrix"></div>
+    <div id="prime-tab-import" style="display:none"></div>
+  `;
+  document.getElementById('primes-month').onchange = e => { STATE.month = e.target.value; renderMatrix(); };
+  renderMatrix();
+  renderImportTab(document.getElementById('prime-tab-import'));
+}
+function switchPrimeTab(t){
+  document.querySelectorAll('[data-pt]').forEach(el => el.classList.toggle('active', el.dataset.pt === t));
+  ['matrix','import'].forEach(k => document.getElementById('prime-tab-'+k).style.display = k===t ? '' : 'none');
+}
+
+async function renderMatrix(){
+  const y = window.scrollY;
+  const el = document.getElementById('prime-tab-matrix');
+  el.innerHTML = `<div class="empty"><span class="spinner"></span></div>`;
+  const data = await api('primes_matrix', { params: { month: STATE.month } });
+  window.__matrix = data;
+
+  const matchCols = data.matches.map(m => `<th><div class="matrix-col-head">
+    <span class="d">${esc(m.date)}</span><span class="a">${esc(m.adversaire)||'—'}</span>
+    <button class="icon-btn" style="align-self:flex-start" onclick="deleteMatch(${m.id})" title="Supprimer ce match">✕</button>
+  </div></th>`).join('');
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h3>Primes — ${esc(STATE.month)}</h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="addGuestPlayer()">+ joueur ponctuel</button>
+          <button class="btn btn-primary btn-sm" onclick="addMatchColumn()">+ nouveau match</button>
+        </div>
+      </div>
+      <div class="card-body pad0 matrix-wrap">
+        ${data.players.length || data.matches.length ? `<table class="matrix-table"><thead><tr><th>Joueur</th>${matchCols}<th>Total</th></tr></thead><tbody>
+          ${data.players.map(p => `<tr>
+            <td><strong>${esc(p.name)}</strong>${p.is_guest?' <span class="pill" style="background:var(--orange-bg);color:var(--orange)">ponctuel</span>':''}</td>
+            ${data.matches.map(m => `<td><input class="cell-amount" type="number" step="0.05" value="${p.cells[m.id] ?? ''}" placeholder="0" onchange="saveCell(${m.id},${p.player_id},this.value)"></td>`).join('')}
+            <td class="matrix-total">${chf(p.total)} CHF</td>
+          </tr>`).join('')}
+          ${data.matches.length ? `<tr><td><strong>Total match</strong></td>${data.matches.map(m => `<td><strong>${chf(data.players.reduce((s,p)=>s+(p.cells[m.id]||0),0))} CHF</strong></td>`).join('')}<td></td></tr>` : ''}
+        </tbody></table>` : `<div class="empty">Aucun joueur actif. Ajoutez des joueurs dans l'onglet Joueurs.</div>`}
+      </div>
+    </div>
+    ${!data.matches.length ? `<p class="hint">Clique sur "+ nouveau match" pour activer une colonne et commencer à saisir les primes.</p>` : ''}
+  `;
+  window.scrollTo(0, y);
+}
+async function saveCell(match_id, player_id, value){
+  await api('match_cell', { method: 'POST', body: { match_id, player_id, montant: Number(value)||0 } });
+  renderMatrix();
+}
+function addMatchColumn(){
+  openModal(`
+    <h3>Nouveau match</h3>
+    <div class="modal-error"></div>
+    <div class="field"><label>Date</label><input id="mm-date" type="date" value="${STATE.month}-01"></div>
+    <div class="field"><label>Adversaire</label><input id="mm-adversaire"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveMatchColumn()">Activer la colonne</button>
+    </div>
+  `);
+}
+async function saveMatchColumn(){
+  const date = document.getElementById('mm-date').value;
+  if (!date) return modalErr('La date est requise.');
+  try {
+    await api('matches', { method: 'POST', body: { date, adversaire: document.getElementById('mm-adversaire').value.trim() } });
+    closeModal(); renderMatrix();
+  } catch (e) { modalErr(e.message); }
+}
+async function deleteMatch(id){
+  if (!confirm('Supprimer cette colonne de match et toutes ses primes ?')) return;
+  await api('matches', { method: 'DELETE', params: { id } }); renderMatrix();
+}
+function addGuestPlayer(){
+  openModal(`
+    <h3>Joueur ponctuel</h3>
+    <div class="modal-error"></div>
+    <p class="hint" style="margin-bottom:12px">Pour un joueur qui n'est pas dans l'effectif salarié (ex: monté de la 2ème équipe pour un match).</p>
+    <div class="field"><label>Nom complet</label><input id="gp-name" placeholder="Prénom Nom"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveGuestPlayer()">Ajouter au tableau</button>
+    </div>
+  `);
+}
+async function saveGuestPlayer(){
+  const name = document.getElementById('gp-name').value.trim();
+  if (!name) return modalErr('Le nom est requis.');
+  const match_ids = (window.__matrix?.matches || []).map(m => m.id);
+  try { await api('match_add_guest', { method: 'POST', body: { name, match_ids } }); closeModal(); renderMatrix(); }
+  catch (e) { modalErr(e.message); }
+}
+
+function renderImportTab(c){
+  c.innerHTML = `
+    <div class="card">
+      <div class="card-head"><h3>Importer la feuille mensuelle de primes</h3></div>
+      <div class="card-body">
+        <p class="hint" style="margin-bottom:14px">Déposez un export PDF/texte du document (ou collez son contenu ci-dessous). Le système détecte les matchs, les joueurs et les montants indiqués, propose une correspondance avec la base joueurs, puis vous validez avant enregistrement dans le tableau des primes.</p>
+        <div class="field"><label>Mois concerné</label><input type="month" id="imp-month" value="${STATE.month}" style="width:180px;padding:9px 12px;border:1.5px solid var(--ligne);border-radius:10px"></div>
+        <div class="dropzone" id="imp-drop" onclick="document.getElementById('imp-file').click()">Cliquez pour choisir un fichier (PDF/TXT) ou glissez-le ici</div>
+        <input type="file" id="imp-file" accept=".pdf,.txt" style="display:none">
+        <div style="text-align:center;color:var(--gris-2);font-size:12px;margin:10px 0">— ou —</div>
+        <div class="field"><textarea id="imp-text" rows="6" placeholder="Collez ici le texte de la feuille de primes…"></textarea></div>
+        <button class="btn btn-primary" id="imp-submit" onclick="submitImport()">Analyser le document</button>
+        <div id="imp-status" style="margin-top:12px"></div>
+      </div>
+    </div>
+    <div id="imp-review"></div>
+  `;
+  document.getElementById('imp-file').onchange = e => {
+    if (e.target.files[0]) document.getElementById('imp-drop').textContent = '📄 ' + e.target.files[0].name;
+  };
+}
+async function submitImport(){
+  const btn = document.getElementById('imp-submit');
+  const status = document.getElementById('imp-status');
+  const month = document.getElementById('imp-month').value;
+  const file = document.getElementById('imp-file').files[0];
+  const text = document.getElementById('imp-text').value.trim();
+  if (!file && !text) { status.innerHTML = `<span style="color:var(--rouge)">Fournissez un fichier ou un texte.</span>`; return; }
+  btn.disabled = true; status.innerHTML = `<span class="spinner"></span> Analyse en cours (Claude)…`;
+  try {
+    let result;
+    if (file) { const fd = new FormData(); fd.append('file', file); fd.append('month', month); result = await api('import_upload', { method: 'POST', form: fd }); }
+    else { result = await api('import_upload', { method: 'POST', body: { text, month } }); }
+    status.innerHTML = `<span style="color:var(--vert)">Analyse terminée. Vérifiez les correspondances ci-dessous avant validation.</span>`;
+    renderImportReview(result.import_id, result.extraction);
+  } catch (e) { status.innerHTML = `<span style="color:var(--rouge)">${esc(e.message)}</span>`; }
+  finally { btn.disabled = false; }
+}
+async function renderImportReview(import_id, extraction){
+  STATE.players = await api('players');
+  const div = document.getElementById('imp-review');
+  div.innerHTML = `
+    <div class="card">
+      <div class="card-head"><h3>Relecture avant validation</h3></div>
+      <div class="card-body">
+        ${extraction.matches.map((m, mi) => `
+          <div class="review-match" data-mi="${mi}">
+            <div class="review-match-head">
+              <div class="field-row" style="flex:1;margin:0;display:grid;grid-template-columns:140px 1fr;gap:8px">
+                <input type="date" value="${esc(m.date||'')}" onchange="updateReviewMatch(${mi},'date',this.value)">
+                <input type="text" value="${esc(m.adversaire||'')}" placeholder="Adversaire" onchange="updateReviewMatch(${mi},'adversaire',this.value)">
+              </div>
+            </div>
+            ${(m.joueurs||[]).map((j, ji) => `
+              <div class="review-player-row">
+                <div>${esc(j.nom)} ${j.match_score < 70 ? `<span class="score-low">(correspondance incertaine)</span>` : ''}</div>
+                <select onchange="updateReviewPlayer(${mi},${ji},'player_id',this.value)">
+                  <option value="">— Ignorer —</option>
+                  ${STATE.players.map(p=>`<option value="${p.id}" ${j.player_id==p.id?'selected':''}>${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('')}
+                </select>
+                <input type="number" step="0.05" value="${j.montant||0}" style="width:100px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px" onchange="updateReviewPlayer(${mi},${ji},'montant',this.value)">
+              </div>
+            `).join('')}
+          </div>
+        `).join('')}
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="document.getElementById('imp-review').innerHTML=''">Annuler</button>
+          <button class="btn btn-primary" onclick="validateImport(${import_id})">Valider et enregistrer</button>
+        </div>
+      </div>
+    </div>
+  `;
+  window.__importExtraction = extraction;
+}
+function updateReviewMatch(mi, field, val){ window.__importExtraction.matches[mi][field] = val; }
+function updateReviewPlayer(mi, ji, field, val){ window.__importExtraction.matches[mi].joueurs[ji][field] = field==='player_id' ? (val?Number(val):null) : (field==='montant'?Number(val):val); }
+async function validateImport(import_id){
+  try {
+    const res = await api('import_validate', { method: 'POST', body: { import_id, matches: window.__importExtraction.matches } });
+    document.getElementById('imp-review').innerHTML = `<div class="card"><div class="card-body">
+      <span style="color:var(--vert)">✓ ${res.matches_crees} match(s) créé(s), ${res.lignes_joueurs} ligne(s) de prime enregistrée(s).</span>
+    </div></div>`;
+  } catch (e) { alert(e.message); }
+}
+
+/* ============================================================ PARAMÈTRES */
+
+let SETTINGS_TAB = 'categories';
+
+async function renderSettings(c){
+  const y = window.scrollY;
+  document.getElementById('topbar-actions').innerHTML = '';
+  c.innerHTML = `
+    <div class="tabs">
+      <div class="tab ${SETTINGS_TAB==='categories'?'active':''}" data-st="categories" onclick="switchSettingsTab('categories')">Catégories</div>
+      <div class="tab ${SETTINGS_TAB==='roles'?'active':''}" data-st="roles" onclick="switchSettingsTab('roles')">Rôles</div>
+      <div class="tab ${SETTINGS_TAB==='equipes'?'active':''}" data-st="equipes" onclick="switchSettingsTab('equipes')">Équipes</div>
+    </div>
+    <div id="settings-body"><div class="empty"><span class="spinner"></span></div></div>
+  `;
+  await loadRefData();
+  renderSettingsBody();
+  window.scrollTo(0, y);
+}
+function switchSettingsTab(t){
+  SETTINGS_TAB = t;
+  document.querySelectorAll('[data-st]').forEach(el => el.classList.toggle('active', el.dataset.st === t));
+  renderSettingsBody();
+}
+function renderSettingsBody(){
+  const el = document.getElementById('settings-body');
+  if (!el) return;
+  if (SETTINGS_TAB === 'categories') renderCategoriesTab(el);
+  else if (SETTINGS_TAB === 'roles') renderRolesTab(el);
+  else renderEquipesTab(el);
+}
+async function refreshSettings(){
+  await loadRefData();
+  renderSettingsBody();
+}
+
+function renderCategoriesTab(el){
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-head"><h3>Catégories</h3><button class="btn btn-primary btn-sm" onclick="categoryModal()">+ Nouvelle catégorie</button></div>
+      <div class="card-body pad0">
+        ${STATE.categories.length ? `<table><thead><tr><th>Nom</th><th></th></tr></thead><tbody>
+          ${STATE.categories.map(cat => `<tr><td>${esc(cat.name)}</td>
+            <td><div class="tbl-actions"><button class="icon-btn" data-obj="${esc(JSON.stringify(cat))}" onclick="categoryModal(JSON.parse(this.dataset.obj))">✎</button><button class="icon-btn" onclick="deleteCategory(${cat.id})">✕</button></div></td></tr>`).join('')}
+        </tbody></table>` : `<div class="empty">Aucune catégorie. Ajoutez-en une (ex: Foot à 11, Juniors).</div>`}
+      </div>
+    </div>
+  `;
+}
+function categoryModal(cat){
+  openModal(`
+    <h3>${cat?'Modifier':'Nouvelle'} catégorie</h3>
+    <div class="modal-error"></div>
+    <div class="field"><label>Nom</label><input id="ct-name" value="${cat?esc(cat.name):''}" placeholder="Ex: Foot à 11"></div>
+    <div class="modal-actions">
+      ${cat ? `<button class="btn btn-ghost" onclick="deleteCategory(${cat.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveCategory(${cat?cat.id:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveCategory(id){
+  const name = document.getElementById('ct-name').value.trim();
+  if (!name) return modalErr('Le nom est requis.');
+  try {
+    if (id) await api('team_categories', { method: 'PUT', body: { id, name, active: true } });
+    else await api('team_categories', { method: 'POST', body: { name } });
+    closeModal(); await refreshSettings();
+  } catch (e) { modalErr(e.message); }
+}
+async function deleteCategory(id){
+  if (!confirm('Supprimer cette catégorie ? Impossible si des équipes y sont encore rattachées.')) return;
+  try { await api('team_categories', { method: 'DELETE', params: { id } }); closeModal(); await refreshSettings(); }
+  catch (e) { alert(e.message); }
+}
+
+function renderRolesTab(el){
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-head"><h3>Rôles</h3><button class="btn btn-primary btn-sm" onclick="posteModal()">+ Nouveau rôle</button></div>
+      <div class="card-body pad0">
+        ${STATE.postes.length ? `<table><thead><tr><th>Libellé</th><th></th></tr></thead><tbody>
+          ${STATE.postes.map(p => `<tr><td>${esc(p.label)}</td>
+            <td><div class="tbl-actions"><button class="icon-btn" data-obj="${esc(JSON.stringify(p))}" onclick="posteModal(JSON.parse(this.dataset.obj))">✎</button><button class="icon-btn" onclick="deletePoste(${p.id})">✕</button></div></td></tr>`).join('')}
+        </tbody></table>` : `<div class="empty">Aucun rôle. Ajoutez-en un (ex: Entraîneur principal).</div>`}
+      </div>
+    </div>
+  `;
+}
+function posteModal(p){
+  openModal(`
+    <h3>${p?'Modifier':'Nouveau'} rôle</h3>
+    <div class="modal-error"></div>
+    <div class="field"><label>Libellé</label><input id="pt-label" value="${p?esc(p.label):''}" placeholder="Ex: Directeur technique"></div>
+    <div class="modal-actions">
+      ${p ? `<button class="btn btn-ghost" onclick="deletePoste(${p.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="savePoste(${p?p.id:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function savePoste(id){
+  const label = document.getElementById('pt-label').value.trim();
+  if (!label) return modalErr('Le libellé est requis.');
+  try {
+    if (id) await api('postes', { method: 'PUT', body: { id, label, active: true } });
+    else await api('postes', { method: 'POST', body: { label } });
+    closeModal(); await refreshSettings();
+  } catch (e) { modalErr(e.message); }
+}
+async function deletePoste(id){
+  if (!confirm('Supprimer définitivement ce rôle ? Il sera retiré de toutes les équipes où il est utilisé.')) return;
+  await api('postes', { method: 'DELETE', params: { id } }); closeModal(); await refreshSettings();
+}
+
+function renderEquipesTab(el){
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-head"><h3>Équipes</h3><button class="btn btn-primary btn-sm" onclick="teamModal()">+ Nouvelle équipe</button></div>
+      <div class="card-body pad0">
+        ${STATE.teams.length ? `<table><thead><tr><th>Nom</th><th>Catégorie</th><th></th></tr></thead><tbody>
+          ${STATE.teams.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.category_name||'—')}</td>
+            <td><div class="tbl-actions"><button class="icon-btn" data-obj="${esc(JSON.stringify(t))}" onclick="teamModal(JSON.parse(this.dataset.obj))">✎</button><button class="icon-btn" onclick="deleteTeam(${t.id})">✕</button></div></td></tr>`).join('')}
+        </tbody></table>` : `<div class="empty">Aucune équipe. Ajoutez-en une, elle apparaîtra ensuite dans le menu Équipes.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================ INIT */
+
+(async function init(){
+  try { const me = await api('me'); STATE.user = me.user; }
+  catch (e) {
+    document.getElementById('app').innerHTML = `<div class="empty" style="padding:80px">Session expirée. <a href="https://erp.meyrinfc.ch" style="color:var(--bleu)">Retour à l'ERP</a></div>`;
+    return;
+  }
+  const initial = (location.hash || '').replace('#', '');
+  if (NAV.some(n => n.id === initial)) STATE.page = initial;
+  render();
+})();
+</script>
+</body>
+</html>

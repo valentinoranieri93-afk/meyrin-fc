@@ -79,6 +79,8 @@ function app_icon(string $icon, string $color): string {
         'users'       => '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
         'credit-card' => '<rect x="2" y="5" width="20" height="14" rx="3"/><line x1="2" y1="10" x2="22" y2="10"/>',
         'whistle'     => '<circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/>',
+        'package'     => '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/>',
+        'briefcase'   => '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
     ];
     $path = $icons[$icon] ?? $icons['whistle'];
     return '<svg viewBox="0 0 24 24" fill="none" stroke="' . htmlspecialchars($color) . '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' . $path . '</svg>';
@@ -352,7 +354,7 @@ $user_apps  = $session['apps'] ?? [];
       $c = htmlspecialchars($app['color']);
       $cb = htmlspecialchars($app['color_bg']);
     ?>
-    <a class="app-card" href="<?= htmlspecialchars($app['url']) ?>" target="_blank"
+    <a class="app-card" href="<?= htmlspecialchars($app['url']) ?>" <?= str_starts_with($app['url'], '/') ? '' : 'target="_blank"' ?>
        style="--card-accent:<?= $c ?>;--card-icon-bg:<?= $cb ?>">
       <div class="card-top">
         <div class="card-icon"><?= app_icon($app['icon'], $app['color']) ?></div>
@@ -365,7 +367,7 @@ $user_apps  = $session['apps'] ?? [];
         <div class="card-desc"><?= htmlspecialchars($app['description']) ?></div>
       </div>
       <div class="card-footer">
-        <span class="card-url"><?= htmlspecialchars(parse_url($app['url'], PHP_URL_HOST)) ?></span>
+        <span class="card-url"><?= htmlspecialchars(parse_url($app['url'], PHP_URL_HOST) ?: $_SERVER['HTTP_HOST'] . $app['url']) ?></span>
         <span class="card-status" style="--card-status-bg:<?= $cb ?>;--card-status-color:<?= $c ?>">
           <span class="card-status-dot"></span>En ligne
         </span>

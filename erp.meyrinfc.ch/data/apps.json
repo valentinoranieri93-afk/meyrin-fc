@@ -48,5 +48,15 @@
     "color": "#D8463A",
     "color_bg": "#FBE7E4",
     "active": true
+  },
+  {
+    "slug": "rh",
+    "name": "Ressources Humaines",
+    "url": "/rh",
+    "description": "Équipes, coachs, indemnités et salaires/primes des joueurs pro",
+    "icon": "briefcase",
+    "color": "#3B6FE0",
+    "color_bg": "#E6EDFB",
+    "active": true
   }
 ]

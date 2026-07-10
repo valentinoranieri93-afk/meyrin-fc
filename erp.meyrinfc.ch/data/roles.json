@@ -3,7 +3,7 @@
     "label": "Administrateur",
     "color": "#7B59D8",
     "color_bg": "#EEE8FB",
-    "apps": ["events", "sponsors", "caisse", "arbitrage", "commandes"],
+    "apps": ["events", "sponsors", "caisse", "arbitrage", "commandes", "rh"],
     "can_access_settings": true
   },
   "staff": {
