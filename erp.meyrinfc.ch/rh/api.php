@@ -943,8 +943,10 @@ switch ($action) {
       $tid = (int)$r['team_id'];
       $totals[$tid] = ($totals[$tid] ?? 0) + monthly_equiv((float)$r['montant'], $r['periodicite'] ?: 'mensuel');
     }
+    // Total non arrondi : l'arrondi se fait uniquement à l'affichage (côté frontend), pour éviter que le
+    // total annuel (mensuel × 12) ne dérive d'un montant mensuel déjà arrondi (ex: 1583.33 × 12 ≠ 19000).
     $out = [];
-    foreach ($totals as $tid => $total) $out[] = ['team_id' => $tid, 'total' => round($total, 2)];
+    foreach ($totals as $tid => $total) $out[] = ['team_id' => $tid, 'total' => $total];
     out($out);
   }
 
