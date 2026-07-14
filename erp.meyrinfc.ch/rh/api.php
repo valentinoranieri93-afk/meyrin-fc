@@ -124,6 +124,8 @@ function init_schema(PDO $pdo): void {
   )");
   ensure_column($pdo, 'teams', 'category_id', 'INTEGER REFERENCES team_categories(id)');
   ensure_column($pdo, 'teams', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'teams', 'cotisation_montant', 'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'teams', 'effectif_max', 'INTEGER NOT NULL DEFAULT 0');
 
   // Saisons : seules les affectations (poste + montant d'un employé sur une équipe) sont rattachées à une
   // saison (1er juillet - 30 juin). Équipes, catégories, rôles et employés restent permanents d'une saison à l'autre.
@@ -145,6 +147,9 @@ function init_schema(PDO $pdo): void {
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )");
+  // Échéance de versement (mensuel/semestriel) : propriété de l'employé (comment on le paie), pas du poste
+  // (le montant d'un poste est toujours annuel, voir plus bas).
+  ensure_column($pdo, 'employees', 'paiement', "TEXT NOT NULL DEFAULT 'mensuel'");
 
   // employee_assignments = un "poste" au sein d'une équipe (rôle + employé optionnel + sa propre indemnité).
   // L'ancien barème séparé (indemnite_bareme, poste x équipe) est abandonné : le montant/périodicité vit
@@ -195,6 +200,27 @@ function init_schema(PDO $pdo): void {
   if (table_exists($pdo, 'indemnite_bareme')) $pdo->exec('DROP TABLE indemnite_bareme');
 
   ensure_column($pdo, 'employee_assignments', 'season_id', 'INTEGER REFERENCES seasons(id)');
+  // Poste rattaché directement à une catégorie plutôt qu'à une équipe (ex: Directeur Technique d'une catégorie).
+  // Mutuellement exclusif avec team_id : validé côté application, pas de contrainte SQL.
+  ensure_column($pdo, 'employee_assignments', 'category_id', 'INTEGER REFERENCES team_categories(id)');
+
+  // Le montant d'un poste est désormais toujours un montant ANNUEL ; "periodicite" (mensuel/annuel, qui
+  // servait à calculer l'équivalent mensuel) devient "paiement" (mensuel/semestriel), une simple échéance
+  // de versement pour le suivi de liquidité, sans effet sur le calcul du total.
+  if (column_exists($pdo, 'employee_assignments', 'periodicite') && !column_exists($pdo, 'employee_assignments', 'paiement')) {
+    $pdo->exec('ALTER TABLE employee_assignments RENAME COLUMN periodicite TO paiement');
+  }
+  ensure_column($pdo, 'employee_assignments', 'paiement', "TEXT NOT NULL DEFAULT 'mensuel'");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
+  $alreadyMigrated = (bool) $pdo->query("SELECT 1 FROM schema_migrations WHERE name = 'annualize_montant_2026_07'")->fetchColumn();
+  if (!$alreadyMigrated) {
+    // Une seule fois : les lignes historiques "mensuel" (montant mensuel) sont annualisées (×12) ; les
+    // lignes "annuel" gardent leur montant (déjà annuel). Toutes basculent sur paiement="mensuel" par défaut
+    // (modifiable ensuite ligne par ligne vers "semestriel").
+    $pdo->exec("UPDATE employee_assignments SET montant = montant * 12 WHERE paiement = 'mensuel'");
+    $pdo->exec("UPDATE employee_assignments SET paiement = 'mensuel' WHERE paiement NOT IN ('mensuel','semestriel')");
+    $pdo->prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)')->execute(['annualize_montant_2026_07']);
+  }
 
   // Chaque poste d'équipe doit être rattaché à une équipe : les anciens postes "sans équipe" (ex: staff
   // administratif) sont regroupés dans une équipe de repli, créée avant le passage qui exige une catégorie
@@ -226,6 +252,26 @@ function init_schema(PDO $pdo): void {
     month TEXT NOT NULL,
     recurring INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )");
+
+  // Règles de paie configurables (impôt source, charges sociales, assurance accident, LPP...) : le club
+  // saisit lui-même les libellés et taux/montants applicables, activables ou non par employé.
+  $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL DEFAULT 'charge_sociale',
+    label TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'percent',
+    valeur REAL NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS employee_payroll_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    rule_id INTEGER NOT NULL REFERENCES payroll_rules(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(employee_id, rule_id)
   )");
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS players (
@@ -319,9 +365,9 @@ function f(array $b, string $k, float $def = 0): float { return (float)($b[$k] ?
 function bo(array $b, string $k, bool $def = false): bool { return isset($b[$k]) ? (bool)$b[$k] : $def; }
 function ni(array $b, string $k): ?int { $v = $b[$k] ?? null; return ($v === null || $v === '') ? null : (int)$v; }
 
-/** Équivalent mensuel d'un montant selon sa périodicité. */
-function monthly_equiv(float $montant, string $periodicite): float {
-  return $periodicite === 'annuel' ? $montant / 12 : $montant;
+/** Équivalent mensuel d'un montant : le montant d'un poste est toujours annuel. */
+function monthly_equiv(float $montant): float {
+  return $montant / 12;
 }
 
 /** Normalise un nom pour comparaison floue (minuscule, sans accents, sans espaces superflus). */
@@ -354,12 +400,13 @@ function match_player_name(string $name, array $players): array {
 function compute_employee_indemnites(PDO $pdo, string $month, int $season_id): array {
   $st = $pdo->prepare("
     SELECT e.id AS employee_id, e.first_name, e.last_name,
-           ea.team_id, t.name AS team_name, ea.poste_id, po.label AS poste_label,
-           ea.montant, ea.periodicite
+           ea.team_id, t.name AS team_name, ea.category_id, tc.name AS category_name, ea.poste_id, po.label AS poste_label,
+           ea.montant
     FROM employee_assignments ea
     JOIN employees e ON e.id = ea.employee_id AND e.active = 1
     JOIN postes po ON po.id = ea.poste_id
     LEFT JOIN teams t ON t.id = ea.team_id
+    LEFT JOIN team_categories tc ON tc.id = ea.category_id
     WHERE ea.active = 1 AND ea.season_id = ?
   ");
   $st->execute([$season_id]);
@@ -372,8 +419,8 @@ function compute_employee_indemnites(PDO $pdo, string $month, int $season_id): a
     if (!isset($byEmployee[$eid])) {
       $byEmployee[$eid] = ['employee_id' => $eid, 'name' => $r['first_name'] . ' ' . $r['last_name'], 'total' => 0.0, 'lignes' => []];
     }
-    $label = $r['poste_label'] . ($r['team_name'] ? ' — ' . $r['team_name'] : '');
-    $montant = round(monthly_equiv((float)$r['montant'], $r['periodicite'] ?: 'mensuel'), 2);
+    $label = $r['poste_label'] . ($r['team_name'] ? ' — ' . $r['team_name'] : ($r['category_name'] ? ' — ' . $r['category_name'] . ' (catégorie)' : ''));
+    $montant = round(monthly_equiv((float)$r['montant']), 2);
     $byEmployee[$eid]['total'] += $montant;
     $byEmployee[$eid]['lignes'][] = ['type' => 'poste', 'label' => $label, 'montant' => $montant];
   }
@@ -398,7 +445,7 @@ function compute_employee_indemnites(PDO $pdo, string $month, int $season_id): a
  * (hors indemnités ponctuelles), pour la liste Employés. */
 function compute_employee_running_totals(PDO $pdo, int $season_id): array {
   $st = $pdo->prepare("
-    SELECT ea.employee_id, ea.montant, ea.periodicite
+    SELECT ea.employee_id, ea.montant
     FROM employee_assignments ea
     WHERE ea.active = 1 AND ea.employee_id IS NOT NULL AND ea.season_id = ?
   ");
@@ -407,7 +454,7 @@ function compute_employee_running_totals(PDO $pdo, int $season_id): array {
   $totals = [];
   foreach ($rows as $r) {
     $eid = (int)$r['employee_id'];
-    $totals[$eid] = ($totals[$eid] ?? 0) + monthly_equiv((float)$r['montant'], $r['periodicite'] ?: 'mensuel');
+    $totals[$eid] = ($totals[$eid] ?? 0) + monthly_equiv((float)$r['montant']);
   }
   $st = $pdo->query("SELECT employee_id, montant, recurring FROM indemnites_custom WHERE recurring = 1");
   foreach ($st->fetchAll() as $r) {
@@ -629,8 +676,8 @@ function find_or_create_season(PDO $pdo, string $label, ?int $duplicateFromId = 
   $st->execute([$label, $startYear . '-07-01', ($startYear + 1) . '-06-30']);
   $newId = (int)$pdo->lastInsertId();
   if ($duplicateFromId) {
-    $pdo->prepare('INSERT INTO employee_assignments (employee_id, team_id, poste_id, montant, periodicite, active, season_id)
-      SELECT employee_id, team_id, poste_id, montant, periodicite, active, ? FROM employee_assignments WHERE season_id = ?')
+    $pdo->prepare('INSERT INTO employee_assignments (employee_id, team_id, category_id, poste_id, montant, active, season_id)
+      SELECT employee_id, team_id, category_id, poste_id, montant, active, ? FROM employee_assignments WHERE season_id = ?')
       ->execute([$newId, $duplicateFromId]);
   }
   return $newId;
@@ -802,16 +849,24 @@ switch ($action) {
       $st0 = db()->prepare('SELECT COALESCE(MAX(sort_order),-1)+1 FROM teams WHERE category_id=?');
       $st0->execute([$category_id]);
       $next = (int)$st0->fetchColumn();
-      $st = db()->prepare('INSERT INTO teams (name, category_id, sort_order) VALUES (?,?,?)');
-      $st->execute([$name, $category_id, $next]);
+      $st = db()->prepare('INSERT INTO teams (name, category_id, sort_order, cotisation_montant, effectif_max) VALUES (?,?,?,?,?)');
+      $st->execute([$name, $category_id, $next, f($b, 'cotisation_montant'), i($b, 'effectif_max')]);
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
       $id = i($b, 'id'); $category_id = ni($b, 'category_id');
       if (!$id) fail('id requis');
       if (!$category_id) fail('Catégorie requise : une équipe doit obligatoirement appartenir à une catégorie.');
-      $st = db()->prepare('UPDATE teams SET name=?, category_id=?, active=? WHERE id=?');
-      $st->execute([s($b, 'name'), $category_id, bo($b, 'active', true) ? 1 : 0, $id]);
+      // cotisation_montant/effectif_max ne sont écrasés que si transmis : les appels de renommage/réordonnancement/
+      // changement de catégorie n'envoient que name/category_id/active et ne doivent pas remettre ces champs à zéro.
+      $existSt = db()->prepare('SELECT cotisation_montant, effectif_max FROM teams WHERE id=?');
+      $existSt->execute([$id]);
+      $existing = $existSt->fetch();
+      if (!$existing) fail('Équipe introuvable', 404);
+      $cotisation = array_key_exists('cotisation_montant', $b) ? f($b, 'cotisation_montant') : (float)$existing['cotisation_montant'];
+      $effectif = array_key_exists('effectif_max', $b) ? i($b, 'effectif_max') : (int)$existing['effectif_max'];
+      $st = db()->prepare('UPDATE teams SET name=?, category_id=?, active=?, cotisation_montant=?, effectif_max=? WHERE id=?');
+      $st->execute([s($b, 'name'), $category_id, bo($b, 'active', true) ? 1 : 0, $cotisation, $effectif, $id]);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
@@ -851,10 +906,11 @@ switch ($action) {
       $employees = $pdo->query('SELECT * FROM employees ORDER BY active DESC, last_name')->fetchAll();
       // Affectations sur toutes les saisons (pas seulement la courante) : la fiche employé doit pouvoir
       // montrer l'historique complet, et la liste Employés doit rester filtrable par n'importe quelle saison.
-      $asg = $pdo->query("SELECT ea.*, t.name AS team_name, po.label AS poste_label, s.label AS season_label
+      $asg = $pdo->query("SELECT ea.*, t.name AS team_name, tc.name AS category_name, po.label AS poste_label, s.label AS season_label
         FROM employee_assignments ea
         JOIN postes po ON po.id = ea.poste_id
         LEFT JOIN teams t ON t.id = ea.team_id
+        LEFT JOIN team_categories tc ON tc.id = ea.category_id
         LEFT JOIN seasons s ON s.id = ea.season_id
         WHERE ea.active=1")->fetchAll();
       $byEmployee = [];
@@ -872,14 +928,24 @@ switch ($action) {
     }
     if ($method === 'POST') {
       $ln = s($b, 'last_name'); if (!$ln) fail('Nom requis');
-      $st = db()->prepare('INSERT INTO employees (first_name,last_name,email,phone,iban) VALUES (?,?,?,?,?)');
-      $st->execute([s($b, 'first_name'), $ln, s($b, 'email'), s($b, 'phone'), s($b, 'iban')]);
+      $paiement = s($b, 'paiement', 'mensuel');
+      if (!in_array($paiement, ['mensuel', 'semestriel'], true)) fail('paiement invalide');
+      $st = db()->prepare('INSERT INTO employees (first_name,last_name,email,phone,iban,paiement) VALUES (?,?,?,?,?,?)');
+      $st->execute([s($b, 'first_name'), $ln, s($b, 'email'), s($b, 'phone'), s($b, 'iban'), $paiement]);
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
       $id = i($b, 'id'); if (!$id) fail('id requis');
-      $st = db()->prepare('UPDATE employees SET first_name=?,last_name=?,email=?,phone=?,iban=?,active=? WHERE id=?');
-      $st->execute([s($b,'first_name'), s($b,'last_name'), s($b,'email'), s($b,'phone'), s($b,'iban'), bo($b,'active',true)?1:0, $id]);
+      // paiement n'est écrasé que si transmis : les sauvegardes du formulaire employé (nom/contact) n'envoient
+      // pas ce champ et ne doivent pas remettre l'échéance de versement à sa valeur par défaut.
+      $existSt = db()->prepare('SELECT paiement FROM employees WHERE id=?');
+      $existSt->execute([$id]);
+      $existingEmp = $existSt->fetch();
+      if (!$existingEmp) fail('Employé introuvable', 404);
+      $paiement = array_key_exists('paiement', $b) ? s($b, 'paiement', 'mensuel') : $existingEmp['paiement'];
+      if (!in_array($paiement, ['mensuel', 'semestriel'], true)) fail('paiement invalide');
+      $st = db()->prepare('UPDATE employees SET first_name=?,last_name=?,email=?,phone=?,iban=?,active=?,paiement=? WHERE id=?');
+      $st->execute([s($b,'first_name'), s($b,'last_name'), s($b,'email'), s($b,'phone'), s($b,'iban'), bo($b,'active',true)?1:0, $paiement, $id]);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
@@ -894,33 +960,42 @@ switch ($action) {
 
   case 'employee_assignments': {
     if ($method === 'GET') {
-      $team_id = i($_GET, 'team_id'); if (!$team_id) fail('team_id requis');
+      $team_id = ni($_GET, 'team_id'); $category_id = ni($_GET, 'category_id');
+      if (!$team_id && !$category_id) fail('team_id ou category_id requis');
       $season_id = i($_GET, 'season_id') ?: ensure_current_season(db());
-      $st = db()->prepare("SELECT ea.*, po.label AS poste_label, e.first_name, e.last_name
-        FROM employee_assignments ea JOIN postes po ON po.id = ea.poste_id
-        LEFT JOIN employees e ON e.id = ea.employee_id
-        WHERE ea.team_id = ? AND ea.season_id = ? ORDER BY ea.created_at");
-      $st->execute([$team_id, $season_id]);
+      if ($team_id) {
+        $st = db()->prepare("SELECT ea.*, po.label AS poste_label, e.first_name, e.last_name
+          FROM employee_assignments ea JOIN postes po ON po.id = ea.poste_id
+          LEFT JOIN employees e ON e.id = ea.employee_id
+          WHERE ea.team_id = ? AND ea.season_id = ? ORDER BY ea.created_at");
+        $st->execute([$team_id, $season_id]);
+      } else {
+        $st = db()->prepare("SELECT ea.*, po.label AS poste_label, e.first_name, e.last_name
+          FROM employee_assignments ea JOIN postes po ON po.id = ea.poste_id
+          LEFT JOIN employees e ON e.id = ea.employee_id
+          WHERE ea.category_id = ? AND ea.season_id = ? ORDER BY ea.created_at");
+        $st->execute([$category_id, $season_id]);
+      }
       out($st->fetchAll());
     }
     if ($method === 'POST') {
-      $team_id = i($b, 'team_id'); $poste_id = i($b, 'poste_id'); $employee_id = ni($b, 'employee_id');
-      $montant = f($b, 'montant'); $periodicite = s($b, 'periodicite', 'mensuel');
+      $team_id = ni($b, 'team_id'); $category_id = ni($b, 'category_id');
+      $poste_id = i($b, 'poste_id'); $employee_id = ni($b, 'employee_id');
+      $montant = f($b, 'montant');
       $season_id = i($b, 'season_id') ?: ensure_current_season(db());
-      if (!$team_id || !$poste_id) fail('team_id et poste_id requis');
-      if (!in_array($periodicite, ['mensuel', 'annuel'], true)) fail('periodicite invalide');
-      $st = db()->prepare('INSERT INTO employee_assignments (employee_id, team_id, poste_id, montant, periodicite, season_id) VALUES (?,?,?,?,?,?)');
-      $st->execute([$employee_id, $team_id, $poste_id, $montant, $periodicite, $season_id]);
+      if (!$team_id && !$category_id) fail('team_id ou category_id requis');
+      if ($team_id && $category_id) fail('Choisir une équipe ou une catégorie, pas les deux');
+      if (!$poste_id) fail('poste_id requis');
+      $st = db()->prepare('INSERT INTO employee_assignments (employee_id, team_id, category_id, poste_id, montant, season_id) VALUES (?,?,?,?,?,?)');
+      $st->execute([$employee_id, $team_id, $category_id, $poste_id, $montant, $season_id]);
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
       $id = i($b, 'id'); if (!$id) fail('id requis');
       $employee_id = ni($b, 'employee_id'); $poste_id = i($b, 'poste_id'); $montant = f($b, 'montant');
-      $periodicite = s($b, 'periodicite', 'mensuel');
       if (!$poste_id) fail('poste_id requis');
-      if (!in_array($periodicite, ['mensuel', 'annuel'], true)) fail('periodicite invalide');
-      $st = db()->prepare('UPDATE employee_assignments SET employee_id=?, poste_id=?, montant=?, periodicite=? WHERE id=?');
-      $st->execute([$employee_id, $poste_id, $montant, $periodicite, $id]);
+      $st = db()->prepare('UPDATE employee_assignments SET employee_id=?, poste_id=?, montant=? WHERE id=?');
+      $st->execute([$employee_id, $poste_id, $montant, $id]);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
@@ -935,18 +1010,50 @@ switch ($action) {
 
   case 'team_totals': {
     $season_id = i($_GET, 'season_id') ?: ensure_current_season(db());
-    $st = db()->prepare('SELECT team_id, montant, periodicite FROM employee_assignments WHERE active = 1 AND season_id = ?');
+    $st = db()->prepare('SELECT team_id, montant FROM employee_assignments WHERE active = 1 AND season_id = ? AND team_id IS NOT NULL');
     $st->execute([$season_id]);
     $rows = $st->fetchAll();
     $totals = [];
     foreach ($rows as $r) {
       $tid = (int)$r['team_id'];
-      $totals[$tid] = ($totals[$tid] ?? 0) + monthly_equiv((float)$r['montant'], $r['periodicite'] ?: 'mensuel');
+      $totals[$tid] = ($totals[$tid] ?? 0) + monthly_equiv((float)$r['montant']);
     }
     // Total non arrondi : l'arrondi se fait uniquement à l'affichage (côté frontend), pour éviter que le
     // total annuel (mensuel × 12) ne dérive d'un montant mensuel déjà arrondi (ex: 1583.33 × 12 ≠ 19000).
     $out = [];
     foreach ($totals as $tid => $total) $out[] = ['team_id' => $tid, 'total' => $total];
+    out($out);
+  }
+
+  /* ============ TOTAUX PAR CATÉGORIE (postes rattachés directement à la catégorie, ex: Directeur Technique) ============ */
+
+  case 'category_totals': {
+    $season_id = i($_GET, 'season_id') ?: ensure_current_season(db());
+    $st = db()->prepare('SELECT category_id, montant FROM employee_assignments WHERE active = 1 AND season_id = ? AND category_id IS NOT NULL');
+    $st->execute([$season_id]);
+    $rows = $st->fetchAll();
+    $totals = [];
+    foreach ($rows as $r) {
+      $cid = (int)$r['category_id'];
+      $totals[$cid] = ($totals[$cid] ?? 0) + monthly_equiv((float)$r['montant']);
+    }
+    $out = [];
+    foreach ($totals as $cid => $total) $out[] = ['category_id' => $cid, 'total' => $total];
+    out($out);
+  }
+
+  /* ============ TOTAUX PAR ÉCHÉANCE DE PAIEMENT (suivi de liquidité : mensuel vs semestriel) ============ */
+
+  case 'payment_totals': {
+    // L'échéance de versement (mensuel/semestriel) est une propriété de l'employé, pas du poste : un poste
+    // sans employé assigné est compté par défaut en "mensuel" (comportement neutre, pas de préférence connue).
+    $season_id = i($_GET, 'season_id') ?: ensure_current_season(db());
+    $st = db()->prepare("SELECT COALESCE(e.paiement, 'mensuel') AS paiement, SUM(ea.montant) AS total
+      FROM employee_assignments ea LEFT JOIN employees e ON e.id = ea.employee_id
+      WHERE ea.active = 1 AND ea.season_id = ? GROUP BY COALESCE(e.paiement, 'mensuel')");
+    $st->execute([$season_id]);
+    $out = ['mensuel' => 0.0, 'semestriel' => 0.0];
+    foreach ($st->fetchAll() as $r) { if (isset($out[$r['paiement']])) $out[$r['paiement']] = (float)$r['total']; }
     out($out);
   }
 
@@ -973,6 +1080,65 @@ switch ($action) {
     if ($method === 'DELETE') {
       $id = i($_GET, 'id'); if (!$id) fail('id requis');
       db()->prepare('DELETE FROM indemnites_custom WHERE id=?')->execute([$id]);
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  /* ============ RÈGLES DE PAIE (paramètres) ============ */
+
+  case 'payroll_rules': {
+    if ($method === 'GET') {
+      out(db()->query("SELECT * FROM payroll_rules ORDER BY category, sort_order, label")->fetchAll());
+    }
+    if ($method === 'POST') {
+      $category = s($b, 'category'); $label = s($b, 'label'); $type = s($b, 'type', 'percent');
+      if (!in_array($category, ['impot_source','charge_sociale','assurance_accident','lpp'], true)) fail('category invalide');
+      if (!$label) fail('Libellé requis');
+      if (!in_array($type, ['percent','fixe'], true)) fail('type invalide');
+      $next = (int)db()->query("SELECT COALESCE(MAX(sort_order),-1)+1 FROM payroll_rules WHERE category=" . db()->quote($category))->fetchColumn();
+      $st = db()->prepare('INSERT INTO payroll_rules (category, label, type, valeur, sort_order) VALUES (?,?,?,?,?)');
+      $st->execute([$category, $label, $type, f($b, 'valeur'), $next]);
+      out(['id' => (int)db()->lastInsertId()]);
+    }
+    if ($method === 'PUT') {
+      $id = i($b, 'id'); if (!$id) fail('id requis');
+      $category = s($b, 'category'); $type = s($b, 'type', 'percent');
+      if (!in_array($category, ['impot_source','charge_sociale','assurance_accident','lpp'], true)) fail('category invalide');
+      if (!in_array($type, ['percent','fixe'], true)) fail('type invalide');
+      $st = db()->prepare('UPDATE payroll_rules SET category=?, label=?, type=?, valeur=?, active=? WHERE id=?');
+      $st->execute([$category, s($b, 'label'), $type, f($b, 'valeur'), bo($b, 'active', true) ? 1 : 0, $id]);
+      out(['ok' => true]);
+    }
+    if ($method === 'DELETE') {
+      $id = i($_GET, 'id'); if (!$id) fail('id requis');
+      db()->prepare('DELETE FROM payroll_rules WHERE id=?')->execute([$id]);
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  /* ============ RÈGLES DE PAIE ACTIVÉES PAR EMPLOYÉ ============ */
+
+  case 'employee_payroll_rules': {
+    if ($method === 'GET') {
+      $employee_id = i($_GET, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+      $st = db()->prepare('SELECT rule_id FROM employee_payroll_rules WHERE employee_id=?');
+      $st->execute([$employee_id]);
+      out(array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)));
+    }
+    if ($method === 'POST') {
+      // Remplace l'intégralité du jeu de règles activées pour cet employé (coché/décoché depuis sa fiche).
+      $employee_id = i($b, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+      $ruleIds = array_unique(array_map('intval', $b['rule_ids'] ?? []));
+      $pdo = db();
+      $pdo->beginTransaction();
+      try {
+        $pdo->prepare('DELETE FROM employee_payroll_rules WHERE employee_id=?')->execute([$employee_id]);
+        $ins = $pdo->prepare('INSERT INTO employee_payroll_rules (employee_id, rule_id) VALUES (?,?)');
+        foreach ($ruleIds as $rid) { if ($rid > 0) $ins->execute([$employee_id, $rid]); }
+        $pdo->commit();
+      } catch (Throwable $e) { $pdo->rollBack(); fail('Échec : ' . $e->getMessage(), 500); }
       out(['ok' => true]);
     }
     fail('Méthode non supportée', 405);
