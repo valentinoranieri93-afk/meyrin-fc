@@ -113,6 +113,7 @@ function init_schema(PDO $pdo): void {
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )");
+  ensure_column($pdo, 'team_categories', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,6 +123,17 @@ function init_schema(PDO $pdo): void {
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )");
   ensure_column($pdo, 'teams', 'category_id', 'INTEGER REFERENCES team_categories(id)');
+  ensure_column($pdo, 'teams', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
+
+  // Saisons : seules les affectations (poste + montant d'un employé sur une équipe) sont rattachées à une
+  // saison (1er juillet - 30 juin). Équipes, catégories, rôles et employés restent permanents d'une saison à l'autre.
+  $pdo->exec("CREATE TABLE IF NOT EXISTS seasons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL UNIQUE,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )");
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -182,6 +194,8 @@ function init_schema(PDO $pdo): void {
 
   if (table_exists($pdo, 'indemnite_bareme')) $pdo->exec('DROP TABLE indemnite_bareme');
 
+  ensure_column($pdo, 'employee_assignments', 'season_id', 'INTEGER REFERENCES seasons(id)');
+
   // Chaque poste d'équipe doit être rattaché à une équipe : les anciens postes "sans équipe" (ex: staff
   // administratif) sont regroupés dans une équipe de repli, créée avant le passage qui exige une catégorie
   // pour chaque équipe ci-dessous (pour que cette équipe de repli en hérite aussi, sans jamais rester orpheline).
@@ -194,6 +208,14 @@ function init_schema(PDO $pdo): void {
   if ((int)$pdo->query('SELECT COUNT(*) FROM teams WHERE category_id IS NULL')->fetchColumn() > 0) {
     $fallbackCategoryId = find_or_create_category($pdo, 'Non classé');
     $pdo->prepare('UPDATE teams SET category_id = ? WHERE category_id IS NULL')->execute([$fallbackCategoryId]);
+  }
+
+  // Saison courante (règle du 1er juillet) : garantit son existence, en la dupliquant depuis la saison la
+  // plus récente si elle vient d'être créée (bascule automatique de saison sans action manuelle). Les
+  // affectations existantes qui n'ont pas encore de saison (première migration d'une base existante) y sont rattachées.
+  $currentSeasonId = ensure_current_season($pdo);
+  if ((int)$pdo->query('SELECT COUNT(*) FROM employee_assignments WHERE season_id IS NULL')->fetchColumn() > 0) {
+    $pdo->prepare('UPDATE employee_assignments SET season_id = ? WHERE season_id IS NULL')->execute([$currentSeasonId]);
   }
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS indemnites_custom (
@@ -328,9 +350,9 @@ function match_player_name(string $name, array $players): array {
   return ['player' => $best, 'score' => round($bestScore, 1)];
 }
 
-/** Calcule le total mensuel des indemnités par employé (état courant, non historisé). */
-function compute_employee_indemnites(PDO $pdo, string $month): array {
-  $rows = $pdo->query("
+/** Calcule le total mensuel des indemnités par employé pour une saison donnée (état courant, non historisé). */
+function compute_employee_indemnites(PDO $pdo, string $month, int $season_id): array {
+  $st = $pdo->prepare("
     SELECT e.id AS employee_id, e.first_name, e.last_name,
            ea.team_id, t.name AS team_name, ea.poste_id, po.label AS poste_label,
            ea.montant, ea.periodicite
@@ -338,8 +360,10 @@ function compute_employee_indemnites(PDO $pdo, string $month): array {
     JOIN employees e ON e.id = ea.employee_id AND e.active = 1
     JOIN postes po ON po.id = ea.poste_id
     LEFT JOIN teams t ON t.id = ea.team_id
-    WHERE ea.active = 1
-  ")->fetchAll();
+    WHERE ea.active = 1 AND ea.season_id = ?
+  ");
+  $st->execute([$season_id]);
+  $rows = $st->fetchAll();
 
   $byEmployee = [];
   $alerts = [];
@@ -370,13 +394,16 @@ function compute_employee_indemnites(PDO $pdo, string $month): array {
   return ['par_employee' => array_values($byEmployee), 'alerts' => array_values(array_unique($alerts))];
 }
 
-/** Total des indemnités récurrentes "en régime de croisière" par employé (hors indemnités ponctuelles), pour la liste Employés. */
-function compute_employee_running_totals(PDO $pdo): array {
-  $rows = $pdo->query("
+/** Total des indemnités récurrentes "en régime de croisière" par employé pour une saison donnée
+ * (hors indemnités ponctuelles), pour la liste Employés. */
+function compute_employee_running_totals(PDO $pdo, int $season_id): array {
+  $st = $pdo->prepare("
     SELECT ea.employee_id, ea.montant, ea.periodicite
     FROM employee_assignments ea
-    WHERE ea.active = 1 AND ea.employee_id IS NOT NULL
-  ")->fetchAll();
+    WHERE ea.active = 1 AND ea.employee_id IS NOT NULL AND ea.season_id = ?
+  ");
+  $st->execute([$season_id]);
+  $rows = $st->fetchAll();
   $totals = [];
   foreach ($rows as $r) {
     $eid = (int)$r['employee_id'];
@@ -577,9 +604,48 @@ function find_or_create_category(PDO $pdo, string $name): int {
   $st->execute([$name]);
   $id = $st->fetchColumn();
   if ($id) return (int)$id;
-  $st = $pdo->prepare('INSERT INTO team_categories (name) VALUES (?)');
-  $st->execute([$name]);
+  $next = (int)$pdo->query('SELECT COALESCE(MAX(sort_order),-1)+1 FROM team_categories')->fetchColumn();
+  $st = $pdo->prepare('INSERT INTO team_categories (name, sort_order) VALUES (?,?)');
+  $st->execute([$name, $next]);
   return (int)$pdo->lastInsertId();
+}
+
+/** Label de saison suisse (1er juillet - 30 juin) correspondant à une date donnée, ex: "2025-2026". */
+function season_label_for_date(string $ymd): string {
+  $y = (int)substr($ymd, 0, 4);
+  $m = (int)substr($ymd, 5, 2);
+  $startYear = $m >= 7 ? $y : $y - 1;
+  return $startYear . '-' . ($startYear + 1);
+}
+
+/** Retrouve ou crée une saison par label, en dupliquant les affectations d'une saison de référence si elle est neuve. */
+function find_or_create_season(PDO $pdo, string $label, ?int $duplicateFromId = null): int {
+  $st = $pdo->prepare('SELECT id FROM seasons WHERE label = ?');
+  $st->execute([$label]);
+  $id = $st->fetchColumn();
+  if ($id) return (int)$id;
+  $startYear = (int)explode('-', $label)[0];
+  $st = $pdo->prepare('INSERT INTO seasons (label, start_date, end_date) VALUES (?,?,?)');
+  $st->execute([$label, $startYear . '-07-01', ($startYear + 1) . '-06-30']);
+  $newId = (int)$pdo->lastInsertId();
+  if ($duplicateFromId) {
+    $pdo->prepare('INSERT INTO employee_assignments (employee_id, team_id, poste_id, montant, periodicite, active, season_id)
+      SELECT employee_id, team_id, poste_id, montant, periodicite, active, ? FROM employee_assignments WHERE season_id = ?')
+      ->execute([$newId, $duplicateFromId]);
+  }
+  return $newId;
+}
+
+/** Garantit l'existence de la saison en cours (règle du 1er juillet) : bascule automatique dès que le calendrier
+ * passe le 1er juillet, la nouvelle saison démarrant avec une copie des affectations de la saison précédente. */
+function ensure_current_season(PDO $pdo): int {
+  $label = season_label_for_date(date('Y-m-d'));
+  $st = $pdo->prepare('SELECT id FROM seasons WHERE label = ?');
+  $st->execute([$label]);
+  $id = $st->fetchColumn();
+  if ($id) return (int)$id;
+  $latest = $pdo->query('SELECT id FROM seasons ORDER BY start_date DESC LIMIT 1')->fetch();
+  return find_or_create_season($pdo, $label, $latest ? (int)$latest['id'] : null);
 }
 
 /* ---------------------------------------------------------------- Anthropic (extraction feuille de primes) */
@@ -691,11 +757,12 @@ switch ($action) {
   /* ============ CATÉGORIES D'ÉQUIPES (paramètres) ============ */
 
   case 'team_categories': {
-    if ($method === 'GET') out(db()->query('SELECT * FROM team_categories ORDER BY active DESC, name')->fetchAll());
+    if ($method === 'GET') out(db()->query('SELECT * FROM team_categories ORDER BY sort_order, name')->fetchAll());
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
-      $st = db()->prepare('INSERT INTO team_categories (name) VALUES (?)');
-      try { $st->execute([$name]); } catch (Throwable $e) { fail('Cette catégorie existe déjà'); }
+      $next = (int)db()->query('SELECT COALESCE(MAX(sort_order),-1)+1 FROM team_categories')->fetchColumn();
+      $st = db()->prepare('INSERT INTO team_categories (name, sort_order) VALUES (?,?)');
+      try { $st->execute([$name, $next]); } catch (Throwable $e) { fail('Cette catégorie existe déjà'); }
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
@@ -714,18 +781,29 @@ switch ($action) {
     fail('Méthode non supportée', 405);
   }
 
+  case 'team_categories_reorder': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $ids = $b['ids'] ?? []; if (!$ids) fail('ids requis');
+    $st = db()->prepare('UPDATE team_categories SET sort_order=? WHERE id=?');
+    foreach ($ids as $idx => $id) $st->execute([$idx, (int)$id]);
+    out(['ok' => true]);
+  }
+
   /* ============ TEAMS ============ */
 
   case 'teams': {
     if ($method === 'GET') {
-      out(db()->query("SELECT t.*, tc.name AS category_name FROM teams t LEFT JOIN team_categories tc ON tc.id = t.category_id ORDER BY t.active DESC, tc.name, t.name")->fetchAll());
+      out(db()->query("SELECT t.*, tc.name AS category_name FROM teams t LEFT JOIN team_categories tc ON tc.id = t.category_id ORDER BY tc.sort_order, t.sort_order")->fetchAll());
     }
     if ($method === 'POST') {
       $name = s($b, 'name'); $category_id = ni($b, 'category_id');
       if (!$name) fail('Nom requis');
       if (!$category_id) fail('Catégorie requise : une équipe doit obligatoirement appartenir à une catégorie.');
-      $st = db()->prepare('INSERT INTO teams (name, category_id) VALUES (?,?)');
-      $st->execute([$name, $category_id]);
+      $st0 = db()->prepare('SELECT COALESCE(MAX(sort_order),-1)+1 FROM teams WHERE category_id=?');
+      $st0->execute([$category_id]);
+      $next = (int)$st0->fetchColumn();
+      $st = db()->prepare('INSERT INTO teams (name, category_id, sort_order) VALUES (?,?,?)');
+      $st->execute([$name, $category_id, $next]);
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
@@ -744,18 +822,50 @@ switch ($action) {
     fail('Méthode non supportée', 405);
   }
 
+  case 'teams_reorder': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $ids = $b['ids'] ?? []; if (!$ids) fail('ids requis');
+    $st = db()->prepare('UPDATE teams SET sort_order=? WHERE id=?');
+    foreach ($ids as $idx => $id) $st->execute([$idx, (int)$id]);
+    out(['ok' => true]);
+  }
+
+  /* ============ SAISONS ============ */
+
+  case 'seasons': {
+    if ($method === 'GET') {
+      $rows = db()->query('SELECT * FROM seasons ORDER BY start_date DESC')->fetchAll();
+      $currentLabel = season_label_for_date(date('Y-m-d'));
+      foreach ($rows as &$r) $r['is_current'] = ($r['label'] === $currentLabel);
+      out($rows);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
   /* ============ EMPLOYÉS ============ */
 
   case 'employees': {
     if ($method === 'GET') {
-      $employees = db()->query('SELECT * FROM employees ORDER BY active DESC, last_name')->fetchAll();
-      $asg = db()->query("SELECT ea.*, t.name AS team_name, po.label AS poste_label FROM employee_assignments ea
-        JOIN postes po ON po.id = ea.poste_id LEFT JOIN teams t ON t.id = ea.team_id WHERE ea.active=1")->fetchAll();
+      $pdo = db();
+      $season_id = i($_GET, 'season_id') ?: ensure_current_season($pdo);
+      $employees = $pdo->query('SELECT * FROM employees ORDER BY active DESC, last_name')->fetchAll();
+      // Affectations sur toutes les saisons (pas seulement la courante) : la fiche employé doit pouvoir
+      // montrer l'historique complet, et la liste Employés doit rester filtrable par n'importe quelle saison.
+      $asg = $pdo->query("SELECT ea.*, t.name AS team_name, po.label AS poste_label, s.label AS season_label
+        FROM employee_assignments ea
+        JOIN postes po ON po.id = ea.poste_id
+        LEFT JOIN teams t ON t.id = ea.team_id
+        LEFT JOIN seasons s ON s.id = ea.season_id
+        WHERE ea.active=1")->fetchAll();
       $byEmployee = [];
       foreach ($asg as $a) $byEmployee[(int)$a['employee_id']][] = $a;
-      $totals = compute_employee_running_totals(db());
+      $custom = $pdo->query('SELECT * FROM indemnites_custom ORDER BY month DESC')->fetchAll();
+      $byEmployeeCustom = [];
+      foreach ($custom as $c) $byEmployeeCustom[(int)$c['employee_id']][] = $c;
+      $totals = compute_employee_running_totals($pdo, $season_id);
       foreach ($employees as &$e) {
         $e['assignments'] = $byEmployee[(int)$e['id']] ?? [];
+        $e['indemnites_custom'] = $byEmployeeCustom[(int)$e['id']] ?? [];
         $e['total_indemnites'] = round($totals[(int)$e['id']] ?? 0, 2);
       }
       out($employees);
@@ -785,20 +895,22 @@ switch ($action) {
   case 'employee_assignments': {
     if ($method === 'GET') {
       $team_id = i($_GET, 'team_id'); if (!$team_id) fail('team_id requis');
+      $season_id = i($_GET, 'season_id') ?: ensure_current_season(db());
       $st = db()->prepare("SELECT ea.*, po.label AS poste_label, e.first_name, e.last_name
         FROM employee_assignments ea JOIN postes po ON po.id = ea.poste_id
         LEFT JOIN employees e ON e.id = ea.employee_id
-        WHERE ea.team_id = ? ORDER BY ea.created_at");
-      $st->execute([$team_id]);
+        WHERE ea.team_id = ? AND ea.season_id = ? ORDER BY ea.created_at");
+      $st->execute([$team_id, $season_id]);
       out($st->fetchAll());
     }
     if ($method === 'POST') {
       $team_id = i($b, 'team_id'); $poste_id = i($b, 'poste_id'); $employee_id = ni($b, 'employee_id');
       $montant = f($b, 'montant'); $periodicite = s($b, 'periodicite', 'mensuel');
+      $season_id = i($b, 'season_id') ?: ensure_current_season(db());
       if (!$team_id || !$poste_id) fail('team_id et poste_id requis');
       if (!in_array($periodicite, ['mensuel', 'annuel'], true)) fail('periodicite invalide');
-      $st = db()->prepare('INSERT INTO employee_assignments (employee_id, team_id, poste_id, montant, periodicite) VALUES (?,?,?,?,?)');
-      $st->execute([$employee_id, $team_id, $poste_id, $montant, $periodicite]);
+      $st = db()->prepare('INSERT INTO employee_assignments (employee_id, team_id, poste_id, montant, periodicite, season_id) VALUES (?,?,?,?,?,?)');
+      $st->execute([$employee_id, $team_id, $poste_id, $montant, $periodicite, $season_id]);
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
@@ -822,7 +934,10 @@ switch ($action) {
   /* ============ TOTAUX PAR ÉQUIPE (équivalent mensuel, pour l'arbre Équipes) ============ */
 
   case 'team_totals': {
-    $rows = db()->query('SELECT team_id, montant, periodicite FROM employee_assignments WHERE active = 1')->fetchAll();
+    $season_id = i($_GET, 'season_id') ?: ensure_current_season(db());
+    $st = db()->prepare('SELECT team_id, montant, periodicite FROM employee_assignments WHERE active = 1 AND season_id = ?');
+    $st->execute([$season_id]);
+    $rows = $st->fetchAll();
     $totals = [];
     foreach ($rows as $r) {
       $tid = (int)$r['team_id'];
@@ -1155,7 +1270,8 @@ switch ($action) {
   case 'dashboard': {
     $month = s($_GET, 'month') ?: date('Y-m');
     $pdo = db();
-    $employeeData = compute_employee_indemnites($pdo, $month);
+    $season_id = i($_GET, 'season_id') ?: ensure_current_season($pdo);
+    $employeeData = compute_employee_indemnites($pdo, $month, $season_id);
     $playerData = compute_player_pay($pdo, $month);
 
     $totalEmployees = array_sum(array_column($employeeData['par_employee'], 'total'));
@@ -1167,18 +1283,21 @@ switch ($action) {
     $playersCount = (int) $pdo->query('SELECT COUNT(*) FROM players WHERE active=1 AND is_guest=0')->fetchColumn();
     $pendingImports = (int) $pdo->query("SELECT COUNT(*) FROM imports WHERE status='pending_review'")->fetchColumn();
 
-    $byTeam = $pdo->query("
+    $byTeamSt = $pdo->prepare("
       SELECT t.id, t.name, tc.name AS category_name, COUNT(DISTINCT ea.employee_id) AS employes
       FROM teams t LEFT JOIN team_categories tc ON tc.id = t.category_id
-      LEFT JOIN employee_assignments ea ON ea.team_id=t.id AND ea.active=1
-      WHERE t.active=1 GROUP BY t.id ORDER BY tc.name, t.name
-    ")->fetchAll();
+      LEFT JOIN employee_assignments ea ON ea.team_id=t.id AND ea.active=1 AND ea.season_id=?
+      WHERE t.active=1 GROUP BY t.id ORDER BY tc.sort_order, t.sort_order
+    ");
+    $byTeamSt->execute([$season_id]);
+    $byTeam = $byTeamSt->fetchAll();
 
     $alerts = $employeeData['alerts'];
     if ($pendingImports > 0) $alerts[] = "$pendingImports import(s) de feuille de primes en attente de validation";
 
     out([
       'month' => $month,
+      'season_id' => $season_id,
       'totaux' => [
         'indemnites_employes' => round($totalEmployees, 2),
         'salaires_joueurs' => round($totalSalaires, 2),
@@ -1198,7 +1317,8 @@ switch ($action) {
   case 'export_compta': {
     $month = s($_GET, 'month') ?: date('Y-m');
     $pdo = db();
-    $employeeData = compute_employee_indemnites($pdo, $month);
+    $season_id = i($_GET, 'season_id') ?: ensure_current_season($pdo);
+    $employeeData = compute_employee_indemnites($pdo, $month, $season_id);
     $playerData = compute_player_pay($pdo, $month);
 
     header('Content-Type: text/csv; charset=utf-8');

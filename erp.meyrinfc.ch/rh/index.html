@@ -38,6 +38,10 @@ table{border-collapse:collapse;width:100%}
 .sb-back:hover{color:#fff}
 .sb-name{font-family:"Sora";font-weight:800;font-size:15px;color:#fff}
 .sb-sub{font-size:10.5px;color:#8C897C;margin-top:2px}
+.season-picker{padding:14px 20px 4px}
+.season-picker-label{font-size:10px;text-transform:uppercase;letter-spacing:1.1px;color:#8C897C;font-weight:700;margin-bottom:6px}
+.season-sel{width:100%;background:#211F18;border:1.5px solid #34322a;border-radius:9px;padding:8px 10px;font-size:13px;font-weight:600;color:#E8E6DD;cursor:pointer}
+.season-sel:focus{border-color:var(--jaune-fonce)}
 .sb-nav{flex:1;padding:16px 12px;overflow-y:auto}
 .sb-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;font-size:13.5px;font-weight:600;color:#C9C7BD;margin-bottom:2px;transition:background .15s,color .15s}
 .sb-item svg{width:16px;height:16px;flex-shrink:0;opacity:.75}
@@ -147,6 +151,7 @@ tr:hover td{background:#FAFAF7}
 <script>
 const API = 'api.php';
 let STATE = { user: null, page: 'dashboard', month: new Date().toISOString().slice(0,7),
+  seasonId: null, seasons: [],
   teams: [], categories: [], postes: [], employees: [], players: [], bareme: [] };
 
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -195,6 +200,12 @@ function render() {
         <div class="sb-name">Ressources Humaines</div>
         <div class="sb-sub">Meyrin FC</div>
       </div>
+      <div class="season-picker">
+        <div class="season-picker-label">Saison</div>
+        <select id="season-selector" class="season-sel">
+          ${STATE.seasons.map(sn => `<option value="${sn.id}" ${sn.id===STATE.seasonId?'selected':''}>${esc(sn.label)}${sn.is_current?' (en cours)':''}</option>`).join('')}
+        </select>
+      </div>
       <div class="sb-nav">
         ${NAV.map(n => `<div class="sb-item ${STATE.page===n.id?'active':''}" onclick="goTo('${n.id}')">${ic(n.icon)}<span>${n.label}</span></div>`).join('')}
       </div>
@@ -208,6 +219,11 @@ function render() {
       <div class="content" id="content"></div>
     </div>
   `;
+  document.getElementById('season-selector').onchange = e => {
+    STATE.seasonId = Number(e.target.value);
+    localStorage.setItem('rh_season_id', String(STATE.seasonId));
+    renderPage();
+  };
   renderPage();
 }
 function goTo(page){ location.hash = page; }
@@ -249,7 +265,7 @@ async function renderDashboard(c) {
 
   c.innerHTML = `<div class="empty"><span class="spinner"></span> Chargement…</div>`;
   let d;
-  try { d = await api('dashboard', { params: { month: STATE.month } }); }
+  try { d = await api('dashboard', { params: { month: STATE.month, season_id: STATE.seasonId } }); }
   catch (e) { c.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
 
   c.innerHTML = `
@@ -287,7 +303,7 @@ async function renderDashboard(c) {
   `;
 }
 async function exportCompta(){
-  const blob = await api('export_compta', { params: { month: STATE.month } });
+  const blob = await api('export_compta', { params: { month: STATE.month, season_id: STATE.seasonId } });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = `rh-meyrinfc-${STATE.month}.csv`; a.click();
   URL.revokeObjectURL(url);
@@ -304,8 +320,9 @@ async function renderTeams(c){
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="teamModal()">+ Nouvelle équipe</button>`;
   c.innerHTML = `<div class="empty"><span class="spinner"></span></div>`;
   await loadRefData();
-  STATE.employees = await api('employees');
-  const totalsRows = await api('team_totals');
+  STATE.employees = await api('employees', { params: { season_id: STATE.seasonId } });
+  TEAM_SLOTS_CACHE = {};
+  const totalsRows = await api('team_totals', { params: { season_id: STATE.seasonId } });
   TEAM_TOTALS = {};
   totalsRows.forEach(r => { TEAM_TOTALS[r.team_id] = r.total; });
 
@@ -332,8 +349,13 @@ function renderTeamsTree(c){
   const y = window.scrollY;
   const byCategory = {};
   STATE.teams.forEach(t => { (byCategory[t.category_id] = byCategory[t.category_id] || []).push(t); });
+  const grandTotal = STATE.teams.reduce((s, t) => s + teamTotal(t.id), 0);
 
   el.innerHTML = `
+    <div class="stats-row" style="margin-bottom:18px">
+      <div class="stat-card"><div class="stat-label">Budget total mensuel</div><div class="stat-value">${chf(grandTotal)} CHF</div></div>
+      <div class="stat-card"><div class="stat-label">Budget total annuel</div><div class="stat-value">${chf(grandTotal*12)} CHF</div></div>
+    </div>
     <datalist id="employee-options">
       ${STATE.employees.map(e=>`<option value="${esc(e.first_name + ' ' + e.last_name)}"></option>`).join('')}
     </datalist>
@@ -400,11 +422,11 @@ function toggleCat(id){
 async function toggleTeam(id){
   if (EXPANDED_TEAMS.has(id)) { EXPANDED_TEAMS.delete(id); renderTeamsTree(); return; }
   EXPANDED_TEAMS.add(id);
-  if (!TEAM_SLOTS_CACHE[id]) TEAM_SLOTS_CACHE[id] = await api('employee_assignments', { params: { team_id: id } });
+  if (!TEAM_SLOTS_CACHE[id]) TEAM_SLOTS_CACHE[id] = await api('employee_assignments', { params: { team_id: id, season_id: STATE.seasonId } });
   renderTeamsTree();
 }
 async function refreshTeamSlots(teamId){
-  TEAM_SLOTS_CACHE[teamId] = await api('employee_assignments', { params: { team_id: teamId } });
+  TEAM_SLOTS_CACHE[teamId] = await api('employee_assignments', { params: { team_id: teamId, season_id: STATE.seasonId } });
   renderTeamsTree();
 }
 async function quickChangeCategory(teamId, categoryId){
@@ -489,7 +511,7 @@ async function addSlot(teamId){
   const montant = Number(document.getElementById(`ns-montant-${teamId}`).value) || 0;
   const periodicite = document.getElementById(`ns-periodicite-${teamId}`).value;
   try {
-    await api('employee_assignments', { method: 'POST', body: { team_id: teamId, poste_id, montant, periodicite } });
+    await api('employee_assignments', { method: 'POST', body: { team_id: teamId, poste_id, montant, periodicite, season_id: STATE.seasonId } });
     refreshTeamSlots(teamId);
   } catch (e) { alert(e.message); }
 }
@@ -508,7 +530,7 @@ async function importFile(action, file, onDone){
 
 /* ============================================================ EMPLOYÉS */
 
-let EMP_FILTER = { search: '', poste: '' };
+let EMP_FILTER = { search: '', poste: '', team: '', season: '' };
 
 async function renderEmployees(c){
   document.getElementById('topbar-actions').innerHTML = `
@@ -519,12 +541,20 @@ async function renderEmployees(c){
 
   c.innerHTML = `<div class="empty"><span class="spinner"></span></div>`;
   await loadRefData();
-  STATE.employees = await api('employees');
+  STATE.employees = await api('employees', { params: { season_id: STATE.seasonId } });
 
   c.innerHTML = `
     <div class="card-head" style="background:none;border:none;padding:0 0 16px">
       <div class="search-bar">
         <input type="text" id="emp-search" placeholder="Rechercher un nom, un e-mail…" value="${esc(EMP_FILTER.search)}">
+        <select id="emp-season-filter">
+          <option value="">Toutes les saisons</option>
+          ${STATE.seasons.map(sn=>`<option value="${sn.id}" ${EMP_FILTER.season==sn.id?'selected':''}>${esc(sn.label)}</option>`).join('')}
+        </select>
+        <select id="emp-team-filter">
+          <option value="">Toutes les équipes</option>
+          ${STATE.teams.map(t=>`<option value="${t.id}" ${EMP_FILTER.team==t.id?'selected':''}>${esc(t.name)}</option>`).join('')}
+        </select>
         <select id="emp-poste-filter">
           <option value="">Tous les postes</option>
           ${STATE.postes.map(p=>`<option value="${p.id}" ${EMP_FILTER.poste==p.id?'selected':''}>${esc(p.label)}</option>`).join('')}
@@ -534,24 +564,35 @@ async function renderEmployees(c){
     <div class="card"><div class="card-body pad0" id="emp-table"></div></div>
   `;
   document.getElementById('emp-search').oninput = e => { EMP_FILTER.search = e.target.value; renderEmployeeTable(); };
+  document.getElementById('emp-season-filter').onchange = e => { EMP_FILTER.season = e.target.value; renderEmployeeTable(); };
+  document.getElementById('emp-team-filter').onchange = e => { EMP_FILTER.team = e.target.value; renderEmployeeTable(); };
   document.getElementById('emp-poste-filter').onchange = e => { EMP_FILTER.poste = e.target.value; renderEmployeeTable(); };
   renderEmployeeTable();
+}
+
+/** Affectations d'un employé à retenir pour les filtres : toutes saisons, ou une seule si EMP_FILTER.season est posé. */
+function empFilterAssignments(ee){
+  return EMP_FILTER.season ? ee.assignments.filter(a => String(a.season_id) === String(EMP_FILTER.season)) : ee.assignments;
 }
 
 function renderEmployeeTable(){
   const el = document.getElementById('emp-table');
   const q = normalizeFr(EMP_FILTER.search);
+  const currentSeason = STATE.seasons.find(sn => sn.id === STATE.seasonId);
   const list = STATE.employees.filter(e => {
-    if (EMP_FILTER.poste && !e.assignments.some(a => String(a.poste_id) === String(EMP_FILTER.poste))) return false;
+    const asg = empFilterAssignments(e);
+    if (EMP_FILTER.season && !asg.length) return false;
+    if (EMP_FILTER.poste && !asg.some(a => String(a.poste_id) === String(EMP_FILTER.poste))) return false;
+    if (EMP_FILTER.team && !asg.some(a => String(a.team_id) === String(EMP_FILTER.team))) return false;
     if (!q) return true;
     const hay = normalizeFr(`${e.first_name} ${e.last_name} ${e.email}`);
     return hay.includes(q);
   });
-  el.innerHTML = list.length ? `<table><thead><tr><th>Nom</th><th>Affectation</th><th>E-mail</th><th>Téléphone</th><th>Indemnités / mois</th><th></th></tr></thead><tbody>
-    ${list.map(ee => `<tr>
-      <td><strong>${esc(ee.first_name)} ${esc(ee.last_name)}</strong>${ee.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactif</span>':''}</td>
-      <td>${ee.assignments.length ? ee.assignments.map(a=>`<span class="pill" style="background:var(--bleu-bg);color:var(--bleu);margin:0 4px 4px 0;display:inline-flex;align-items:center;gap:4px">${esc(a.poste_label)}${a.team_name?' · '+esc(a.team_name):''}</span>`).join('') : '<span style="color:var(--gris-2)">—</span>'}
-        <div class="hint" style="margin-top:2px">Gérer les postes depuis la fiche de l'équipe</div>
+  list.sort((a, b) => normalizeFr(a.last_name).localeCompare(normalizeFr(b.last_name)) || normalizeFr(a.first_name).localeCompare(normalizeFr(b.first_name)));
+  el.innerHTML = list.length ? `<table><thead><tr><th>Nom</th><th>Affectation${EMP_FILTER.season?'':' (toutes saisons)'}</th><th>E-mail</th><th>Téléphone</th><th>Indemnités / mois${currentSeason?' ('+esc(currentSeason.label)+')':''}</th><th></th></tr></thead><tbody>
+    ${list.map(ee => { const asg = empFilterAssignments(ee); return `<tr>
+      <td><a href="javascript:void(0)" data-obj="${esc(JSON.stringify(ee))}" onclick="employeeDetailModal(JSON.parse(this.dataset.obj))" style="font-weight:700;color:var(--noir)">${esc(ee.first_name)} ${esc(ee.last_name)}</a>${ee.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactif</span>':''}</td>
+      <td>${asg.length ? asg.map(a=>`<span class="pill" style="background:var(--bleu-bg);color:var(--bleu);margin:0 4px 4px 0;display:inline-flex;align-items:center;gap:4px">${esc(a.poste_label)}${a.team_name?' · '+esc(a.team_name):''}${!EMP_FILTER.season?' · '+esc(a.season_label||''):''}</span>`).join('') : '<span style="color:var(--gris-2)">—</span>'}
       </td>
       <td style="font-size:12.5px;color:var(--gris)">${esc(ee.email)}</td>
       <td style="font-size:12.5px;color:var(--gris)">${esc(ee.phone)}</td>
@@ -561,8 +602,48 @@ function renderEmployeeTable(){
         <button class="icon-btn" onclick="indemniteModal(${ee.id})" title="Indemnité personnalisée">CHF</button>
         <button class="icon-btn" onclick="deleteEmployee(${ee.id})">✕</button>
       </div></td>
-    </tr>`).join('')}
+    </tr>`; }).join('')}
   </tbody></table>` : `<div class="empty">Aucun employé ne correspond.</div>`;
+}
+
+function employeeDetailModal(ee){
+  const bySeasoLabel = {};
+  ee.assignments.forEach(a => { (bySeasoLabel[a.season_label || '—'] = bySeasoLabel[a.season_label || '—'] || []).push(a); });
+  const seasonBlocks = Object.keys(bySeasoLabel).sort().reverse().map(label => {
+    const rows = bySeasoLabel[label];
+    const totalAnnuel = rows.reduce((s, a) => s + (a.periodicite === 'annuel' ? Number(a.montant) : Number(a.montant) * 12), 0);
+    return `
+    <div style="margin-bottom:12px">
+      <div style="font-weight:700;font-size:12.5px;color:var(--noir-3);margin-bottom:6px">${esc(label)}</div>
+      ${rows.map(a => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
+        <span>${esc(a.poste_label)}${a.team_name?' — '+esc(a.team_name):''}</span>
+        <strong>${chf(a.montant)} CHF / ${a.periodicite==='annuel'?'an':'mois'}</strong>
+      </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:13px">
+        <span style="font-weight:700">Total annuel</span>
+        <strong>${chf(totalAnnuel)} CHF</strong>
+      </div>
+    </div>
+  `;
+  }).join('');
+  const customBlock = ee.indemnites_custom && ee.indemnites_custom.length ? ee.indemnites_custom.map(ic => `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
+      <span>${esc(ic.label)} <span style="color:var(--gris)">(${esc(ic.month)}${ic.recurring==1?' · récurrente':''})</span></span>
+      <strong>${chf(ic.montant)} CHF</strong>
+    </div>
+  `).join('') : `<div class="empty" style="padding:10px 0">Aucune indemnité personnalisée.</div>`;
+  openModal(`
+    <h3>${esc(ee.first_name)} ${esc(ee.last_name)}</h3>
+    <p class="hint" style="margin-bottom:16px">${esc(ee.email)}${ee.email&&ee.phone?' · ':''}${esc(ee.phone)}</p>
+    <h4 style="font-size:13px;font-weight:700;margin-bottom:8px">Équipes & indemnités par saison</h4>
+    ${seasonBlocks || `<div class="empty" style="padding:10px 0">Aucune affectation enregistrée.</div>`}
+    <h4 style="font-size:13px;font-weight:700;margin:16px 0 8px">Indemnités personnalisées</h4>
+    ${customBlock}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+      <button class="btn btn-primary" data-obj="${esc(JSON.stringify(ee))}" onclick="closeModal(); employeeModal(JSON.parse(this.dataset.obj))">Modifier la fiche</button>
+    </div>
+  `, true);
 }
 function normalizeFr(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
 
@@ -888,9 +969,8 @@ async function renderSettings(c){
   document.getElementById('topbar-actions').innerHTML = '';
   c.innerHTML = `
     <div class="tabs">
-      <div class="tab ${SETTINGS_TAB==='categories'?'active':''}" data-st="categories" onclick="switchSettingsTab('categories')">Catégories</div>
+      <div class="tab ${SETTINGS_TAB==='categories'?'active':''}" data-st="categories" onclick="switchSettingsTab('categories')">Catégories & Équipes</div>
       <div class="tab ${SETTINGS_TAB==='roles'?'active':''}" data-st="roles" onclick="switchSettingsTab('roles')">Rôles</div>
-      <div class="tab ${SETTINGS_TAB==='equipes'?'active':''}" data-st="equipes" onclick="switchSettingsTab('equipes')">Équipes</div>
     </div>
     <div id="settings-body"><div class="empty"><span class="spinner"></span></div></div>
   `;
@@ -900,6 +980,7 @@ async function renderSettings(c){
 }
 function switchSettingsTab(t){
   SETTINGS_TAB = t;
+  EDITING_CAT_ID = null;
   document.querySelectorAll('[data-st]').forEach(el => el.classList.toggle('active', el.dataset.st === t));
   renderSettingsBody();
 }
@@ -907,51 +988,187 @@ function renderSettingsBody(){
   const el = document.getElementById('settings-body');
   if (!el) return;
   if (SETTINGS_TAB === 'categories') renderCategoriesTab(el);
-  else if (SETTINGS_TAB === 'roles') renderRolesTab(el);
-  else renderEquipesTab(el);
+  else renderRolesTab(el);
 }
 async function refreshSettings(){
   await loadRefData();
   renderSettingsBody();
 }
 
+let SETTINGS_EXPANDED_CATS = new Set();
+
 function renderCategoriesTab(el){
+  const byCategory = {};
+  STATE.teams.forEach(t => { (byCategory[t.category_id] = byCategory[t.category_id] || []).push(t); });
   el.innerHTML = `
     <div class="card">
-      <div class="card-head"><h3>Catégories</h3><button class="btn btn-primary btn-sm" onclick="categoryModal()">+ Nouvelle catégorie</button></div>
+      <div class="card-head">
+        <h3>Catégories & Équipes</h3>
+        <span class="pill" style="background:var(--bleu-bg);color:var(--bleu)">${STATE.teams.length} équipe${STATE.teams.length>1?'s':''}</span>
+      </div>
       <div class="card-body pad0">
-        ${STATE.categories.length ? `<table><thead><tr><th>Nom</th><th></th></tr></thead><tbody>
-          ${STATE.categories.map(cat => `<tr><td>${esc(cat.name)}</td>
-            <td><div class="tbl-actions"><button class="icon-btn" data-obj="${esc(JSON.stringify(cat))}" onclick="categoryModal(JSON.parse(this.dataset.obj))">✎</button><button class="icon-btn" onclick="deleteCategory(${cat.id})">✕</button></div></td></tr>`).join('')}
-        </tbody></table>` : `<div class="empty">Aucune catégorie. Ajoutez-en une (ex: Foot à 11, Juniors).</div>`}
+        ${STATE.categories.length ? STATE.categories.map((cat, idx) => categorySettingsRow(cat, idx, STATE.categories.length, byCategory[cat.id]||[])).join('') : `<div class="empty">Aucune catégorie. Ajoutez-en une ci-dessous (ex: Foot à 11, Juniors).</div>`}
+        <div style="display:flex;gap:8px;padding:14px 18px">
+          <input id="new-cat-name" placeholder="Nouvelle catégorie…" style="flex:1;padding:8px 10px;border:1.5px solid var(--ligne);border-radius:8px" onkeydown="if(event.key==='Enter')addCategoryInline()">
+          <button class="btn btn-primary btn-sm" onclick="addCategoryInline()">+ Ajouter une catégorie</button>
+        </div>
       </div>
     </div>
   `;
 }
-function categoryModal(cat){
-  openModal(`
-    <h3>${cat?'Modifier':'Nouvelle'} catégorie</h3>
-    <div class="modal-error"></div>
-    <div class="field"><label>Nom</label><input id="ct-name" value="${cat?esc(cat.name):''}" placeholder="Ex: Foot à 11"></div>
-    <div class="modal-actions">
-      ${cat ? `<button class="btn btn-ghost" onclick="deleteCategory(${cat.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
-      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-      <button class="btn btn-primary" onclick="saveCategory(${cat?cat.id:'null'})">Enregistrer</button>
+
+let EDITING_CAT_ID = null;
+
+function categorySettingsRow(cat, idx, total, teams){
+  const open = SETTINGS_EXPANDED_CATS.has(cat.id);
+  const editing = EDITING_CAT_ID === cat.id;
+  const nameHtml = editing
+    ? `<input id="cat-edit-${cat.id}" value="${esc(cat.name)}" style="flex:1;font-weight:700;font-size:13.5px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:6px" onblur="finishCategoryEdit(${cat.id},this.value)" onkeydown="if(event.key==='Enter')this.blur()">`
+    : `<span onclick="toggleSettingsCat(${cat.id})" style="flex:1;font-weight:700;font-size:13.5px;color:var(--noir);cursor:pointer">${esc(cat.name)}</span>`;
+  return `<div style="border-bottom:1px solid var(--ligne-2)">
+    <div draggable="${editing?'false':'true'}" data-cat-id="${cat.id}"
+      ondragstart="onCatDragStart(event,${cat.id})"
+      ondragover="onCatDragOver(event)"
+      ondragleave="onCatDragLeave(event)"
+      ondrop="onCatDrop(event,${cat.id})"
+      ondragend="onCatDragEnd(event)"
+      style="display:flex;align-items:center;gap:8px;padding:11px 18px;background:#FAFAF7;cursor:grab">
+      <span style="color:var(--gris-2);font-size:14px;line-height:1;user-select:none" title="Glisser pour réordonner">⠿</span>
+      <span onclick="toggleSettingsCat(${cat.id})" style="cursor:pointer;display:inline-block;width:12px;font-size:12px;transition:transform .15s;transform:rotate(${open?90:0}deg)">▸</span>
+      ${nameHtml}
+      <span class="pill" style="background:var(--jaune-soft);color:#7A6000;white-space:nowrap">${teams.length} équipe${teams.length>1?'s':''}</span>
+      <button class="icon-btn" onclick="startCategoryEdit(${cat.id})" title="Renommer">✎</button>
+      <button class="icon-btn" onclick="deleteCategory(${cat.id})" title="Supprimer">✕</button>
     </div>
-  `);
+    ${open ? `<div>
+      ${teams.map((t, ti) => teamSettingsRow(t, ti, teams.length)).join('')}
+      <div style="display:flex;gap:8px;padding:10px 18px 14px 46px;background:#fff">
+        <input id="new-team-${cat.id}" placeholder="Nouvelle équipe…" style="flex:1;padding:7px 8px;border:1.5px solid var(--ligne);border-radius:8px" onkeydown="if(event.key==='Enter')addTeamInline(${cat.id})">
+        <button class="btn btn-ghost btn-sm" onclick="addTeamInline(${cat.id})">+ Équipe</button>
+      </div>
+    </div>` : ''}
+  </div>`;
 }
-async function saveCategory(id){
-  const name = document.getElementById('ct-name').value.trim();
-  if (!name) return modalErr('Le nom est requis.');
-  try {
-    if (id) await api('team_categories', { method: 'PUT', body: { id, name, active: true } });
-    else await api('team_categories', { method: 'POST', body: { name } });
-    closeModal(); await refreshSettings();
-  } catch (e) { modalErr(e.message); }
+
+function startCategoryEdit(id){
+  EDITING_CAT_ID = id;
+  renderSettingsBody();
+  requestAnimationFrame(() => {
+    const el = document.getElementById(`cat-edit-${id}`);
+    if (el) { el.focus(); el.select(); }
+  });
+}
+async function finishCategoryEdit(id, name){
+  EDITING_CAT_ID = null;
+  name = name.trim();
+  const cat = STATE.categories.find(c => c.id === id);
+  if (!cat || !name || name === cat.name) { renderSettingsBody(); return; }
+  try { await api('team_categories', { method: 'PUT', body: { id, name, active: true } }); await refreshSettings(); }
+  catch (e) { alert(e.message); renderSettingsBody(); }
+}
+
+let DRAG_CAT = null;
+function onCatDragStart(e, id){
+  DRAG_CAT = id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '.4';
+}
+function onCatDragOver(e){
+  if (DRAG_CAT === null) return;
+  e.preventDefault();
+  e.currentTarget.style.background = 'var(--jaune-soft)';
+}
+function onCatDragLeave(e){ e.currentTarget.style.background = '#FAFAF7'; }
+async function onCatDrop(e, targetId){
+  e.preventDefault();
+  e.currentTarget.style.background = '#FAFAF7';
+  if (DRAG_CAT === null || DRAG_CAT === targetId) { DRAG_CAT = null; return; }
+  const fromIdx = STATE.categories.findIndex(c => c.id === DRAG_CAT);
+  const toIdx = STATE.categories.findIndex(c => c.id === targetId);
+  DRAG_CAT = null;
+  if (fromIdx < 0 || toIdx < 0) return;
+  const arr = STATE.categories.slice();
+  const [moved] = arr.splice(fromIdx, 1);
+  arr.splice(toIdx, 0, moved);
+  STATE.categories = arr;
+  renderSettingsBody();
+  await api('team_categories_reorder', { method: 'POST', body: { ids: arr.map(c => c.id) } });
+}
+function onCatDragEnd(e){ e.currentTarget.style.opacity = ''; DRAG_CAT = null; }
+
+function teamSettingsRow(t, idx, total){
+  return `<div draggable="true" data-team-id="${t.id}" data-category-id="${t.category_id}"
+    ondragstart="onTeamDragStart(event,${t.id},${t.category_id})"
+    ondragover="onTeamDragOver(event,${t.category_id})"
+    ondragleave="onTeamDragLeave(event)"
+    ondrop="onTeamDrop(event,${t.id},${t.category_id})"
+    ondragend="onTeamDragEnd(event)"
+    style="display:flex;align-items:center;gap:8px;padding:9px 18px 9px 46px;background:#fff;border-top:1px solid var(--ligne-2);cursor:grab">
+    <span style="color:var(--gris-2);font-size:14px;line-height:1;user-select:none" title="Glisser pour réordonner">⠿</span>
+    <input value="${esc(t.name)}" style="flex:1;font-size:13px;padding:6px 8px;border:1.5px solid transparent;border-radius:6px" onfocus="this.style.borderColor='var(--ligne)'" onblur="this.style.borderColor='transparent';saveTeamName(${t.id},this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+    <button class="icon-btn" onclick="deleteTeam(${t.id})" title="Supprimer">✕</button>
+  </div>`;
+}
+
+let DRAG_TEAM = null;
+function onTeamDragStart(e, teamId, categoryId){
+  DRAG_TEAM = { id: teamId, categoryId };
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '.4';
+}
+function onTeamDragOver(e, categoryId){
+  if (!DRAG_TEAM || DRAG_TEAM.categoryId !== categoryId) return;
+  e.preventDefault();
+  e.currentTarget.style.background = 'var(--jaune-soft)';
+}
+function onTeamDragLeave(e){ e.currentTarget.style.background = '#fff'; }
+async function onTeamDrop(e, targetTeamId, categoryId){
+  e.preventDefault();
+  e.currentTarget.style.background = '#fff';
+  if (!DRAG_TEAM || DRAG_TEAM.categoryId !== categoryId || DRAG_TEAM.id === targetTeamId) { DRAG_TEAM = null; return; }
+  const scoped = STATE.teams.filter(t => t.category_id === categoryId);
+  const fromIdx = scoped.findIndex(t => t.id === DRAG_TEAM.id);
+  const toIdx = scoped.findIndex(t => t.id === targetTeamId);
+  DRAG_TEAM = null;
+  if (fromIdx < 0 || toIdx < 0) return;
+  const arr = scoped.slice();
+  const [moved] = arr.splice(fromIdx, 1);
+  arr.splice(toIdx, 0, moved);
+  const others = STATE.teams.filter(t => t.category_id !== categoryId);
+  STATE.teams = [...others, ...arr];
+  renderSettingsBody();
+  await api('teams_reorder', { method: 'POST', body: { ids: arr.map(t => t.id) } });
+}
+function onTeamDragEnd(e){ e.currentTarget.style.opacity = ''; DRAG_TEAM = null; }
+
+function toggleSettingsCat(id){
+  if (SETTINGS_EXPANDED_CATS.has(id)) SETTINGS_EXPANDED_CATS.delete(id); else SETTINGS_EXPANDED_CATS.add(id);
+  renderSettingsBody();
+}
+async function saveTeamName(id, name){
+  name = name.trim();
+  const t = STATE.teams.find(x => x.id === id);
+  if (!t || !name || name === t.name) { renderSettingsBody(); return; }
+  try { await api('teams', { method: 'PUT', body: { id, name, category_id: t.category_id, active: t.active == 1 } }); await refreshSettings(); }
+  catch (e) { alert(e.message); renderSettingsBody(); }
+}
+async function addCategoryInline(){
+  const input = document.getElementById('new-cat-name');
+  const name = input.value.trim();
+  if (!name) return;
+  try { await api('team_categories', { method: 'POST', body: { name } }); await refreshSettings(); }
+  catch (e) { alert(e.message); }
+}
+async function addTeamInline(categoryId){
+  const input = document.getElementById(`new-team-${categoryId}`);
+  const name = input.value.trim();
+  if (!name) return;
+  try { await api('teams', { method: 'POST', body: { name, category_id: categoryId } }); SETTINGS_EXPANDED_CATS.add(categoryId); await refreshSettings(); }
+  catch (e) { alert(e.message); }
 }
 async function deleteCategory(id){
   if (!confirm('Supprimer cette catégorie ? Impossible si des équipes y sont encore rattachées.')) return;
-  try { await api('team_categories', { method: 'DELETE', params: { id } }); closeModal(); await refreshSettings(); }
+  try { await api('team_categories', { method: 'DELETE', params: { id } }); await refreshSettings(); }
   catch (e) { alert(e.message); }
 }
 
@@ -994,20 +1211,6 @@ async function deletePoste(id){
   await api('postes', { method: 'DELETE', params: { id } }); closeModal(); await refreshSettings();
 }
 
-function renderEquipesTab(el){
-  el.innerHTML = `
-    <div class="card">
-      <div class="card-head"><h3>Équipes</h3><button class="btn btn-primary btn-sm" onclick="teamModal()">+ Nouvelle équipe</button></div>
-      <div class="card-body pad0">
-        ${STATE.teams.length ? `<table><thead><tr><th>Nom</th><th>Catégorie</th><th></th></tr></thead><tbody>
-          ${STATE.teams.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.category_name||'—')}</td>
-            <td><div class="tbl-actions"><button class="icon-btn" data-obj="${esc(JSON.stringify(t))}" onclick="teamModal(JSON.parse(this.dataset.obj))">✎</button><button class="icon-btn" onclick="deleteTeam(${t.id})">✕</button></div></td></tr>`).join('')}
-        </tbody></table>` : `<div class="empty">Aucune équipe. Ajoutez-en une, elle apparaîtra ensuite dans le menu Équipes.</div>`}
-      </div>
-    </div>
-  `;
-}
-
 /* ============================================================ INIT */
 
 (async function init(){
@@ -1016,6 +1219,10 @@ function renderEquipesTab(el){
     document.getElementById('app').innerHTML = `<div class="empty" style="padding:80px">Session expirée. <a href="https://erp.meyrinfc.ch" style="color:var(--bleu)">Retour à l'ERP</a></div>`;
     return;
   }
+  STATE.seasons = await api('seasons');
+  const saved = Number(localStorage.getItem('rh_season_id')) || null;
+  const current = STATE.seasons.find(s => s.is_current);
+  STATE.seasonId = (saved && STATE.seasons.some(s => s.id === saved)) ? saved : (current ? current.id : (STATE.seasons[0]?.id || null));
   const initial = (location.hash || '').replace('#', '');
   if (NAV.some(n => n.id === initial)) STATE.page = initial;
   render();
