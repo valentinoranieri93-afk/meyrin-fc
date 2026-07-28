@@ -243,7 +243,7 @@ input:focus,select:focus{outline:none;border-color:var(--jaune-fonce);box-shadow
         <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
         Historique
       </button>
-      <button class="nav-item" data-tab="export" onclick="showTab('export')">
+      <button class="nav-item" data-tab="export" id="navExport" onclick="showTab('export')">
         <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 18h16v2H4z"/></svg>
         Exports
       </button>
@@ -283,10 +283,38 @@ input:focus,select:focus{outline:none;border-color:var(--jaune-fonce);box-shadow
 "use strict";
 
 // ============================================================
-// CONFIGURATION — même valeur que dans api.php
+// CONFIGURATION
+// L'API est authentifiée par la session unique de l'ERP (cookie JWT envoyé
+// automatiquement, même domaine). Plus aucune clé dans cette page.
 // ============================================================
 const API_URL = "api.php";
-const API_KEY = "MEYRIN_CAISSE_2026_VAL";
+// Permissions injectées par index.php.
+// Leur absence signifie que cette page n'a PAS été servie par index.php :
+// soit le serveur a livré index.html directement, soit le navigateur affiche
+// une version en cache. Dans les deux cas on ne devine pas des droits, on
+// repasse par index.php. Sans ce garde-fou, la panne serait silencieuse et
+// l'interface afficherait des boutons sans rapport avec les droits réels.
+if (!window.MFC) {
+  if (!/[?&]wrapped=1/.test(location.search)) {
+    // Une seule tentative, marquée dans l'URL, pour ne jamais boucler.
+    location.replace("index.php?wrapped=1&_=" + Date.now());
+  } else {
+    // Déjà passé par index.php et toujours rien : c'est une erreur de
+    // configuration du serveur. On le dit clairement plutôt que de laisser
+    // l'application tourner avec des droits inventés.
+    document.addEventListener("DOMContentLoaded", function(){
+      document.body.innerHTML =
+        '<div style="font-family:system-ui;max-width:520px;margin:80px auto;padding:28px;'
+      + 'background:#fff;border-radius:14px;color:#15140F;line-height:1.6">'
+      + '<h2 style="margin:0 0 10px">Configuration incomplète</h2>'
+      + "<p>Cette page n'a pas reçu vos droits d'accès. Elle a probablement été servie "
+      + "sans passer par <code>index.php</code>.</p>"
+      + '<p>Signalez-le à l\'administrateur. L\'application ne peut pas fonctionner '
+      + 'correctement dans cet état.</p></div>';
+    });
+  }
+}
+const MFC = window.MFC || {use:false, close:false, reports:false, name:""};
 // ============================================================
 // Intégration CRM Commande — décrémente le stock des articles boutique
 // La clé doit correspondre à celle affichée dans commandes.meyrinfc.ch (Paramètres → Exercice & alertes)
@@ -315,7 +343,8 @@ function migrate(){
 /* ---- Persistance ---- */
 async function load(){
   try{
-    const r=await fetch(API_URL+"?key="+API_KEY);
+    const r=await fetch(API_URL);
+    if(r.status===401){location.href="https://erp.meyrinfc.ch/?redirect="+encodeURIComponent(location.pathname);return;}
     if(!r.ok) throw new Error("HTTP "+r.status);
     DB=await r.json();
     if(!DB.days) DB.days=[];
@@ -332,7 +361,17 @@ async function save(){
   try{localStorage.setItem(KEY_LOCAL,JSON.stringify(DB));}catch(e){}
   setSaveStatus("saving");
   try{
-    const r=await fetch(API_URL+"?key="+API_KEY,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(DB)});
+    const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(DB)});
+    if(r.status===401){location.href="https://erp.meyrinfc.ch/?redirect="+encodeURIComponent(location.pathname);return;}
+    if(r.status===403){
+      /* Droit refusé par le serveur : on recharge l'état réel plutôt que de
+         laisser l'écran afficher une modification qui n'a pas été enregistrée. */
+      let msg="Vous n'avez pas le droit d'effectuer cette action.";
+      try{const j=await r.json(); if(j&&j.error) msg=j.error;}catch(e){}
+      setSaveStatus("warn"); toast("⛔ "+msg);
+      await load(); renderAll();
+      return;
+    }
     if(!r.ok) throw new Error("HTTP "+r.status);
     setSaveStatus("ok");
   }catch(e){
@@ -482,8 +521,13 @@ async function decrementStockRemote(barcode,qty){
   }catch(e){/* le stock CRM Commande est indisponible : la vente en caisse n'est jamais bloquée */}
 }
 function renderJournal(day){const ul=document.getElementById("journalList");if(!ul)return;const mv=(day.mouvements||[]).slice().reverse();if(mv.length===0){ul.innerHTML=`<li class="empty">Aucun mouvement.</li>`;return;}ul.innerHTML=mv.map(m=>`<li class="mvt"><div class="dot ${m.sens}"></div><div class="info"><b>${m.sens==="in"?(m.mode==="carte"?'<span class="mode-ico">💳</span> ':'<span class="mode-ico">💵</span> '):""}${m.cat}</b><span>${m.heure}${m.detail?" · "+escapeHtml(m.detail):""}</span></div><div class="amt ${m.sens}">${m.sens==="in"?"+":"−"}${fmt(m.montant)}</div><button class="del" onclick="delMvt('${m.id}')">✕</button></li>`).join("");}
-async function openDay(){const v=parseFloat((document.getElementById("fondInput").value||"").replace(",","."));if(isNaN(v)||v<0){toast("Fond invalide");return;}DB.days.push({date:todayISO(),fond:v,mouvements:[],cloture:null});await save();renderJour();toast("Journée ouverte");}
+/* Garde d'interface. Le serveur revérifie systématiquement : ceci évite
+   d'afficher une action qui échouerait, ce n'est pas la sécurité elle-même. */
+function needPerm(ok,msg){if(!ok){toast("⛔ "+msg);return false;}return true;}
+
+async function openDay(){if(!needPerm(MFC.use,"Vous n'avez pas le droit d'ouvrir une journée."))return;const v=parseFloat((document.getElementById("fondInput").value||"").replace(",","."));if(isNaN(v)||v<0){toast("Fond invalide");return;}DB.days.push({date:todayISO(),fond:v,mouvements:[],cloture:null});await save();renderJour();toast("Journée ouverte");}
 async function addMvt(){
+  if(!needPerm(MFC.use,"Vous n'avez pas le droit d'enregistrer un mouvement."))return;
   const day=getDay(todayISO());if(!day||day.cloture)return;
   const cat=document.getElementById("catSelect").value,v=parseFloat((document.getElementById("montInput").value||"").replace(",","."));
   const detail=document.getElementById("detailInput").value.trim(),mode=mvtSens==="out"?"especes":mvtMode;
@@ -497,7 +541,7 @@ async function addMvt(){
   await save();renderJour();toast(mvtSens==="in"?"Entrée enregistrée":"Sortie enregistrée");
   if(barcode)decrementStockRemote(barcode,qty);
 }
-async function delMvt(id){const day=getDay(todayISO());if(!day||day.cloture)return;if(!confirm("Supprimer ce mouvement ?"))return;day.mouvements=day.mouvements.filter(m=>m.id!==id);await save();renderJour();}
+async function delMvt(id){if(!needPerm(MFC.use,"Vous n'avez pas le droit de supprimer un mouvement."))return;const day=getDay(todayISO());if(!day||day.cloture)return;if(!confirm("Supprimer ce mouvement ?"))return;day.mouvements=day.mouvements.filter(m=>m.id!==id);await save();renderJour();}
 function previewEcart(kind){
   const day=getDay(todayISO()),t=totals(day);
   if(kind==="especes"){
@@ -515,6 +559,7 @@ function previewEcart(kind){
   }
 }
 async function closeDay(){
+  if(!needPerm(MFC.close,"Vous n'avez pas le droit de clôturer une journée."))return;
   const day=getDay(todayISO());if(!day)return;
   const t=totals(day);
   const compteEspeces=parseFloat((document.getElementById("compteEspecesInput").value||"").replace(",","."));
@@ -526,7 +571,7 @@ async function closeDay(){
   day.cloture={especes:{compte:compteEspeces,theorique:t.theoriqueEspeces,ecart:ecartEspeces},carte:{compte:compteCarte,theorique:t.theoriqueCarte,ecart:ecartCarte},heure:nowHM()};
   await save();renderJour();toast("Journée clôturée");
 }
-async function reopenDay(){const day=getDay(todayISO());if(!day)return;if(!confirm("Rouvrir la journée ?"))return;day.cloture=null;await save();renderJour();toast("Journée rouverte");}
+async function reopenDay(){if(!needPerm(MFC.close,"Vous n'avez pas le droit de rouvrir une journée."))return;const day=getDay(todayISO());if(!day)return;if(!confirm("Rouvrir la journée ?"))return;day.cloture=null;await save();renderJour();toast("Journée rouverte");}
 
 /* ---- Historique ---- */
 let histFilter="tout";
@@ -593,6 +638,10 @@ function exportXLS(){
 (async function init(){
   await load();
   document.getElementById("appLoader").style.display="none";
+  /* L'onglet Exports n'est proposé qu'à qui a le droit de consulter les
+     rapports. Le contenu reste calculé côté navigateur, donc c'est un
+     masquage d'interface, pas un cloisonnement de données. */
+  if(!MFC.reports){const n=document.getElementById("navExport");if(n)n.style.display="none";}
   buildPad();
   if(!DB.pin){pinMode="create";document.getElementById("lockTitle").textContent="Définir un code PIN";document.getElementById("lockSub").textContent="Choisissez un code à 4 chiffres";}
   document.getElementById("lock").style.display="flex";

@@ -1,0 +1,99 @@
+{
+  "_comment": "Catalogue des permissions par application. Source de verite unique, lue par lib/mfc_auth.php et par l'ecran Roles de l'ERP. Ajouter une permission ici suffit a la rendre attribuable. Ne jamais renommer une cle deja utilisee dans roles.json sans migrer les roles.",
+
+  "erp": {
+    "label": "ERP (administration)",
+    "permissions": {
+      "users.manage": "Creer, modifier et desactiver les utilisateurs",
+      "roles.manage": "Creer et modifier les roles et leurs permissions",
+      "apps.manage":  "Activer/desactiver les applications et modifier leur fiche",
+      "logs.view":    "Consulter le journal d'activite et les sessions actives"
+    }
+  },
+
+  "arbitrage": {
+    "label": "Arbitrage",
+    "permissions": {
+      "matches.view":   "Consulter les matchs et les affectations",
+      "matches.edit":   "Creer et modifier les matchs et les affectations",
+      "matches.pay":    "Marquer les indemnites d'arbitrage comme payees",
+      "teams.manage":   "Gerer les equipes et les categories",
+      "seasons.manage": "Creer et basculer les saisons",
+      "import.run":     "Importer un fichier CSV de matchs",
+      "stats.view":     "Consulter les statistiques et le tableau de bord"
+    }
+  },
+
+  "sponsors": {
+    "label": "CRM Sponsoring",
+    "permissions": {
+      "partners.view":       "Consulter les sponsors et leurs contacts",
+      "partners.edit":       "Creer et modifier les sponsors et leurs contacts",
+      "contracts.view":      "Consulter les contrats et les contreparties",
+      "contracts.edit":      "Creer et modifier les contrats et les contreparties",
+      "opportunities.manage":"Gerer le pipeline d'opportunites",
+      "tasks.manage":        "Gerer les taches et relances",
+      "documents.view":      "Consulter et telecharger les documents",
+      "documents.upload":    "Deposer et supprimer des documents",
+      "dashboard.view":      "Consulter le tableau de bord et l'activite"
+    }
+  },
+
+  "events": {
+    "label": "Hub Evenements",
+    "permissions": {
+      "planning.view":       "Consulter les evenements et le planning",
+      "planning.edit":       "Creer et modifier les evenements",
+      "volunteers.manage": "Gerer les benevoles et les postes a pourvoir",
+      "materiel.manage":   "Gerer le materiel des evenements",
+      "documents.manage":  "Deposer et consulter les documents",
+      "settings.manage":   "Modifier les parametres de l'application"
+    }
+  },
+
+  "commandes": {
+    "label": "CRM Commande",
+    "permissions": {
+      "catalog.view":      "Consulter le catalogue, les articles et les variantes",
+      "catalog.edit":      "Creer et modifier les articles, variantes et attributs",
+      "stock.view":        "Consulter les stocks et l'historique des mouvements",
+      "stock.move":        "Effectuer entrees, sorties, transferts et dispatchs",
+      "requests.create":   "Creer une demande de materiel",
+      "requests.validate": "Valider ou refuser les demandes de materiel",
+      "orders.view":       "Consulter les commandes fournisseurs",
+      "orders.edit":       "Creer et modifier les commandes fournisseurs",
+      "orders.receive":    "Receptionner une commande et scanner les articles",
+      "suppliers.manage":  "Gerer les fournisseurs, adresses et contacts",
+      "budgets.view":      "Consulter les budgets par categorie",
+      "budgets.edit":      "Definir et modifier les budgets",
+      "invoices.manage":   "Deposer et traiter les factures fournisseurs",
+      "reports.view":      "Consulter les rapports, exports et valeur du stock",
+      "settings.manage":   "Modifier les parametres, etiquettes et codes promo"
+    }
+  },
+
+  "rh": {
+    "label": "Ressources Humaines",
+    "permissions": {
+      "teams.view":       "Consulter les equipes, categories et postes",
+      "teams.edit":       "Creer et modifier les equipes, categories et postes",
+      "employees.view":   "Consulter les employes et leurs affectations",
+      "employees.edit":   "Creer et modifier les employes et leurs affectations",
+      "indemnites.edit":  "Definir le bareme d'indemnites et les montants par poste",
+      "payroll.view":     "Consulter les salaires, decomptes et regles de paie",
+      "payroll.edit":     "Modifier les salaires, decomptes et regles de paie",
+      "primes.edit":      "Gerer le bareme et les primes de match des joueurs",
+      "imports.run":      "Importer la feuille mensuelle de primes",
+      "export.compta":    "Exporter les donnees pour la fiduciaire"
+    }
+  },
+
+  "caisse": {
+    "label": "Gestion Caisse",
+    "permissions": {
+      "register.use":     "Encaisser, enregistrer des depenses et des mouvements",
+      "register.close":   "Cloturer une journee de caisse",
+      "register.reports": "Consulter l'historique et les rapports de caisse"
+    }
+  }
+}

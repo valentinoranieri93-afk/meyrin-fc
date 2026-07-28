@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 if (!defined('ERP_ROOT')) die('Direct access denied.');
 
 // Clé secrète JWT — à changer après le premier déploiement

@@ -5,12 +5,14 @@
 define('ERP_ROOT', true);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/jwt.php';
+require_once __DIR__ . '/lib/mfc_auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
 // ── Auth ────────────────────────────────────────────────────────────────────
-$token   = $_COOKIE[COOKIE_NAME] ?? '';
-$session = $token ? jwt_decode($token, JWT_SECRET) : null;
+/* mfc_session() applique aussi la liste de révocation : un compte désactivé
+   ou dont le rôle vient de changer perd l'accès à l'API immédiatement. */
+$session = mfc_session();
 
 function require_auth(): void {
     global $session;
@@ -42,6 +44,38 @@ function uid(): string {
     return 'usr_' . substr(md5(uniqid('', true)), 0, 8);
 }
 
+/**
+ * Invalide immédiatement les jetons déjà émis pour un utilisateur.
+ *
+ * Appelée dès qu'un changement doit prendre effet sans attendre l'expiration
+ * naturelle du jeton (8h) : changement de rôle, désactivation, suppression,
+ * modification des permissions d'un rôle. Le guard de chaque application
+ * refuse alors tout jeton émis avant cet horodatage.
+ *
+ * Écrit uniquement dans data/revocations.json, jamais dans users.json.
+ */
+function erp_revoke(array $erp_ids): void {
+    if (!$erp_ids) return;
+    $f   = DATA_DIR . 'revocations.json';
+    $rev = file_exists($f) ? (json_decode(file_get_contents($f), true) ?: []) : [];
+    /* Horodatage exact, sans marge : la comparaison du guard est un
+       « strictement inférieur », donc un jeton réémis dans la même seconde
+       reste accepté. Une marge de +1s ferait boucler la réémission
+       silencieuse de index.php (jeton neuf immédiatement re-refusé). */
+    $ts = time();
+    foreach ($erp_ids as $id) { $rev[(string)$id] = $ts; }
+    file_put_contents($f, json_encode($rev, JSON_PRETTY_PRINT));
+}
+
+/** Identifiants des utilisateurs portant un rôle donné. */
+function erp_users_with_role(string $role): array {
+    $ids = [];
+    foreach (read_json('users.json') as $u) {
+        if (($u['role'] ?? '') === $role) $ids[] = $u['id'];
+    }
+    return $ids;
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
@@ -69,8 +103,12 @@ switch ($action) {
         $name  = trim($input['name'] ?? '');
         $pw    = $input['password'] ?? '';
         $role  = $input['role'] ?? 'stagiaire';
+        $email = strtolower(trim($input['email'] ?? ''));
         if (!$login || !$name || strlen($pw) < 6) {
             json_die(400, 'Login, nom et mot de passe (6 car. min) requis.');
+        }
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            json_die(400, 'Adresse e-mail invalide.');
         }
         $users = read_json('users.json');
         foreach ($users as $u) {
@@ -83,6 +121,7 @@ switch ($action) {
             'login'         => $login,
             'password_hash' => password_hash($pw, PASSWORD_BCRYPT, ['cost' => 12]),
             'name'          => $name,
+            'email'         => $email,
             'role'          => $role,
             'active'        => true,
             'created_at'    => date('Y-m-d'),
@@ -99,17 +138,30 @@ switch ($action) {
         $idx  = -1;
         foreach ($users as $i => $u) { if ($u['id'] === $id) { $idx = $i; break; } }
         if ($idx === -1) json_die(404, 'Utilisateur introuvable.');
+        $revoke = false;   // le changement doit-il couper les sessions en cours ?
         if (isset($input['name']))   $users[$idx]['name']   = trim($input['name']);
+        if (isset($input['email'])) {
+            $email = strtolower(trim($input['email']));
+            if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                json_die(400, 'Adresse e-mail invalide.');
+            }
+            $users[$idx]['email'] = $email;
+        }
         if (isset($input['role']))   {
             $roles = read_json('roles.json');
             if (!isset($roles[$input['role']])) json_die(400, 'Rôle invalide.');
+            if ($users[$idx]['role'] !== $input['role']) $revoke = true;
             $users[$idx]['role'] = $input['role'];
         }
-        if (isset($input['active'])) $users[$idx]['active'] = (bool)$input['active'];
+        if (isset($input['active'])) {
+            if ((bool)$users[$idx]['active'] !== (bool)$input['active']) $revoke = true;
+            $users[$idx]['active'] = (bool)$input['active'];
+        }
         if (!empty($input['password']) && strlen($input['password']) >= 6) {
             $users[$idx]['password_hash'] = password_hash($input['password'], PASSWORD_BCRYPT, ['cost' => 12]);
         }
         write_json('users.json', $users);
+        if ($revoke) erp_revoke([$users[$idx]['id']]);
         erp_log($session['login'], $session['name'], "update_user:{$users[$idx]['login']}");
         json_ok(['message' => 'Utilisateur mis à jour.']);
 
@@ -125,6 +177,7 @@ switch ($action) {
         });
         if (!$login_del) json_die(404, 'Utilisateur introuvable.');
         write_json('users.json', array_values($users));
+        erp_revoke([$id]);
         erp_log($session['login'], $session['name'], "delete_user:$login_del");
         json_ok(['message' => "Utilisateur $login_del supprimé."]);
 
@@ -133,14 +186,66 @@ switch ($action) {
         require_auth();
         json_ok(['roles' => read_json('roles.json')]);
 
+    /* Catalogue des permissions déclarées par les applications (lib/permissions.json).
+       Sert à construire la grille de l'écran Rôles. */
+    case 'permissions_catalog':
+        require_auth();
+        $cat = mfc_permission_catalog();
+        unset($cat['_comment']);
+        json_ok(['catalog' => $cat]);
+
     case 'update_role':
         require_admin();
         $role_key = $input['role'] ?? '';
         $apps     = $input['apps'] ?? [];
         $roles    = read_json('roles.json');
         if (!isset($roles[$role_key])) json_die(404, 'Rôle introuvable.');
-        $roles[$role_key]['apps'] = array_values(array_unique($apps));
+        $apps = array_values(array_unique($apps));
+        $roles[$role_key]['apps'] = $apps;
+
+        /* La matrice d'accès fait autorité sur le périmètre : décocher une app
+           retire aussi ses permissions détaillées, sinon un accès resterait
+           ouvert par le bloc perms alors que l'interrupteur est éteint. */
+        if (!isset($input['perms']) && !empty($roles[$role_key]['perms'])) {
+            $p = array_intersect_key($roles[$role_key]['perms'], array_flip($apps));
+            /* Une app qu'on vient de cocher n'a encore aucune permission réglée :
+               on lui accorde tout le catalogue par défaut. Sans ça, l'accès
+               serait activé dans la matrice mais vide en pratique, ce qui se
+               lirait comme un bug côté utilisateur. */
+            foreach ($apps as $slug) {
+                if (!isset($p[$slug])) {
+                    $keys = mfc_app_permission_keys($slug);
+                    $p[$slug] = $keys ?: ['*'];
+                }
+            }
+            $roles[$role_key]['perms'] = $p;
+        }
+
+        /* Permissions détaillées, envoyées seulement par la modale dédiée.
+           Absentes d'un simple enregistrement de la matrice d'accès : on ne
+           veut pas effacer silencieusement des permissions déjà réglées. */
+        if (isset($input['perms']) && is_array($input['perms'])) {
+            $catalog = mfc_permission_catalog();
+            $clean   = [];
+            foreach ($input['perms'] as $app => $keys) {
+                if (!isset($catalog[$app]) || !is_array($keys)) continue;
+                /* Refus par défaut : seule une clé réellement déclarée au
+                   catalogue est acceptée. Une clé inventée est ignorée. */
+                $valid = array_values(array_intersect(
+                    $keys, array_keys($catalog[$app]['permissions'] ?? [])
+                ));
+                if ($valid) $clean[$app] = $valid;
+            }
+            $roles[$role_key]['perms'] = $clean;
+            /* La liste d'apps reste cohérente avec les permissions accordées :
+               une app sans aucune permission n'est plus accessible. */
+            $roles[$role_key]['apps'] = array_values(array_keys($clean));
+        }
+
         write_json('roles.json', $roles);
+        /* Les porteurs de ce rôle doivent voir le changement tout de suite,
+           pas à leur prochaine connexion. */
+        erp_revoke(erp_users_with_role($role_key));
         erp_log($session['login'], $session['name'], "update_role:$role_key");
         json_ok(['message' => "Rôle $role_key mis à jour."]);
 

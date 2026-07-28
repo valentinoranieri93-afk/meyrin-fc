@@ -1,7 +1,8 @@
-﻿<?php
+<?php
 define('ERP_ROOT', true);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/jwt.php';
+require_once __DIR__ . '/lib/mfc_auth.php';
 
 // ── Setup check ─────────────────────────────────────────────────────────────
 $users = json_decode(file_get_contents(DATA_DIR . 'users.json'), true) ?: [];
@@ -10,9 +11,10 @@ if (empty($users) || ($users[0]['password_hash'] ?? '') === '__SETUP_REQUIRED__'
 }
 
 // ── Session ──────────────────────────────────────────────────────────────────
-$session = null;
-$token   = $_COOKIE[COOKIE_NAME] ?? '';
-if ($token) $session = jwt_decode($token, JWT_SECRET);
+/* mfc_session() plutôt que jwt_decode() : vérifie en plus la liste de
+   révocation, pour qu'un changement de rôle ou une désactivation prenne effet
+   à la requête suivante et non à l'expiration du jeton (8h). */
+$session = mfc_session();
 
 // ── Login POST ───────────────────────────────────────────────────────────────
 $login_error = '';
@@ -26,38 +28,100 @@ if (!$session && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     if ($found) {
-        $roles = json_decode(file_get_contents(DATA_DIR . 'roles.json'), true);
-        $rd    = $roles[$found['role']] ?? [];
-        $jwt   = jwt_encode([
-            'sub'      => $found['id'],
-            'name'     => $found['name'],
-            'login'    => $found['login'],
-            'role'     => $found['role'],
-            'apps'     => $rd['apps'] ?? [],
-            'settings' => (bool)($rd['can_access_settings'] ?? false),
-            'iat'      => time(),
-            'exp'      => time() + JWT_DURATION,
-        ], JWT_SECRET);
-        setcookie(COOKIE_NAME, $jwt, [
-            'expires'  => time() + JWT_DURATION,
-            'path'     => '/',
-            'domain'   => COOKIE_DOMAIN,
-            'secure'   => true,
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
+        erp_issue_token($found);
         erp_log($found['login'], $found['name'], 'login');
         foreach ($users as &$u) {
             if ($u['id'] === $found['id']) { $u['last_login'] = date('c'); break; }
         }
+        unset($u);
         file_put_contents(DATA_DIR . 'users.json', json_encode($users, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-        $redirect = $_GET['redirect'] ?? '/';
-        header('Location: ' . (str_starts_with($redirect, '/') ? $redirect : '/'));
+        header('Location: ' . erp_safe_redirect($_GET['redirect'] ?? '/'));
         exit;
     } else {
         $login_error = 'Identifiant ou mot de passe incorrect.';
         erp_log($login ?: '?', '—', 'login_failed');
     }
+}
+
+/* ── Réémission silencieuse ───────────────────────────────────────────────────
+   Jeton correctement signé et non expiré, mais refusé par la révocation : le
+   plus souvent parce que les droits de la personne viennent de changer. Tant
+   que son compte est actif, on lui délivre un jeton à jour sans lui redemander
+   son mot de passe. Sans ça, la moindre modification de permissions
+   déconnecterait tout le monde, ce qui pousserait à ne plus y toucher. */
+if (!$session && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    $raw = mfc_raw_session();
+    if ($raw) {
+        foreach ($users as $u) {
+            if ($u['id'] === ($raw['sub'] ?? '') && ($u['active'] ?? true)) {
+                erp_issue_token($u);
+                /* La révocation a joué son rôle : on la retire, sinon un
+                   décalage d'horloge d'une seconde suffirait à faire boucler
+                   la redirection. Ceci borne aussi la taille du fichier. */
+                $rf  = DATA_DIR . 'revocations.json';
+                $rev = file_exists($rf) ? (json_decode(file_get_contents($rf), true) ?: []) : [];
+                unset($rev[$u['id']]);
+                file_put_contents($rf, json_encode($rev, JSON_PRETTY_PRINT));
+                erp_log($u['login'], $u['name'], 'token_refresh');
+                /* On renvoie la personne là où elle voulait aller. Sans ça,
+                   quelqu'un dont les droits viennent de changer et qui était
+                   dans une application atterrit sur le portail de l'ERP sans
+                   comprendre pourquoi il a été sorti de son écran. */
+                $back = (string)($_GET['redirect'] ?? '');
+                header('Location: ' . ($back !== ''
+                    ? erp_safe_redirect($back)
+                    : ($_SERVER['REQUEST_URI'] ?: '/')));
+                exit;
+            }
+        }
+    }
+}
+
+/** Émet le cookie de session pour un utilisateur donné. */
+function erp_issue_token(array $user): void {
+    $roles = json_decode(file_get_contents(DATA_DIR . 'roles.json'), true);
+    $rd    = $roles[$user['role']] ?? [];
+    /* Permissions détaillées par application. Un rôle qui n'a pas encore de
+       bloc "perms" reçoit toutes les permissions de ses apps : le jeton reste
+       donc équivalent à l'ancien tant que rien n'a été restreint. */
+    $perms = mfc_role_permissions($rd);
+    $jwt   = jwt_encode([
+        'sub'      => $user['id'],
+        'name'     => $user['name'],
+        'login'    => $user['login'],
+        'role'     => $user['role'],
+        'apps'     => array_values(array_keys($perms)),
+        'perms'    => $perms,
+        'settings' => (bool)($rd['can_access_settings'] ?? false),
+        'iat'      => time(),
+        'exp'      => time() + JWT_DURATION,
+    ], JWT_SECRET);
+    setcookie(COOKIE_NAME, $jwt, [
+        'expires'  => time() + JWT_DURATION,
+        'path'     => '/',
+        'domain'   => COOKIE_DOMAIN,
+        'secure'   => true,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+}
+
+/**
+ * Destination de retour après connexion, validée.
+ *
+ * N'accepte qu'un chemin local ou une URL du domaine meyrinfc.ch. Sans ce
+ * filtre, un lien du type `erp.meyrinfc.ch/?redirect=https://site-pirate/`
+ * enverrait la personne ailleurs juste après sa connexion, sur une page qui
+ * aurait toute l'apparence de l'ERP.
+ */
+function erp_safe_redirect(string $to): string {
+    if ($to === '') return '/';
+    if (str_starts_with($to, '/') && !str_starts_with($to, '//')) return $to;
+    $p = parse_url($to);
+    $host = strtolower($p['host'] ?? '');
+    $okScheme = ($p['scheme'] ?? '') === 'https';
+    $okHost   = $host === 'meyrinfc.ch' || str_ends_with($host, '.meyrinfc.ch');
+    return ($okScheme && $okHost) ? $to : '/';
 }
 
 function erp_log(string $user, string $name, string $action): void {
@@ -225,6 +289,15 @@ input,select{font-family:inherit;font-size:14px;outline:none}
 .switch input:checked+.switch-slider::before{transform:translateX(16px)}
 
 /* ── Roles matrix ── */
+.perm-block{border:1px solid var(--ligne);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.perm-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;background:#FAFAF7;border-bottom:1px solid var(--ligne-2);font-size:13px;font-weight:700}
+.perm-row{display:flex;align-items:flex-start;gap:10px;padding:8px 12px;border-bottom:1px solid var(--ligne-2);cursor:pointer;font-size:13px}
+.perm-row:last-child{border-bottom:none}
+.perm-row:hover{background:#FAFAF7}
+.perm-row input{margin-top:3px;flex:none}
+.perm-row span{display:flex;flex-direction:column;gap:1px}
+.perm-row strong{font-weight:500}
+.perm-row code{font-size:11px;color:var(--gris-2)}
 .roles-matrix{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r);overflow:hidden}
 .roles-matrix table{width:100%;border-collapse:collapse}
 .roles-matrix th{padding:12px 16px;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--gris-2);background:#FAFAF7;border-bottom:1px solid var(--ligne);text-align:center}
@@ -435,7 +508,7 @@ $role_info  = $roles_data[$session['role']] ?? ['label' => $session['role'], 'co
           <div class="s-title">Utilisateurs</div>
           <div class="s-desc">Gérez les comptes d'accès à l'ERP.</div>
         </div>
-        <button class="btn btn-primary" onclick="openModal('modal-add-user')">
+        <button class="btn btn-primary" onclick="openAddUser()">
           <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z"/></svg>
           Ajouter
         </button>
@@ -537,13 +610,13 @@ $role_info  = $roles_data[$session['role']] ?? ['label' => $session['role'], 'co
     <div class="modal-error" id="add-user-error"></div>
     <div class="m-field"><label>Prénom Nom</label><input type="text" id="add-name" placeholder="Jean Dupont"></div>
     <div class="m-field"><label>Login</label><input type="text" id="add-login" placeholder="jean.dupont"><small>Identifiant de connexion, sans espaces.</small></div>
+    <div class="m-field"><label>E-mail</label><input type="email" id="add-email" placeholder="jean.dupont@meyrinfc.ch"><small>Sert à relier ce compte à ses données dans les applications.</small></div>
     <div class="m-field"><label>Mot de passe</label><input type="password" id="add-pw" placeholder="Min. 6 caractères"></div>
     <div class="m-field">
       <label>Rôle</label>
       <select id="add-role">
-        <option value="stagiaire">Stagiaire</option>
-        <option value="staff">Staff</option>
-        <option value="admin">Administrateur</option>
+        <!-- Rempli dynamiquement depuis roles.json par fillRoleSelects(). -->
+        <option value="">Chargement des rôles...</option>
       </select>
     </div>
     <div class="modal-actions">
@@ -560,12 +633,12 @@ $role_info  = $roles_data[$session['role']] ?? ['label' => $session['role'], 'co
     <div class="modal-error" id="edit-user-error"></div>
     <input type="hidden" id="edit-id">
     <div class="m-field"><label>Prénom Nom</label><input type="text" id="edit-name"></div>
+    <div class="m-field"><label>E-mail</label><input type="email" id="edit-email" placeholder="jean.dupont@meyrinfc.ch"><small>Sert à relier ce compte à ses données dans les applications.</small></div>
     <div class="m-field">
       <label>Rôle</label>
       <select id="edit-role">
-        <option value="stagiaire">Stagiaire</option>
-        <option value="staff">Staff</option>
-        <option value="admin">Administrateur</option>
+        <!-- Rempli dynamiquement depuis roles.json par fillRoleSelects(). -->
+        <option value="">Chargement des rôles...</option>
       </select>
     </div>
     <div class="m-field"><label>Nouveau mot de passe <small style="font-weight:400">(laisser vide pour ne pas changer)</small></label><input type="password" id="edit-pw" placeholder="Laisser vide pour ne pas modifier"></div>
@@ -576,6 +649,21 @@ $role_info  = $roles_data[$session['role']] ?? ['label' => $session['role'], 'co
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-edit-user')">Annuler</button>
       <button class="btn btn-primary" onclick="updateUser()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal : Permissions détaillées d'un rôle ── -->
+<div class="modal-overlay" id="modal-perms">
+  <div class="modal" style="max-width:620px">
+    <h3>Permissions · <span id="perms-role-name"></span></h3>
+    <div class="s-desc" style="margin:-6px 0 14px">Décochez ce que ce rôle ne doit pas pouvoir faire. Une application dont toutes les permissions sont décochées devient inaccessible.</div>
+    <div class="modal-error" id="perms-error"></div>
+    <input type="hidden" id="perms-role-key">
+    <div id="perms-body" style="max-height:52vh;overflow-y:auto;margin:0 -4px;padding:0 4px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-perms')">Annuler</button>
+      <button class="btn btn-primary" onclick="savePerms()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -680,19 +768,47 @@ function roleBadge(role) {
 }
 
 // ── USERS ────────────────────────────────────────────────────────────────────
+/* Recharge le cache des rôles. `force` sert après création ou suppression d'un
+   rôle, pour que les listes déroulantes reflètent la réalité sans rechargement
+   de page. */
+async function ensureRoles(force) {
+  if (!force && Object.keys(_rolesCache).length) return;
+  const rr = await api('roles');
+  if (!rr.ok) return;
+  _rolesCache = {};
+  _rolesRaw   = rr.roles || {};
+  Object.entries(rr.roles).forEach(([key, role]) => {
+    _rolesCache[key] = {label: role.label, color: role.color, bg: role.color_bg};
+  });
+}
+
+/* Les listes de rôles des modales utilisateur étaient écrites en dur dans le
+   HTML (stagiaire/staff/admin) : tout rôle créé ensuite restait invisible et
+   donc inattribuable. Elles sont désormais construites depuis roles.json. */
+function fillRoleSelects(selected) {
+  const opts = Object.entries(_rolesCache)
+    .map(([key, r]) => `<option value="${esc(key)}">${esc(r.label)}</option>`).join('');
+  ['add-role', 'edit-role'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const keep = el.value;
+    el.innerHTML = opts;
+    const want = (id === 'edit-role' && selected) ? selected : keep;
+    if (want && _rolesCache[want]) el.value = want;
+  });
+}
+
 async function loadUsers() {
-  if (!Object.keys(_rolesCache).length) {
-    const rr = await api('roles');
-    if (rr.ok) Object.entries(rr.roles).forEach(([key, role]) => {
-      _rolesCache[key] = {label: role.label, color: role.color, bg: role.color_bg};
-    });
-  }
+  await ensureRoles();
+  fillRoleSelects();
   const res = await api('users');
   const tbody = document.getElementById('users-tbody');
   if (!res.ok) { tbody.innerHTML = `<tr><td colspan="6" style="color:var(--rouge);padding:20px">${res.error}</td></tr>`; return; }
   tbody.innerHTML = res.users.map(u => `
     <tr>
-      <td style="font-weight:600">${esc(u.name)}</td>
+      <td style="font-weight:600">${esc(u.name)}
+        <div style="font-weight:400;font-size:11.5px;color:${u.email ? 'var(--gris-2)' : 'var(--rouge)'}">${u.email ? esc(u.email) : 'e-mail manquant'}</div>
+      </td>
       <td><code style="font-size:12px;background:var(--bg);padding:2px 7px;border-radius:5px">${esc(u.login)}</code></td>
       <td>${roleBadge(u.role)}</td>
       <td>${u.active ? '<span class="badge" style="background:var(--vert-bg);color:var(--vert)"><span class="badge-dot"></span>Actif</span>' : '<span class="badge" style="background:var(--rouge-bg);color:var(--rouge)"><span class="badge-dot"></span>Inactif</span>'}</td>
@@ -704,9 +820,30 @@ async function loadUsers() {
     </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--gris-2);padding:20px">Aucun utilisateur.</td></tr>';
 }
 
-function editUser(u) {
+async function openAddUser() {
+  await ensureRoles();
+  fillRoleSelects();
+  /* Présélection du rôle le moins doté plutôt que du premier de la liste :
+     créer un compte trop puissant par inattention doit être impossible en
+     laissant simplement le champ tel quel. */
+  const sel = document.getElementById('add-role');
+  const keys = Object.keys(_rolesCache);
+  if (sel && keys.length) {
+    keys.sort((a, b) => ((_rolesRaw[a] || {}).apps || []).length - ((_rolesRaw[b] || {}).apps || []).length);
+    sel.value = keys[0];
+  }
+  openModal('modal-add-user');
+}
+
+async function editUser(u) {
+  await ensureRoles();
+  /* La liste est remplie avant d'y sélectionner le rôle : sinon un rôle
+     absent des options serait silencieusement ignoré par le navigateur, et
+     l'écran afficherait un rôle qui n'est pas celui de la personne. */
+  fillRoleSelects(u.role);
   document.getElementById('edit-id').value = u.id;
   document.getElementById('edit-name').value = u.name;
+  document.getElementById('edit-email').value = u.email || '';
   document.getElementById('edit-role').value = u.role;
   document.getElementById('edit-active').checked = !!u.active;
   document.getElementById('edit-pw').value = '';
@@ -716,7 +853,7 @@ function editUser(u) {
 
 async function createUser() {
   const err = document.getElementById('add-user-error');
-  const data = { name: document.getElementById('add-name').value, login: document.getElementById('add-login').value, password: document.getElementById('add-pw').value, role: document.getElementById('add-role').value };
+  const data = { name: document.getElementById('add-name').value, login: document.getElementById('add-login').value, email: document.getElementById('add-email').value, password: document.getElementById('add-pw').value, role: document.getElementById('add-role').value };
   const res = await api('create_user', data, 'POST');
   if (!res.ok) { err.textContent = res.error; err.style.display='block'; return; }
   closeModal('modal-add-user');
@@ -726,7 +863,7 @@ async function createUser() {
 
 async function updateUser() {
   const err = document.getElementById('edit-user-error');
-  const data = { id: document.getElementById('edit-id').value, name: document.getElementById('edit-name').value, role: document.getElementById('edit-role').value, active: document.getElementById('edit-active').checked, password: document.getElementById('edit-pw').value };
+  const data = { id: document.getElementById('edit-id').value, name: document.getElementById('edit-name').value, email: document.getElementById('edit-email').value, role: document.getElementById('edit-role').value, active: document.getElementById('edit-active').checked, password: document.getElementById('edit-pw').value };
   const res = await api('update_user', data, 'POST');
   if (!res.ok) { err.textContent = res.error; err.style.display='block'; return; }
   closeModal('modal-edit-user');
@@ -741,15 +878,18 @@ async function deleteUser(id, name) {
 }
 
 // ── ROLES ────────────────────────────────────────────────────────────────────
-let _apps = [];
+let _apps = [], _catalog = {}, _rolesRaw = {};
 async function loadRoles() {
-  const [rr, ar] = await Promise.all([api('roles'), api('apps')]);
+  const [rr, ar, cr] = await Promise.all([api('roles'), api('apps'), api('permissions_catalog')]);
   if (!rr.ok) return;
   _apps = ar.apps || [];
+  _catalog = (cr && cr.ok) ? (cr.catalog || {}) : {};
+  _rolesRaw = rr.roles || {};
   _rolesCache = {};
   Object.entries(rr.roles).forEach(([key, role]) => {
     _rolesCache[key] = {label: role.label, color: role.color, bg: role.color_bg};
   });
+  fillRoleSelects();
   const thead = document.getElementById('roles-thead');
   const tbody = document.getElementById('roles-tbody');
   thead.innerHTML = '<th>Rôle</th>' + _apps.map(a => `<th>${esc(a.name)}</th>`).join('') + '<th></th>';
@@ -759,8 +899,8 @@ async function loadRoles() {
       ${_apps.map(a => `<td><label class="switch"><input type="checkbox" data-app="${a.slug}" ${role.apps.includes(a.slug)?'checked':''}${key==='admin'?'disabled':''}><span class="switch-slider"></span></label></td>`).join('')}
       <td style="text-align:right;white-space:nowrap">
         ${key !== 'admin'
-          ? `<button class="btn btn-ghost btn-sm" onclick='openEditRole(${JSON.stringify({key,label:role.label,color:role.color,color_bg:role.color_bg})})' style="margin-right:6px">Modifier</button><button class="btn btn-danger btn-sm" onclick="deleteRole('${key}','${esc(role.label)}')">Supprimer</button>`
-          : '<span style="font-size:11px;color:var(--gris-2)">Rôle système</span>'}
+          ? `<button class="btn btn-ghost btn-sm" onclick="openPerms('${key}')" style="margin-right:6px">${permsLabel(role)}</button><button class="btn btn-ghost btn-sm" onclick='openEditRole(${JSON.stringify({key,label:role.label,color:role.color,color_bg:role.color_bg})})' style="margin-right:6px">Modifier</button><button class="btn btn-danger btn-sm" onclick="deleteRole('${key}','${esc(role.label)}')">Supprimer</button>`
+          : '<span style="font-size:11px;color:var(--gris-2)">Rôle système · tous droits</span>'}
       </td>
     </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--gris-2);padding:20px">Aucun rôle.</td></tr>';
 }
@@ -775,6 +915,77 @@ async function saveRoles() {
     if (!res.ok) { toast(res.error, 'error'); return; }
   }
   toast('Accès mis à jour.');
+}
+
+// ── PERMISSIONS DÉTAILLÉES ───────────────────────────────────────────────────
+/* Rend visible un comportement autrement invisible : tant qu'on n'a rien
+   restreint, cocher une application dans la matrice accorde TOUTES ses
+   permissions. Le bouton dit donc l'état réel, au lieu de laisser croire
+   qu'un rôle neuf serait limité. */
+function permsLabel(role) {
+  const apps = role.apps || [];
+  let total = 0;
+  apps.forEach(s => { total += Object.keys((_catalog[s] || {}).permissions || {}).length; });
+  if (!apps.length) return 'Permissions';
+  if (!role.perms)  return `Permissions · tous les droits (${total})`;
+  let granted = 0;
+  apps.forEach(s => { granted += ((role.perms || {})[s] || []).length; });
+  return granted >= total
+    ? `Permissions · tous les droits (${total})`
+    : `Permissions · ${granted}/${total}`;
+}
+
+function openPerms(key) {
+  const role = _rolesRaw[key] || {};
+  const granted = role.perms || null;   // null = pas encore réglé => tout accordé
+  const allowedApps = role.apps || [];
+  const body = document.getElementById('perms-body');
+
+  document.getElementById('perms-role-key').value = key;
+  document.getElementById('perms-role-name').textContent = role.label || key;
+
+  const blocks = allowedApps.filter(slug => _catalog[slug]).map(slug => {
+    const app  = _catalog[slug];
+    const has  = granted ? (granted[slug] || []) : Object.keys(app.permissions);
+    const list = Object.entries(app.permissions).map(([pk, label]) => `
+      <label class="perm-row">
+        <input type="checkbox" data-app="${slug}" value="${pk}" ${has.includes(pk) ? 'checked' : ''}>
+        <span><strong>${esc(label)}</strong><code>${slug}.${pk}</code></span>
+      </label>`).join('');
+    return `<div class="perm-block">
+      <div class="perm-head">
+        <span>${esc(app.label)}</span>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="togglePermApp('${slug}')">Tout / rien</button>
+      </div>${list}</div>`;
+  }).join('');
+
+  body.innerHTML = blocks || `<div style="padding:16px;color:var(--gris-2);font-size:13px">
+    Ce rôle n'a accès à aucune application. Activez d'abord un accès dans la matrice, puis revenez ici.</div>`;
+
+  document.getElementById('perms-error').style.display = 'none';
+  openModal('modal-perms');
+}
+
+function togglePermApp(slug) {
+  const boxes = document.querySelectorAll(`#perms-body input[data-app="${slug}"]`);
+  const allOn = [...boxes].every(b => b.checked);
+  boxes.forEach(b => b.checked = !allOn);
+}
+
+async function savePerms() {
+  const key = document.getElementById('perms-role-key').value;
+  const perms = {};
+  document.querySelectorAll('#perms-body input[data-app]:checked').forEach(b => {
+    (perms[b.dataset.app] = perms[b.dataset.app] || []).push(b.value);
+  });
+  const res = await api('update_role', {role: key, apps: Object.keys(perms), perms}, 'POST');
+  if (!res.ok) {
+    const err = document.getElementById('perms-error');
+    err.textContent = res.error; err.style.display = 'block'; return;
+  }
+  closeModal('modal-perms');
+  toast('Permissions mises à jour. Les utilisateurs concernés les voient immédiatement.');
+  loadRoles();
 }
 
 function openEditRole(r) {

@@ -1,0 +1,13 @@
+# erp.meyrinfc.ch — service des fichiers
+#
+# S'applique aussi aux modules internes (rh/), dont l'interface est un gabarit
+# index.html lu par index.php et qui ne doit jamais être servi directement.
+DirectoryIndex index.php
+
+<Files "index.html">
+    Require all denied
+</Files>
+
+# Les outils de migration ne sont accessibles qu'aux administrateurs (contrôle
+# fait en PHP). Cette règle interdit en plus de lister le dossier.
+Options -Indexes

@@ -1,0 +1,13 @@
+# commandes.meyrinfc.ch — service des fichiers
+#
+# 1. L'URL nue doit exécuter index.php, jamais servir index.html directement.
+#    Sans cette ligne, l'ordre par défaut du serveur peut placer index.html en
+#    premier : l'interface serait alors servie sans aucune authentification.
+DirectoryIndex index.php
+
+# 2. index.html n'est pas une page, c'est le gabarit lu par index.php.
+#    On interdit d'y accéder directement par son URL. La lecture depuis le
+#    disque par PHP n'est pas concernée par cette règle.
+<Files "index.html">
+    Require all denied
+</Files>

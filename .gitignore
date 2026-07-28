@@ -10,3 +10,17 @@
 # Environnement
 .env
 *.env
+
+# État vivant du serveur — ne doit jamais être versionné ni redéployé
+# (leçon du 2026-07-10 : ré-uploader data/ écrase les comptes réels)
+erp.meyrinfc.ch/data/users.json
+erp.meyrinfc.ch/data/logs.json
+erp.meyrinfc.ch/data/revocations.json
+
+# Dossiers de sauvegarde locaux
+_Backup/
+**/_Backup/
+**/*.bak-*
+
+# Outils de diagnostic temporaires déposés à la racine d'une app
+mfc_check.php
