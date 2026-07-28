@@ -761,6 +761,12 @@ function fmtDate(ts) {
   if (!ts) return '—';
   return new Date(ts).toLocaleString('fr-CH', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 }
+/* Identifiant du compte connecté : on ne propose pas de supprimer son propre
+   compte. Le serveur refuse en plus de retirer le dernier administrateur,
+   quel qu'il soit (l'ancienne protection ciblait `usr_1` en dur, un
+   identifiant qui n'existe sur aucune installation réelle). */
+const _me     = <?= json_encode($session['sub'] ?? '') ?>;
+const _myRole = <?= json_encode($session['role'] ?? '') ?>;
 let _rolesCache = {};
 function roleBadge(role) {
   const r = _rolesCache[role] || {label:role,color:'#6E6C61',bg:'#F0EDE4'};
@@ -815,7 +821,7 @@ async function loadUsers() {
       <td style="color:var(--gris-2)">${fmtDate(u.last_login)}</td>
       <td style="text-align:right">
         <button class="btn btn-ghost btn-sm" onclick='editUser(${JSON.stringify(u)})' style="margin-right:6px">Modifier</button>
-        ${u.id !== 'usr_1' ? `<button class="btn btn-danger btn-sm" onclick="deleteUser('${esc(u.id)}','${esc(u.name)}')">Supprimer</button>` : ''}
+        ${u.id !== _me ? `<button class="btn btn-danger btn-sm" onclick="deleteUser('${esc(u.id)}','${esc(u.name)}')">Supprimer</button>` : '<span style="font-size:11px;color:var(--gris-2)">Votre compte</span>'}
       </td>
     </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--gris-2);padding:20px">Aucun utilisateur.</td></tr>';
 }
@@ -863,6 +869,24 @@ async function createUser() {
 
 async function updateUser() {
   const err = document.getElementById('edit-user-error');
+  /* Se retirer soi-même l'accès à l'administration est autorisé tant qu'un
+     autre administrateur existe (le serveur refuse le dernier), mais ça ne
+     doit jamais arriver par surprise : sans cet avertissement, on se retrouve
+     enfermé dehors sans comprendre ce qui s'est passé. */
+  {
+    const id = document.getElementById('edit-id').value;
+    const newRole = document.getElementById('edit-role').value;
+    const stillActive = document.getElementById('edit-active').checked;
+    const wasAdmin = !!(_rolesRaw[_myRole] || {}).can_access_settings;
+    const willBeAdmin = stillActive && !!(_rolesRaw[newRole] || {}).can_access_settings;
+    if (id === _me && wasAdmin && !willBeAdmin) {
+      const ok = confirm(
+        "Vous êtes sur le point de retirer VOTRE propre accès à l'administration.\n\n"
+      + "Vous perdrez immédiatement l'accès à cet écran et il vous faudra un autre "
+      + "administrateur pour vous le rendre.\n\nContinuer ?");
+      if (!ok) return;
+    }
+  }
   const data = { id: document.getElementById('edit-id').value, name: document.getElementById('edit-name').value, email: document.getElementById('edit-email').value, role: document.getElementById('edit-role').value, active: document.getElementById('edit-active').checked, password: document.getElementById('edit-pw').value };
   const res = await api('update_user', data, 'POST');
   if (!res.ok) { err.textContent = res.error; err.style.display='block'; return; }

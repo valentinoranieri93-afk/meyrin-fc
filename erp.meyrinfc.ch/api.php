@@ -67,6 +67,27 @@ function erp_revoke(array $erp_ids): void {
     file_put_contents($f, json_encode($rev, JSON_PRETTY_PRINT));
 }
 
+/**
+ * Identifiants des comptes actifs pouvant administrer l'ERP.
+ *
+ * Sert à empêcher la suppression ou la désactivation du dernier d'entre eux.
+ * L'ancienne protection visait l'identifiant `usr_1` en dur, qui ne correspond
+ * à aucun compte réel : elle ne protégeait donc rien. Depuis que toutes les
+ * applications dépendent de cette session unique, perdre le dernier compte
+ * administrateur revient à perdre l'accès à tout l'ERP, sans recours par
+ * l'interface.
+ */
+function erp_admin_ids(?array $users = null): array {
+    $users = $users ?? read_json('users.json');
+    $roles = read_json('roles.json');
+    $ids   = [];
+    foreach ($users as $u) {
+        if (!($u['active'] ?? true)) continue;
+        if (!empty($roles[$u['role'] ?? '']['can_access_settings'])) $ids[] = $u['id'];
+    }
+    return $ids;
+}
+
 /** Identifiants des utilisateurs portant un rôle donné. */
 function erp_users_with_role(string $role): array {
     $ids = [];
@@ -160,6 +181,11 @@ switch ($action) {
         if (!empty($input['password']) && strlen($input['password']) >= 6) {
             $users[$idx]['password_hash'] = password_hash($input['password'], PASSWORD_BCRYPT, ['cost' => 12]);
         }
+        /* Vérifié sur l'état APRÈS modification : c'est le seul moment où l'on
+           sait si le changement demandé laisse l'ERP sans administrateur. */
+        if (erp_admin_ids($users) === []) {
+            json_die(403, "Ce changement retirerait le dernier compte administrateur. Nommez un autre administrateur avant.");
+        }
         write_json('users.json', $users);
         if ($revoke) erp_revoke([$users[$idx]['id']]);
         erp_log($session['login'], $session['name'], "update_user:{$users[$idx]['login']}");
@@ -168,7 +194,10 @@ switch ($action) {
     case 'delete_user':
         require_admin();
         $id = $input['id'] ?? '';
-        if ($id === 'usr_1') json_die(403, 'Impossible de supprimer le compte admin principal.');
+        $admins = erp_admin_ids();
+        if (in_array($id, $admins, true) && count($admins) <= 1) {
+            json_die(403, "Impossible de supprimer le dernier compte administrateur : plus personne ne pourrait administrer cet ERP.");
+        }
         $users = read_json('users.json');
         $login_del = '';
         $users = array_filter($users, function($u) use ($id, &$login_del) {

@@ -24,10 +24,14 @@ register_shutdown_function(function () {
   }
 });
 
-require_once __DIR__ . '/guard.php'; // vérifie la session ERP + accès app 'rh', expose $rh_session (démarre aussi le tampon de sortie, voir guard.php)
+require_once __DIR__ . '/mfc_boot.php';
 require_once __DIR__ . '/config.php';
 
-ob_clean(); // purge le BOM éventuellement bufferisé par ../config.php avant le vrai corps de réponse
+/* Session ERP + accès au module. Répond 401/403 en JSON si besoin.
+   $rh_session est conservé : le reste du fichier s'en sert déjà. */
+$rh_session = mfc_require_api('rh');
+
+if (ob_get_level() > 0) ob_clean();
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -764,6 +768,62 @@ PROMPT;
 $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 $b = body();
+
+/* ---------------------------------------------------------------- Permissions
+ *
+ * Table déclarative plutôt qu'une vérification dans chacun des 29 blocs :
+ * une seule liste à relire pour savoir qui peut faire quoi, et impossible
+ * d'oublier un contrôle au milieu d'un case.
+ *
+ * Format : action => permission unique, ou ['GET' => perm, 'write' => perm]
+ * quand lire et modifier ne demandent pas le même droit. 'write' couvre
+ * POST, PUT, PATCH et DELETE.
+ *
+ * REFUS PAR DÉFAUT : toute action absente de cette table exige le droit le
+ * plus élevé du module. Ajouter un point d'entrée sans y penser le rend donc
+ * inaccessible, plutôt que public.
+ */
+const RH_PERMS = [
+  'me'                     => null,   // identité de la personne connectée, aucun droit particulier
+  'seasons'                => ['GET' => 'teams.view',      'write' => 'teams.edit'],
+  'postes'                 => ['GET' => 'teams.view',      'write' => 'indemnites.edit'],
+  'team_categories'        => ['GET' => 'teams.view',      'write' => 'teams.edit'],
+  'team_categories_reorder'=> 'teams.edit',
+  'teams'                  => ['GET' => 'teams.view',      'write' => 'teams.edit'],
+  'teams_reorder'          => 'teams.edit',
+  'team_totals'            => 'teams.view',
+  'category_totals'        => 'teams.view',
+  'payment_totals'         => 'teams.view',
+  'dashboard'              => 'teams.view',
+  'employees'              => ['GET' => 'employees.view',  'write' => 'employees.edit'],
+  'employee_assignments'   => ['GET' => 'employees.view',  'write' => 'employees.edit'],
+  'indemnites_custom'      => ['GET' => 'employees.view',  'write' => 'indemnites.edit'],
+  'payroll_rules'          => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
+  'employee_payroll_rules' => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
+  'players'                => ['GET' => 'employees.view',  'write' => 'primes.edit'],
+  'matches'                => ['GET' => 'employees.view',  'write' => 'primes.edit'],
+  'primes_matrix'          => ['GET' => 'employees.view',  'write' => 'primes.edit'],
+  'match_cell'             => 'primes.edit',
+  'match_add_guest'        => 'primes.edit',
+  'import_upload'          => 'imports.run',
+  'imports'                => 'imports.run',
+  'import_get'             => 'imports.run',
+  'import_validate'        => 'imports.run',
+  'import_discard'         => 'imports.run',
+  'import_employees_file'  => 'imports.run',
+  'export_compta'          => 'export.compta',
+];
+
+$rh_rule = array_key_exists($action, RH_PERMS)
+  ? RH_PERMS[$action]
+  : 'payroll.edit';   // refus par défaut : le droit le plus élevé du module
+
+if ($rh_rule !== null) {
+  if (is_array($rh_rule)) {
+    $rh_rule = ($method === 'GET') ? $rh_rule['GET'] : $rh_rule['write'];
+  }
+  mfc_require_perm('rh.' . $rh_rule);
+}
 
 switch ($action) {
 

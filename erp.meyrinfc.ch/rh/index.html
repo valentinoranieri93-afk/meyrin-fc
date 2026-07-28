@@ -177,7 +177,12 @@ async function api(action, opts = {}) {
   const res = await fetch(`${API}?action=${action}${params}`, fetchOpts);
   if (action === 'export_compta') return res.blob();
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Erreur serveur');
+  if (!res.ok) {
+    const err = new Error(data.error || 'Erreur serveur');
+    err.status = res.status;   // exploité par apiSoft() pour distinguer refus et panne
+    if (res.status === 401) location.href = 'https://erp.meyrinfc.ch/?redirect=' + encodeURIComponent(location.href);
+    throw err;
+  }
   return data;
 }
 
@@ -193,14 +198,44 @@ const ICONS = {
 };
 function ic(name){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
 
-const NAV = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { id: 'teams', label: 'Équipes', icon: 'teams' },
-  { id: 'employees', label: 'Employés', icon: 'employees' },
-  { id: 'players', label: 'Joueurs (1ère équipe)', icon: 'players' },
-  { id: 'primes', label: 'Primes de match', icon: 'primes' },
-  { id: 'settings', label: 'Paramètres', icon: 'settings' },
+/* Permissions injectées par index.php.
+   Leur absence signifie que la page n'a PAS été servie par index.php : soit le
+   serveur a livré index.html directement, soit le navigateur affiche une
+   version en cache. On ne devine pas des droits dans ce cas, on repasse par
+   index.php une seule fois, puis on le dit clairement. */
+if (!window.MFC) {
+  if (!/[?&]wrapped=1/.test(location.search)) {
+    location.replace('index.php?wrapped=1&_=' + Date.now());
+  } else {
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.innerHTML =
+        '<div style="font-family:system-ui;max-width:520px;margin:80px auto;padding:28px;'
+      + 'background:#fff;border-radius:14px;line-height:1.6">'
+      + '<h2 style="margin:0 0 10px">Configuration incomplète</h2>'
+      + "<p>Cette page n'a pas reçu vos droits d'accès. Signalez-le à l'administrateur.</p></div>";
+    });
+  }
+}
+const MFC = window.MFC || {};
+
+const NAV_ALL = [
+  { id: 'dashboard', label: 'Dashboard',             icon: 'dashboard', need: 'teamsView' },
+  { id: 'teams',     label: 'Équipes',               icon: 'teams',     need: 'teamsView' },
+  { id: 'employees', label: 'Employés',              icon: 'employees', need: 'employeesView' },
+  { id: 'players',   label: 'Joueurs (1ère équipe)', icon: 'players',   need: 'employeesView' },
+  { id: 'primes',    label: 'Primes de match',       icon: 'primes',    need: 'employeesView' },
+  /* Les paramètres regroupent barème d'indemnités et règles de paie : on ne
+     les propose qu'à qui peut agir sur au moins l'un des deux. */
+  { id: 'settings',  label: 'Paramètres',            icon: 'settings',
+    need: ['teamsEdit', 'indemnites', 'payrollView'] },
 ];
+
+/* Un onglet n'est affiché que si la personne a le droit correspondant. Le
+   serveur revérifie chaque appel : ceci évite d'ouvrir un écran qui ne
+   renverrait que des erreurs. */
+const NAV = NAV_ALL.filter(n =>
+  Array.isArray(n.need) ? n.need.some(k => MFC[k]) : MFC[n.need]
+);
 
 function render() {
   const app = document.getElementById('app');
@@ -262,8 +297,29 @@ function openModal(html, wide=false){
 function closeModal(){ document.getElementById('modal').classList.remove('open'); }
 function modalErr(msg){ const e = document.querySelector('.modal-error'); if(e){ e.textContent = msg; e.style.display = 'block'; } }
 
+/* Appel dont un refus de droit n'est pas une erreur fatale : on renvoie une
+   valeur de repli et la page se dessine sans ce bloc. Une vraie panne (500,
+   réseau) continue de remonter, pour ne pas masquer un incident derrière un
+   écran vide. */
+async function apiSoft(action, fallback, allowed = true){
+  if (!allowed) return fallback;
+  try { return await api(action); }
+  catch (e) {
+    if (e.status === 403) { console.warn('Bloc ignoré, droit manquant :', action); return fallback; }
+    throw e;
+  }
+}
+
 async function loadRefData(){
-  [STATE.teams, STATE.categories, STATE.postes, STATE.payrollRules] = await Promise.all([api('teams'), api('team_categories'), api('postes'), api('payroll_rules')]);
+  /* Ces quatre jeux de données étaient chargés d'un bloc : un seul refus de
+     droit (payroll_rules exige l'accès aux salaires) faisait échouer le lot
+     entier et laissait les pages Équipes, Employés et Paramètres vides. */
+  [STATE.teams, STATE.categories, STATE.postes, STATE.payrollRules] = await Promise.all([
+    apiSoft('teams', []),
+    apiSoft('team_categories', []),
+    apiSoft('postes', []),
+    apiSoft('payroll_rules', [], !!MFC.payrollView),
+  ]);
 }
 
 /* ============================================================ DASHBOARD */
@@ -1111,16 +1167,19 @@ async function validateImport(import_id){
 
 /* ============================================================ PARAMÈTRES */
 
-let SETTINGS_TAB = 'categories';
+/* Premier onglet réellement accessible, plutôt que « categories » en dur :
+   sinon quelqu'un qui n'a que le droit sur la paie ouvrirait Paramètres sur
+   un onglet vide. */
+let SETTINGS_TAB = MFC.teamsEdit ? 'categories' : (MFC.indemnites ? 'roles' : 'paie');
 
 async function renderSettings(c){
   const y = window.scrollY;
   document.getElementById('topbar-actions').innerHTML = '';
   c.innerHTML = `
     <div class="tabs">
-      <div class="tab ${SETTINGS_TAB==='categories'?'active':''}" data-st="categories" onclick="switchSettingsTab('categories')">Catégories & Équipes</div>
-      <div class="tab ${SETTINGS_TAB==='roles'?'active':''}" data-st="roles" onclick="switchSettingsTab('roles')">Rôles</div>
-      <div class="tab ${SETTINGS_TAB==='paie'?'active':''}" data-st="paie" onclick="switchSettingsTab('paie')">Paie</div>
+      ${MFC.teamsEdit ? `<div class="tab ${SETTINGS_TAB==='categories'?'active':''}" data-st="categories" onclick="switchSettingsTab('categories')">Catégories &amp; Équipes</div>` : ''}
+      ${MFC.indemnites ? `<div class="tab ${SETTINGS_TAB==='roles'?'active':''}" data-st="roles" onclick="switchSettingsTab('roles')">Rôles</div>` : ''}
+      ${MFC.payrollView ? `<div class="tab ${SETTINGS_TAB==='paie'?'active':''}" data-st="paie" onclick="switchSettingsTab('paie')">Paie</div>` : ''}
     </div>
     <div id="settings-body"><div class="empty"><span class="spinner"></span></div></div>
   `;
@@ -1472,11 +1531,22 @@ let PS = { employee: null, season: null, seasonId: null, isSemestriel: false, ba
 async function renderPayslipPage(employeeId, seasonId){
   const app = document.getElementById('app');
   app.innerHTML = `<div style="padding:80px;text-align:center;color:#6E6C61">Chargement…</div>`;
-  const [employees, seasons, rules] = await Promise.all([
-    api('employees', { params: { season_id: seasonId } }),
-    api('seasons'),
-    api('payroll_rules'),
-  ]);
+  /* Cette page EST la fiche de paie : sans le droit sur les salaires, il n'y a
+     rien à dégrader, on le dit franchement au lieu de rester sur « Chargement ». */
+  let employees, seasons, rules;
+  try {
+    [employees, seasons, rules] = await Promise.all([
+      api('employees', { params: { season_id: seasonId } }),
+      api('seasons'),
+      api('payroll_rules'),
+    ]);
+  } catch (e) {
+    app.innerHTML = `<div style="padding:80px;text-align:center;max-width:520px;margin:0 auto;line-height:1.6">`
+      + `<h2 style="margin-bottom:10px">${e.status === 403 ? 'Accès refusé' : 'Erreur'}</h2>`
+      + `<p>${e.status === 403 ? "Vous n'avez pas le droit de consulter les décomptes de paie." : esc(e.message)}</p>`
+      + `<p style="margin-top:16px"><a href="index.php">Retour au module RH</a></p></div>`;
+    return;
+  }
   const ee = employees.find(e => e.id === employeeId);
   if (!ee) { app.innerHTML = `<div style="padding:80px;text-align:center">Employé introuvable.</div>`; return; }
   const enabledRuleIds = await api('employee_payroll_rules', { params: { employee_id: employeeId } });
@@ -1595,6 +1665,22 @@ function renderPayslipDoc(){
   STATE.seasonId = (saved && STATE.seasons.some(s => s.id === saved)) ? saved : (current ? current.id : (STATE.seasons[0]?.id || null));
   const initial = (location.hash || '').replace('#', '');
   if (NAV.some(n => n.id === initial)) STATE.page = initial;
+  /* La page par défaut est « dashboard ». Si les droits de la personne ne la
+     lui donnent pas, on ouvre le premier écran auquel elle a accès plutôt que
+     d'afficher un écran vide alimenté par des appels refusés. */
+  if (!NAV.some(n => n.id === STATE.page)) {
+    if (!NAV.length) {
+      document.getElementById('app').innerHTML =
+        '<div style="font-family:system-ui;max-width:520px;margin:80px auto;padding:28px;'
+      + 'background:#fff;border-radius:14px;line-height:1.6">'
+      + '<h2 style="margin:0 0 10px">Aucun écran disponible</h2>'
+      + "<p>Votre rôle donne accès au module RH mais à aucun de ses écrans. "
+      + "Demandez à un administrateur d'ajuster vos permissions.</p>"
+      + '<p><a href="https://erp.meyrinfc.ch">Retour à l\'ERP</a></p></div>';
+      return;
+    }
+    STATE.page = NAV[0].id;
+  }
   render();
 })();
 </script>
