@@ -25,14 +25,14 @@ register_shutdown_function(function () {
   }
 });
 
-session_set_cookie_params([
-  'lifetime' => 60 * 60 * 24 * 14,
-  'path' => '/',
-  'httponly' => true,
-  'samesite' => 'Lax',
-  'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-]);
-session_start();
+/* Plus de session PHP propre a l'application : l'identite vient de la session
+   unique de l'ERP (cookie JWT). Cette app conserve trois regimes d'acces
+   distincts, voir la table CMD_PERMS plus bas :
+     - la boutique publique, sans aucune authentification ;
+     - deux points d'entree machine a machine appeles par la Caisse, authentifies
+       par cle API et non par cookie ;
+     - tout le reste, sous session ERP et permission. */
+require_once __DIR__ . '/mfc_boot.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -557,12 +557,21 @@ function fail(string $msg, int $code = 400): never {
   out(['error' => $msg], $code);
 }
 
+/**
+ * Ligne `users` locale de la personne connectee.
+ *
+ * La table n'authentifie plus rien mais reste indispensable : created_by des
+ * commandes fournisseurs et des prets, requester_id des demandes (contrainte
+ * NOT NULL) et user_id des mouvements de stock pointent dessus.
+ * mfc_local_user() rattache le compte ERP sans toucher aux lignes existantes.
+ */
 function current_user(): ?array {
-  if (empty($_SESSION['uid'])) return null;
-  $st = db()->prepare('SELECT id, name, email, role, active FROM users WHERE id = ? AND active = 1');
-  $st->execute([$_SESSION['uid']]);
-  $u = $st->fetch();
-  return $u ?: null;
+  static $u = null;
+  if ($u !== null) return $u;
+  $s = mfc_session();
+  if (!$s) return null;
+  $u = mfc_local_user(db(), $s);
+  return $u;
 }
 
 function require_auth(): array {
@@ -571,16 +580,9 @@ function require_auth(): array {
   return $u;
 }
 
-/** view : les 3 rôles. edit : responsable + admin. admin : réservé à l'admin. */
-function require_role(array $u, string $level): void {
-  $ok = match ($level) {
-    'view'  => in_array($u['role'], ['demandeur', 'responsable', 'admin'], true),
-    'edit'  => in_array($u['role'], ['responsable', 'admin'], true),
-    'admin' => $u['role'] === 'admin',
-    default => false,
-  };
-  if (!$ok) fail('Droits insuffisants pour cette action', 403);
-}
+/* require_role() a disparu : les droits ne dependent plus d'un role local
+   (demandeur/responsable/admin) mais des permissions portees par le jeton,
+   verifiees en un seul point par la table CMD_PERMS du routeur. */
 
 /** Id du compte système réservé aux demandes de la boutique publique (/shop, sans authentification).
  *  Ce compte est créé au premier besoin, désactivé (active=0, mot de passe aléatoire inutilisable) : il ne sert
@@ -773,145 +775,177 @@ $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 $b = body();
 
+/* ---------------------------------------------------------------- Permissions
+ *
+ * Trois regimes d'acces coexistent dans cette application :
+ *
+ *  1. CMD_PUBLIC   : la boutique publique. Aucune authentification, par
+ *                    conception : n'importe qui doit pouvoir commander.
+ *  2. CMD_MACHINE  : appels de la Caisse, authentifies par cle API (X-Api-Key)
+ *                    verifiee dans le bloc de chaque action. Ce n'est pas un
+ *                    utilisateur, il n'y a donc ni session ni permission.
+ *  3. tout le reste : session ERP + permission listee dans CMD_PERMS.
+ *
+ * Format d'une entree de CMD_PERMS :
+ *    'action' => 'perm'                          toutes methodes
+ *    'action' => ['GET'=>'a', 'write'=>'b']      lecture / ecriture
+ *    'action' => ['GET'=>'a','POST'=>'b','PUT'=>'c','DELETE'=>'c']  par methode
+ *    'action' => null                            session suffisante
+ *
+ * REFUS PAR DEFAUT : une action absente exige settings.manage, le droit le plus
+ * eleve. Sur 63 points d'entree, en oublier un est certain ; le defaut doit donc
+ * etre ferme.
+ */
+const CMD_PUBLIC  = ['shop_catalog', 'shop_validate_promo', 'shop_request', 'shop_cancel'];
+const CMD_MACHINE = ['vendable_articles', 'decrement_stock'];
+
+const CMD_PERMS = [
+  /* --- session suffisante ------------------------------------------------ */
+  'me'                       => null,
+  'seasons_list'             => null,
+  'vat_rate'                 => null,
+  'users'                    => ['GET' => 'catalog.view', 'write' => null],
+
+  /* --- catalogue --------------------------------------------------------- */
+  'categories'               => ['GET' => 'catalog.view', 'write' => 'catalog.edit'],
+  'departments'              => ['GET' => 'catalog.view', 'write' => 'catalog.edit'],
+  'formes'                   => ['GET' => 'catalog.view', 'write' => 'catalog.edit'],
+  'attributes'               => ['GET' => 'catalog.view', 'write' => 'catalog.edit'],
+  'attribute_values'         => 'catalog.edit',
+  'attribute_values_reorder' => 'catalog.edit',
+  'locations'                => ['GET' => 'catalog.view', 'write' => 'catalog.edit'],
+  'articles'                 => ['GET' => 'catalog.view', 'write' => 'catalog.edit'],
+  'article_lookup'           => 'catalog.view',
+  'article_history'          => 'catalog.view',
+  'article_photo'            => 'catalog.edit',
+  'article_color_photo'      => 'catalog.edit',
+  'articles_import'          => 'catalog.edit',
+  'variants'                 => 'catalog.edit',
+  'variants_batch'           => 'catalog.edit',
+  'variants_shop_visibility' => 'catalog.edit',
+  'label_settings'           => 'catalog.view',
+
+  /* --- fournisseurs ------------------------------------------------------ */
+  /* La liste est consultable par qui voit le catalogue : elle sert a afficher
+     le fournisseur d'un article. La modifier demande le droit dedie. */
+  'suppliers'                => ['GET' => 'catalog.view', 'write' => 'suppliers.manage'],
+  'supplier_address'         => 'suppliers.manage',
+  'supplier_contact'         => 'suppliers.manage',
+
+  /* --- stock ------------------------------------------------------------- */
+  'stock'                    => 'stock.view',
+  'stock_movement'           => 'stock.move',
+  'stock_movements'          => ['GET' => 'stock.view', 'write' => 'stock.move'],
+  'stock_transfer'           => 'stock.move',
+  'stock_dispatch'           => 'stock.move',
+  'equipment_loans'          => ['GET' => 'stock.view', 'write' => 'stock.move'],
+  'equipment_don'            => 'stock.move',
+
+  /* --- demandes de materiel ---------------------------------------------- */
+  /* Creer une demande et la valider sont deux droits distincts : c'est le
+     decoupage voulu (un stagiaire demande, un responsable valide). D'ou le
+     detail par methode plutot qu'un simple lecture / ecriture. */
+  'requests'                 => ['GET'    => 'requests.create',
+                                 'POST'   => 'requests.create',
+                                 'PUT'    => 'requests.validate',
+                                 'DELETE' => 'requests.validate'],
+  'request_cart'             => 'requests.create',
+  'request_fulfill_stock'    => 'requests.validate',
+  'request_to_order'         => 'requests.validate',
+
+  /* --- commandes fournisseurs -------------------------------------------- */
+  'orders'                   => ['GET' => 'orders.view', 'write' => 'orders.edit'],
+  'orders_quick_from_request'=> 'orders.edit',
+  'orders_receive'           => 'orders.receive',
+  'orders_receive_scan'      => 'orders.receive',
+  'order_export_csv'         => 'orders.view',
+
+  /* --- factures ---------------------------------------------------------- */
+  'invoice_upload'           => 'invoices.manage',
+  'invoice'                  => 'invoices.manage',
+  'invoice_anomaly'          => 'invoices.manage',
+
+  /* --- budgets et rapports ----------------------------------------------- */
+  'budgets'                  => ['GET' => 'budgets.view', 'write' => 'budgets.edit'],
+  'reports'                  => 'reports.view',
+  'stock_value'              => 'reports.view',
+  'activity'                 => 'reports.view',
+  'dashboard'                => 'reports.view',
+
+  /* --- fichiers ---------------------------------------------------------- */
+  /* Le droit exact est determine dans le bloc : une facture exige
+     invoices.manage, une photo d'article se contente de catalog.view. */
+  'download'                 => null,
+
+  /* --- administration ---------------------------------------------------- */
+  /* settings contient la cle API de la Caisse : lecture comme ecriture sont
+     reservees a l'administration. */
+  'settings'                 => 'settings.manage',
+  'promo_codes'              => 'settings.manage',
+  'backup_db'                => 'settings.manage',
+];
+
+/* Points d'entree supprimes : l'authentification est centralisee dans l'ERP. */
+if (in_array($action, ['login', 'logout', 'setup', 'status', 'change_password'], true)) {
+  fail("Cette application n'a plus de connexion propre. Utilisez l'ERP : " . ERP_URL, 410);
+}
+
+if (in_array($action, CMD_PUBLIC, true)) {
+  /* Boutique publique : rien a verifier, c'est voulu. */
+} elseif (in_array($action, CMD_MACHINE, true)) {
+  /* Machine a machine : la cle API est verifiee dans le bloc de l'action. */
+} else {
+  mfc_require_api('commandes');
+  $cmd_rule = array_key_exists($action, CMD_PERMS) ? CMD_PERMS[$action] : 'settings.manage';
+  if (is_array($cmd_rule)) {
+    if (array_key_exists($method, $cmd_rule)) {
+      $cmd_rule = $cmd_rule[$method];
+    } elseif ($method === 'GET') {
+      $cmd_rule = $cmd_rule['GET'] ?? 'settings.manage';
+    } else {
+      $cmd_rule = array_key_exists('write', $cmd_rule) ? $cmd_rule['write'] : 'settings.manage';
+    }
+  }
+  if ($cmd_rule !== null) {
+    mfc_require_perm('commandes.' . $cmd_rule);
+  }
+}
+
 switch ($action) {
 
   /* ============ AUTH & SETUP ============ */
 
-  case 'status': {
-    $count = (int) db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
-    out(['installed' => $count > 0, 'user' => current_user()]);
-  }
-
-  case 'setup': {
-    $count = (int) db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
-    if ($count > 0) fail('L\'application est déjà installée', 403);
-    $name = s($b, 'name'); $email = strtolower(s($b, 'email')); $pass = (string)($b['password'] ?? '');
-    if (!$name || !filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Nom et e-mail valides requis');
-    if (strlen($pass) < 8) fail('Mot de passe : 8 caractères minimum');
-    $st = db()->prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?,?,?,?)');
-    $st->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), 'admin']);
-    $_SESSION['uid'] = (int) db()->lastInsertId();
-    session_regenerate_id(true);
-    log_activity($_SESSION['uid'], 'Installation', 'Compte administrateur créé');
-    out(['ok' => true, 'user' => current_user()]);
-  }
-
-  case 'login': {
-    $email = strtolower(s($b, 'email')); $pass = (string)($b['password'] ?? '');
-    $st = db()->prepare('SELECT * FROM users WHERE email = ? AND active = 1');
-    $st->execute([$email]);
-    $u = $st->fetch();
-    if (!$u || !password_verify($pass, $u['password_hash'])) {
-      usleep(400000);
-      fail('E-mail ou mot de passe incorrect', 401);
-    }
-    $_SESSION['uid'] = (int) $u['id'];
-    session_regenerate_id(true);
-    out(['ok' => true, 'user' => current_user()]);
-  }
-
-  case 'logout': {
-    session_destroy();
-    out(['ok' => true]);
-  }
+  /* status, setup, login, logout et change_password ont ete supprimes :
+     l'authentification est centralisee dans l'ERP. Les appels a ces actions
+     sont interceptes plus haut et renvoient un 410 explicite. */
 
   case 'me': {
     out(['user' => require_auth()]);
   }
 
-  case 'change_password': {
-    $u = require_auth();
-    $old = (string)($b['old'] ?? ''); $new = (string)($b['new'] ?? '');
-    if (strlen($new) < 8) fail('Nouveau mot de passe : 8 caractères minimum');
-    $st = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
-    $st->execute([$u['id']]);
-    if (!password_verify($old, (string)$st->fetchColumn())) fail('Mot de passe actuel incorrect', 403);
-    db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
-        ->execute([password_hash($new, PASSWORD_DEFAULT), $u['id']]);
-    out(['ok' => true]);
-  }
-
-  /* ============ UTILISATEURS (admin) ============ */
-
+  /* Annuaire local, en lecture seule : il alimente les listes de demandeurs et
+     de responsables, et l'affichage des noms dans les historiques. Les comptes
+     se gerent exclusivement dans l'ERP.
+     Le compte systeme de la boutique publique est masque : ce n'est pas une
+     personne, il ne doit apparaitre dans aucune liste. */
   case 'users': {
-    $u = require_auth();
+    require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
-      out(db()->query('SELECT id, name, email, role, active, created_at FROM users ORDER BY id')->fetchAll());
+      $st = db()->prepare('SELECT id, name, email, role, active FROM users WHERE email <> ? ORDER BY id');
+      $st->execute(['boutique-publique@commandes.meyrinfc.ch']);
+      out($st->fetchAll());
     }
-    require_role($u, 'admin');
-    if ($method === 'POST') {
-      $name = s($b, 'name'); $email = strtolower(s($b, 'email'));
-      $pass = (string)($b['password'] ?? ''); $role = s($b, 'role', 'demandeur');
-      if (!$name || !filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Nom et e-mail valides requis');
-      if (strlen($pass) < 8) fail('Mot de passe : 8 caractères minimum');
-      if (!in_array($role, ['admin', 'responsable', 'demandeur'], true)) fail('Rôle invalide');
-      try {
-        db()->prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?,?,?,?)')
-            ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), $role]);
-      } catch (PDOException $e) { fail('Cet e-mail est déjà utilisé'); }
-      log_activity($u['id'], 'Utilisateur créé', "$name ($role)");
-      out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
-    }
-    if ($method === 'PUT') {
-      $id = i($b, 'id');
-      $fields = []; $vals = [];
-      if (isset($b['name']))  { $fields[] = 'name = ?';  $vals[] = s($b, 'name'); }
-      if (isset($b['email'])) { $fields[] = 'email = ?'; $vals[] = strtolower(s($b, 'email')); }
-      if (isset($b['role'])) {
-        $role = s($b, 'role');
-        if (!in_array($role, ['admin', 'responsable', 'demandeur'], true)) fail('Rôle invalide');
-        if ($role !== 'admin') {
-          $admins = (int) db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
-          $isAdmin = (int) db()->query("SELECT COUNT(*) FROM users WHERE id=$id AND role='admin'")->fetchColumn();
-          if ($isAdmin && $admins <= 1) fail('Impossible : il doit rester au moins un administrateur');
-        }
-        $fields[] = 'role = ?'; $vals[] = $role;
-      }
-      if (isset($b['active'])) {
-        $act = i($b, 'active');
-        if (!$act) {
-          $admins = (int) db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
-          $isAdmin = (int) db()->query("SELECT COUNT(*) FROM users WHERE id=$id AND role='admin'")->fetchColumn();
-          if ($isAdmin && $admins <= 1) fail('Impossible de désactiver le dernier administrateur');
-        }
-        $fields[] = 'active = ?'; $vals[] = $act;
-      }
-      if (isset($b['password']) && $b['password'] !== '') {
-        if (strlen((string)$b['password']) < 8) fail('Mot de passe : 8 caractères minimum');
-        $fields[] = 'password_hash = ?'; $vals[] = password_hash((string)$b['password'], PASSWORD_DEFAULT);
-      }
-      if (!$fields) fail('Rien à modifier');
-      $vals[] = $id;
-      db()->prepare('UPDATE users SET ' . implode(', ', $fields) . ' WHERE id = ?')->execute($vals);
-      log_activity($u['id'], 'Utilisateur modifié', "ID $id");
-      out(['ok' => true]);
-    }
-    if ($method === 'DELETE') {
-      $id = i($_GET, 'id');
-      if ($id === (int)$u['id']) fail('Vous ne pouvez pas supprimer votre propre compte');
-      $isAdmin = (int) db()->query("SELECT COUNT(*) FROM users WHERE id=$id AND role='admin'")->fetchColumn();
-      $admins = (int) db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
-      if ($isAdmin && $admins <= 1) fail('Impossible de supprimer le dernier administrateur');
-      db()->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
-      log_activity($u['id'], 'Utilisateur supprimé', "ID $id");
-      out(['ok' => true]);
-    }
-    fail('Méthode non supportée', 405);
+    fail("Les comptes se gerent dans l'ERP : " . ERP_URL, 403);
   }
-
-  /* ============ PARAMÈTRES (settings) ============ */
 
   case 'settings': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'admin');
       $rows = db()->query('SELECT key, value FROM settings')->fetchAll();
       $out = [];
       foreach ($rows as $r) $out[$r['key']] = $r['value'];
       out($out);
     }
-    require_role($u, 'admin');
     if ($method === 'PUT') {
       foreach (['fiscal_year_start_month', 'request_stale_days', 'order_forgotten_days', 'label_format'] as $k) {
         if (isset($b[$k])) set_setting($k, (string)$b[$k]);
@@ -926,7 +960,6 @@ switch ($action) {
   // écrans d'impression d'étiquettes sans exposer le reste de la table settings (notamment caisse_api_key).
   case 'label_settings': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'GET') fail('Méthode non supportée', 405);
     out(['label_format' => setting('label_format', '62x29')]);
   }
@@ -936,10 +969,8 @@ switch ($action) {
   case 'categories': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       out(db()->query('SELECT * FROM categories ORDER BY COALESCE(parent_id, id), (parent_id IS NOT NULL), name COLLATE NOCASE')->fetchAll());
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
       $parentId = i($b, 'parent_id') ?: null;
@@ -980,8 +1011,7 @@ switch ($action) {
 
   case 'departments': {
     $u = require_auth();
-    if ($method === 'GET') { require_role($u, 'view'); out(db()->query('SELECT * FROM departments ORDER BY name COLLATE NOCASE')->fetchAll()); }
-    require_role($u, 'edit');
+    if ($method === 'GET') { out(db()->query('SELECT * FROM departments ORDER BY name COLLATE NOCASE')->fetchAll()); }
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
       db()->prepare('INSERT INTO departments (name) VALUES (?)')->execute([$name]);
@@ -1002,8 +1032,7 @@ switch ($action) {
 
   case 'formes': {
     $u = require_auth();
-    if ($method === 'GET') { require_role($u, 'view'); out(db()->query('SELECT * FROM formes ORDER BY name COLLATE NOCASE')->fetchAll()); }
-    require_role($u, 'edit');
+    if ($method === 'GET') { out(db()->query('SELECT * FROM formes ORDER BY name COLLATE NOCASE')->fetchAll()); }
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
       try {
@@ -1027,7 +1056,6 @@ switch ($action) {
   case 'attributes': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       $rows = db()->query('SELECT * FROM attributes ORDER BY name COLLATE NOCASE')->fetchAll();
       $values = db()->query('SELECT * FROM attribute_values ORDER BY sort_order, value COLLATE NOCASE')->fetchAll();
       $byAttr = [];
@@ -1035,7 +1063,6 @@ switch ($action) {
       foreach ($rows as &$r) { $r['values'] = $byAttr[$r['id']] ?? []; }
       out($rows);
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
       try {
@@ -1056,7 +1083,6 @@ switch ($action) {
 
   case 'attribute_values': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $attrId = i($b, 'attribute_id'); $value = s($b, 'value'); $colorCode = s($b, 'color_code');
       if (!$attrId || !$value) fail('Attribut et valeur requis');
@@ -1080,7 +1106,6 @@ switch ($action) {
    * d'affichage souhaité, le rang dans le tableau devient le sort_order (0, 1, 2...). */
   case 'attribute_values_reorder': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $ids = $b['ids'] ?? [];
     if (!is_array($ids) || !count($ids)) fail('Liste ordonnée requise');
@@ -1093,8 +1118,7 @@ switch ($action) {
 
   case 'locations': {
     $u = require_auth();
-    if ($method === 'GET') { require_role($u, 'view'); out(db()->query('SELECT * FROM locations ORDER BY active DESC, name COLLATE NOCASE')->fetchAll()); }
-    require_role($u, 'edit');
+    if ($method === 'GET') { out(db()->query('SELECT * FROM locations ORDER BY active DESC, name COLLATE NOCASE')->fetchAll()); }
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
       db()->prepare('INSERT INTO locations (name) VALUES (?)')->execute([$name]);
@@ -1120,7 +1144,6 @@ switch ($action) {
   case 'suppliers': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       $rows = db()->query('SELECT * FROM suppliers ORDER BY name COLLATE NOCASE')->fetchAll();
       $addresses = db()->query('SELECT * FROM supplier_addresses ORDER BY id')->fetchAll();
       $contacts = db()->query('SELECT * FROM supplier_contacts ORDER BY id')->fetchAll();
@@ -1141,7 +1164,6 @@ switch ($action) {
       }
       out($rows);
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
       db()->prepare('INSERT INTO suppliers (name, notes) VALUES (?,?)')
@@ -1167,7 +1189,6 @@ switch ($action) {
 
   case 'supplier_address': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $supplierId = i($b, 'supplier_id'); $label = s($b, 'label');
       if (!$supplierId) fail('Fournisseur requis');
@@ -1193,7 +1214,6 @@ switch ($action) {
 
   case 'supplier_contact': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $supplierId = i($b, 'supplier_id'); $name = s($b, 'name');
       if (!$supplierId) fail('Fournisseur requis');
@@ -1220,7 +1240,6 @@ switch ($action) {
   case 'articles': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       $products = db()->query('SELECT a.*, c.name AS category_name, c.parent_id AS category_parent_id, pc.name AS parent_category_name,
                             f.name AS forme_name, d.name AS department_name, s.name AS supplier_name
                             FROM articles a
@@ -1260,7 +1279,6 @@ switch ($action) {
       }
       out($products);
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Le nom de l\'article est requis');
       $pdo = db();
@@ -1322,7 +1340,6 @@ switch ($action) {
    *  son propre code-barres et un stock initial optionnel. Le prix reste au niveau de l'article. */
   case 'variants_batch': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $articleId = i($b, 'article_id'); $primaryAttrId = i($b, 'primary_attribute_id'); $secondaryAttrId = i($b, 'secondary_attribute_id');
     $locationId = i($b, 'location_id');
@@ -1367,7 +1384,6 @@ switch ($action) {
 
   case 'variants': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method === 'PUT') {
       $id = i($b, 'id');
       try {
@@ -1388,7 +1404,6 @@ switch ($action) {
    * toutes les variantes d'une même couleur (mêmes tailles réparties sur des couleurs, certaines réservées). */
   case 'variants_shop_visibility': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $ids = $b['ids'] ?? [];
     if (!is_array($ids) || !count($ids)) fail('Liste de variantes requise');
@@ -1401,7 +1416,6 @@ switch ($action) {
 
   case 'article_lookup': {
     $u = require_auth();
-    require_role($u, 'view');
     $barcode = s($_GET, 'barcode');
     if (!$barcode) fail('Code-barres requis');
     $st = db()->prepare('SELECT v.*, a.name AS article_name, a.category_id FROM article_variants v JOIN articles a ON a.id = v.article_id WHERE v.barcode = ?');
@@ -1413,7 +1427,6 @@ switch ($action) {
 
   case 'article_photo': {
     $u = require_auth();
-    require_role($u, 'edit');
     if (empty($_FILES['file'])) fail('Aucun fichier reçu');
     $f = $_FILES['file'];
     if ($f['error'] !== UPLOAD_ERR_OK) fail('Erreur de téléversement (code ' . $f['error'] . ')');
@@ -1432,7 +1445,6 @@ switch ($action) {
   /* Photo dédiée à une valeur de couleur (variant_attributes.is_primary=1), en plus de articles.photo. */
   case 'article_color_photo': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method === 'POST') {
       if (empty($_FILES['file'])) fail('Aucun fichier reçu');
       $f = $_FILES['file'];
@@ -1462,7 +1474,6 @@ switch ($action) {
    * name) puis upsert de la variante (par barcode, sinon par combinaison des valeurs d'attributs). */
   case 'articles_import': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $rows = $b['articles'] ?? null;
     if (!is_array($rows) || !count($rows)) fail('Aucune ligne à importer');
@@ -1637,7 +1648,6 @@ switch ($action) {
 
   case 'article_history': {
     $u = require_auth();
-    require_role($u, 'view');
     $id = i($_GET, 'id'); // variant_id
     if (!$id) fail('Variante requise');
     $pdo = db();
@@ -1672,7 +1682,6 @@ switch ($action) {
 
   case 'stock': {
     $u = require_auth();
-    require_role($u, 'view');
     $rows = db()->query("SELECT sl.*, a.name AS article_name, v.label AS variant_label, v.alert_threshold, loc.name AS location_name
                       FROM stock_levels sl
                       JOIN article_variants v ON v.id = sl.variant_id
@@ -1693,7 +1702,6 @@ switch ($action) {
 
   case 'stock_movement': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $variantId = i($b, 'variant_id'); $locationId = i($b, 'location_id');
     $type = s($b, 'type'); $qty = n($b, 'quantity');
@@ -1711,7 +1719,6 @@ switch ($action) {
   case 'stock_movements': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       out(db()->query("SELECT sm.*, a.name AS article_name, v.label AS variant_label, loc.name AS location_name, usr.name AS user_name
                         FROM stock_movements sm
                         JOIN article_variants v ON v.id = sm.variant_id
@@ -1720,7 +1727,6 @@ switch ($action) {
                         LEFT JOIN users usr ON usr.id = sm.user_id
                         ORDER BY sm.created_at DESC, sm.id DESC LIMIT 500")->fetchAll());
     }
-    require_role($u, 'edit');
     $pdo = db();
 
     /** Charge le mouvement + son groupe (lui-même seul, ou toutes les lignes liées par ref_type+ref_id pour
@@ -1833,7 +1839,6 @@ switch ($action) {
 
   case 'stock_transfer': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $variantId = i($b, 'variant_id'); $from = i($b, 'from_location_id'); $to = i($b, 'to_location_id'); $qty = n($b, 'quantity');
     if (!$variantId || !$from || !$to || $from === $to || $qty <= 0) fail('Variante, lieux distincts et quantité (> 0) requis');
@@ -1859,7 +1864,6 @@ switch ($action) {
    * lors d'une modification/suppression ultérieure (cf. action stock_movements). */
   case 'stock_dispatch': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $variantId = i($b, 'variant_id'); $locationId = i($b, 'location_id');
     $qtyBoutique = n($b, 'qty_boutique'); $qtyEquipement = n($b, 'qty_equipement');
@@ -1890,7 +1894,6 @@ switch ($action) {
   case 'equipment_loans': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       $status = s($_GET, 'status');
       $sql = "SELECT el.*, a.name AS article_name, v.label AS variant_label, loc.name AS location_name
               FROM equipment_loans el
@@ -1903,7 +1906,6 @@ switch ($action) {
       $st = db()->prepare($sql); $st->execute($params);
       out($st->fetchAll());
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $variantId = i($b, 'variant_id'); $locationId = i($b, 'location_id');
       $player = s($b, 'player_name'); $qty = n($b, 'quantity', 1);
@@ -1940,7 +1942,6 @@ switch ($action) {
   /* Don définitif : sort réellement l'article de l'inventaire (contrairement au prêt). */
   case 'equipment_don': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $variantId = i($b, 'variant_id'); $locationId = i($b, 'location_id');
     $player = s($b, 'player_name'); $qty = n($b, 'quantity', 1);
@@ -1955,7 +1956,6 @@ switch ($action) {
   case 'requests': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       // cart_id : regroupe les lignes soumises ensemble depuis le panier demandeur (voir action request_cart).
       // Nullable pour compat : les demandes créées avant cette fonctionnalité restent des lignes isolées (cart_id NULL).
       // variant_attrs : concatène les valeurs d'attributs de la variante (ex. "Rouge / M") triées couleur d'abord,
@@ -1989,7 +1989,6 @@ switch ($action) {
       $st = db()->prepare($sql); $st->execute($params);
       out($st->fetchAll());
     }
-    require_role($u, 'view');
     if ($method === 'POST') {
       $variantId = i($b, 'variant_id'); $qty = n($b, 'quantity', 1);
       if (!$variantId || $qty <= 0) fail('Variante et quantité (> 0) requis');
@@ -1999,7 +1998,6 @@ switch ($action) {
       out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
-      require_role($u, 'edit');
       // Conservé pour compatibilité ascendante : avant l'introduction des boutons Ajouter/À commander (qui font
       // approbation + traitement en un clic depuis le statut pending), le flux passait par 'approved' ici puis
       // par une action de commande séparée (voir orders_quick_from_request). D'éventuelles demandes déjà en
@@ -2028,7 +2026,6 @@ switch ($action) {
      Coexiste avec l'action 'requests' POST (demande unique, comportement historique conservé). */
   case 'request_cart': {
     $u = require_auth();
-    require_role($u, 'view');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $items = $b['items'] ?? [];
     if (!is_array($items) || !count($items)) fail('Le panier est vide');
@@ -2061,7 +2058,6 @@ switch ($action) {
 
   case 'promo_codes': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method === 'GET') {
       out(db()->query('SELECT * FROM promo_codes ORDER BY created_at DESC')->fetchAll());
     }
@@ -2226,7 +2222,6 @@ switch ($action) {
      fourni) jusqu'à couvrir la quantité demandée, plutôt que d'exiger un unique lieu suffisant à lui seul. */
   case 'request_fulfill_stock': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $reqId = i($b, 'request_id');
     $r = db()->query("SELECT * FROM requests WHERE id=$reqId")->fetch();
@@ -2264,7 +2259,6 @@ switch ($action) {
      recalculer son prix unitaire) plutôt que de dupliquer la ligne. Passe la demande en 'ordered'. */
   case 'request_to_order': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $reqId = i($b, 'request_id');
     $r = db()->query("SELECT * FROM requests WHERE id=$reqId")->fetch();
@@ -2318,7 +2312,6 @@ switch ($action) {
   case 'orders': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       $id = i($_GET, 'id');
       if ($id) {
         $o = db()->query("SELECT po.*, s.name AS supplier_name,
@@ -2373,7 +2366,6 @@ switch ($action) {
       }
       out($rows);
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $supplierId = i($b, 'supplier_id'); $lines = $b['lines'] ?? [];
       if (!$supplierId || !is_array($lines) || !count($lines)) fail('Fournisseur et au moins une ligne requis');
@@ -2555,7 +2547,6 @@ switch ($action) {
 
   case 'orders_quick_from_request': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $reqId = i($b, 'request_id');
     $r = db()->query("SELECT * FROM requests WHERE id=$reqId")->fetch();
@@ -2591,7 +2582,6 @@ switch ($action) {
 
   case 'orders_receive': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $orderId = i($b, 'order_id'); $locationId = i($b, 'location_id'); $lines = $b['lines'] ?? [];
     if (!$orderId || !$locationId || !is_array($lines)) fail('Commande, lieu de réception et lignes requis');
@@ -2640,7 +2630,6 @@ switch ($action) {
   // mais signalé au client via 'exceeded' => true pour affichage d'un avertissement, plutôt que d'être bloqué.
   case 'orders_receive_scan': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $orderId = i($b, 'order_id'); $barcode = s($b, 'barcode'); $locationId = i($b, 'location_id');
     if (!$orderId || !$barcode || !$locationId) fail('Commande, code-barres et lieu de réception requis');
@@ -2687,7 +2676,6 @@ switch ($action) {
 
   case 'order_export_csv': {
     $u = require_auth();
-    require_role($u, 'view');
     $id = i($_GET, 'id');
     $o = db()->query("SELECT po.*, s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id WHERE po.id=$id")->fetch();
     if (!$o) fail('Commande introuvable', 404);
@@ -2725,7 +2713,6 @@ switch ($action) {
 
   case 'invoice_upload': {
     $u = require_auth();
-    require_role($u, 'edit');
     if (empty($_FILES['file'])) fail('Aucun fichier reçu');
     $f = $_FILES['file'];
     if ($f['error'] !== UPLOAD_ERR_OK) fail('Erreur de téléversement (code ' . $f['error'] . ')');
@@ -2787,7 +2774,6 @@ switch ($action) {
 
   case 'invoice': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'PUT') fail('Méthode non supportée', 405);
     $id = i($b, 'id'); $status = s($b, 'status');
     if (!$id || !in_array($status, ['a_controler', 'approuvee', 'en_attente_paiement', 'payee'], true)) fail('Facture et statut valides requis');
@@ -2798,7 +2784,6 @@ switch ($action) {
 
   case 'invoice_anomaly': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'PUT') fail('Méthode non supportée', 405);
     $id = i($b, 'id');
     if (!$id) fail('Anomalie requise');
@@ -2808,8 +2793,17 @@ switch ($action) {
 
   case 'download': {
     $u = require_auth();
-    require_role($u, 'view');
     $file = basename(s($_GET, 'file'));
+    /* Le droit depend de la NATURE du fichier, pas de l'action. L'ancien modele
+       accordait le telechargement de n'importe quel fichier de uploads/ a tous
+       les roles, factures fournisseurs incluses. On distingue desormais. */
+    $isInvoice = false;
+    try {
+      $stChk = db()->prepare('SELECT 1 FROM invoices WHERE filename = ? LIMIT 1');
+      $stChk->execute([$file]);
+      $isInvoice = (bool) $stChk->fetchColumn();
+    } catch (Throwable $e) { $isInvoice = true; }  // en cas de doute, on restreint
+    mfc_require_perm($isInvoice ? 'commandes.invoices.manage' : 'commandes.catalog.view');
     $path = __DIR__ . '/uploads/' . $file;
     if (!$file || !file_exists($path)) fail('Fichier introuvable', 404);
     header_remove('Content-Type');
@@ -2822,7 +2816,6 @@ switch ($action) {
 
   case 'backup_db': {
     $u = require_auth();
-    require_role($u, 'admin');
     db(); // s'assure que la connexion (et le fichier) existe avant la sauvegarde
     if (!file_exists(DB_FILE)) fail('Base de données introuvable', 404);
     header_remove('Content-Type');
@@ -2838,7 +2831,6 @@ switch ($action) {
   case 'budgets': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       $fy = s($_GET, 'fiscal_year') ?: fiscal_year();
       $rows = db()->query("SELECT b.*, d.name AS department_name FROM budgets b JOIN departments d ON d.id = b.department_id WHERE b.fiscal_year = '$fy'")->fetchAll();
       foreach ($rows as &$r) {
@@ -2854,7 +2846,6 @@ switch ($action) {
       }
       out(['fiscal_year' => $fy, 'budgets' => $rows]);
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $depId = i($b, 'department_id'); $fy = s($b, 'fiscal_year') ?: fiscal_year();
       if (!$depId) fail('Département requis');
@@ -2879,7 +2870,6 @@ switch ($action) {
 
   case 'reports': {
     $u = require_auth();
-    require_role($u, 'view');
     $from = s($_GET, 'from') ?: '2000-01-01';
     $to = s($_GET, 'to') ?: '2999-12-31';
     $catId = i($_GET, 'category_id');
@@ -2937,7 +2927,6 @@ switch ($action) {
   // un prêt d'équipement ne décrémente pas quantity, seul un don le fait via stock_movements type=exit).
   case 'stock_value': {
     $u = require_auth();
-    require_role($u, 'view');
     $catId = i($_GET, 'category_id');
     $deptId = i($_GET, 'department_id');
 
@@ -2962,13 +2951,11 @@ switch ($action) {
 
   case 'activity': {
     $u = require_auth();
-    require_role($u, 'view');
     out(db()->query('SELECT a.*, u.name AS user_name FROM activity a LEFT JOIN users u ON u.id = a.user_id ORDER BY a.id DESC LIMIT 20')->fetchAll());
   }
 
   case 'dashboard': {
     $u = require_auth();
-    require_role($u, 'view');
     $pdo = db();
     $fy = s($_GET, 'fiscal_year') ?: fiscal_year();
     $requestStaleDays = (int) setting('request_stale_days', '5');
@@ -3035,7 +3022,6 @@ switch ($action) {
    * côté client pour calculer le total TTC d'une commande en cours de saisie, avant tout envoi au serveur. */
   case 'vat_rate': {
     $u = require_auth();
-    require_role($u, 'view');
     out(['rate' => (float) setting('vat_rate', '8.1')]);
   }
 

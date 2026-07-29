@@ -314,37 +314,7 @@ th.chk-col,td.chk-col{width:40px}
 <body>
 
 <!-- ===== AUTH SCREEN ===== -->
-<div id="auth-screen">
-  <div class="auth-card">
-    <div class="auth-logo">MFC</div>
-    <h1 class="auth-title" id="auth-title">Connexion</h1>
-    <p class="auth-sub" id="auth-sub">Accès réservé aux administrateurs du Meyrin FC</p>
-    <div class="auth-err" id="auth-err"></div>
-
-    <!-- Setup fields (hidden by default) -->
-    <div id="setup-fields" class="hidden">
-      <div class="form-field">
-        <label class="form-label">Votre nom</label>
-        <input type="text" id="setup-name" class="form-input" placeholder="Prénom Nom">
-      </div>
-    </div>
-
-    <div class="form-field">
-      <label class="form-label">Adresse e-mail</label>
-      <input type="email" id="auth-email" class="form-input" placeholder="vous@meyrinfc.ch" autocomplete="email">
-    </div>
-    <div class="form-field">
-      <label class="form-label">Mot de passe</label>
-      <input type="password" id="auth-password" class="form-input" placeholder="••••••••" autocomplete="current-password">
-    </div>
-    <button class="btn btn-primary btn-full" id="auth-btn" style="margin-top:4px">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-      Se connecter
-    </button>
-  </div>
-</div>
-
-<!-- ===== APP ===== -->
+<!-- Ecran de connexion supprime : l'authentification est centralisee dans l'ERP. -->
 <div id="app" class="app hidden">
 
   <!-- Sidebar -->
@@ -999,93 +969,48 @@ document.getElementById('modal-confirm').addEventListener('click', async () => {
 /* ===============================================================
    AUTH
 =============================================================== */
-let isSetup = false;
+/* Permissions injectees par index.php. Leur absence signifie que la page n'a
+   PAS ete servie par index.php : on repasse une fois par lui, puis on le dit. */
+if (!window.MFC) {
+  if (!/[?&]wrapped=1/.test(location.search)) {
+    location.replace('index.php?wrapped=1&_=' + Date.now());
+  } else {
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.innerHTML =
+        '<div style="font-family:system-ui;max-width:520px;margin:80px auto;padding:28px;'
+      + 'background:#fff;border-radius:14px;line-height:1.6">'
+      + '<h2 style="margin:0 0 10px">Configuration incomplete</h2>'
+      + "<p>Cette page n'a pas recu vos droits d'acces. Signalez-le a l'administrateur.</p></div>";
+    });
+  }
+}
+const MFC = window.MFC || {};
 
+/* L'ecran de connexion et celui d'installation ont ete retires : arriver ici
+   signifie que la session ERP est deja validee par index.php. */
 async function initAuth() {
-  try {
-    const r = await api('status');
-    if (!r.installed) {
-      showSetupForm();
-    } else if (!r.user) {
-      showLoginForm();
-    } else {
-      S.user = r.user;
-      enterApp();
-    }
-  } catch(e) {
-    showLoginForm();
-  }
+  S.user = { name: MFC.name || '', role: MFC.roleLabel || '' };
+  enterApp();
 }
 
-function showSetupForm() {
-  isSetup = true;
-  document.getElementById('auth-title').textContent = 'Première connexion';
-  document.getElementById('auth-sub').textContent = 'Créez le compte administrateur pour commencer.';
-  document.getElementById('setup-fields').classList.remove('hidden');
-  document.getElementById('auth-btn').innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-    Créer le compte`;
-  // set default season label
-  const y = new Date().getFullYear();
-  document.getElementById('season-label').value = `${y}-${y+1}`;
-}
-
-function showLoginForm() {
-  isSetup = false;
-  document.getElementById('auth-title').textContent = 'Connexion';
-  document.getElementById('setup-fields').classList.add('hidden');
-}
-
-document.getElementById('auth-btn').addEventListener('click', async () => {
-  const email = document.getElementById('auth-email').value.trim();
-  const pass  = document.getElementById('auth-password').value;
-  const errEl = document.getElementById('auth-err');
-  errEl.classList.remove('show');
-  const btn = document.getElementById('auth-btn');
-  btn.disabled = true;
-  try {
-    let r;
-    if (isSetup) {
-      const name = document.getElementById('setup-name').value.trim();
-      r = await api('setup', 'POST', { name, email, password: pass });
-    } else {
-      r = await api('login', 'POST', { email, password: pass });
-    }
-    S.user = r.user;
-    enterApp();
-  } catch(e) {
-    errEl.textContent = e.message;
-    errEl.classList.add('show');
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-['auth-email','auth-password','setup-name'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('auth-btn').click(); });
-});
-
-document.getElementById('btn-logout').addEventListener('click', async () => {
-  await api('logout', 'POST');
-  S.user = null;
-  document.getElementById('app').classList.add('hidden');
-  document.getElementById('auth-screen').classList.remove('hidden');
-  showLoginForm();
+document.getElementById('btn-logout').addEventListener('click', () => {
+  location.href = 'https://erp.meyrinfc.ch/logout.php';
 });
 
 /* ===============================================================
    APP ENTRY
 =============================================================== */
 async function enterApp() {
-  document.getElementById('auth-screen').classList.add('hidden');
+  /* L'ecran d'authentification n'existe plus dans cette page : le chercher
+     renvoyait null et l'exception qui suivait interrompait enterApp() des sa
+     premiere ligne, laissant #app masque, donc une page blanche. */
   document.getElementById('app').classList.remove('hidden');
 
   // Set user info in sidebar
   const initials = (S.user.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-  document.getElementById('sb-avatar').textContent = initials;
-  document.getElementById('sb-name').textContent = S.user.name;
-  document.getElementById('sb-role').textContent = S.user.role === 'admin' ? 'Administrateur' : 'Lecteur';
+  const av = document.getElementById('sb-avatar'); if (av) av.textContent = initials;
+  const nm = document.getElementById('sb-name');   if (nm) nm.textContent = S.user.name || '';
+  const rl = document.getElementById('sb-role');   if (rl) rl.textContent = MFC.roleLabel || '';
   applyRoleUI();
 
   // Set default season label
@@ -2684,18 +2609,31 @@ async function onDeleteMatch(id) {
 /* ===============================================================
    ROLE-BASED UI
 =============================================================== */
+/* Chaque ecran de configuration est desormais lie a sa propre permission, la
+   ou tout dependait auparavant d'un unique role « admin » local. Le serveur
+   revalide chaque appel : ceci evite d'ouvrir un ecran qui ne renverrait que
+   des refus. */
 function applyRoleUI() {
-  const isAdmin = S.user?.role === 'admin';
-  const configViews = ['teams', 'import', 'seasons', 'users'];
-  configViews.forEach(v => {
+  const needed = {
+    teams:   MFC.teamsManage,
+    import:  MFC.importRun,
+    seasons: MFC.seasonsManage,
+    users:   MFC.teamsManage,   // annuaire en lecture seule, reserve aux gestionnaires
+  };
+  Object.entries(needed).forEach(([v, ok]) => {
     const el = document.querySelector(`.nav-item[data-view="${v}"]`);
-    if (el) el.style.display = isAdmin ? '' : 'none';
+    if (el) el.style.display = ok ? '' : 'none';
   });
+  const anyConfig = Object.values(needed).some(Boolean);
   const configLabel = [...document.querySelectorAll('.nav-label')].find(el => el.textContent.trim() === 'Configuration');
-  if (configLabel) configLabel.style.display = isAdmin ? '' : 'none';
-  // Hide bulk pay button for viewers
+  if (configLabel) configLabel.style.display = anyConfig ? '' : 'none';
+
   const bulkBtn = document.getElementById('btn-bulk-pay');
-  if (bulkBtn) bulkBtn.style.display = isAdmin ? '' : 'none';
+  if (bulkBtn) bulkBtn.style.display = MFC.matchesPay ? '' : 'none';
+
+  /* Le module statistiques a sa propre permission. */
+  const statsNav = document.querySelector('.nav-item[data-view="stats"]');
+  if (statsNav) statsNav.style.display = MFC.statsView ? '' : 'none';
 }
 
 /* ===============================================================

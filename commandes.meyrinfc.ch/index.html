@@ -89,44 +89,7 @@ tailwind.config = {
 <body class="bg-canvas text-ink font-sans text-[14px] leading-relaxed">
 
 <!-- ============ ÉCRAN AUTH ============ -->
-<div id="authScreen" class="hidden min-h-screen grid place-items-center p-4">
-  <div class="w-full max-w-sm">
-    <div class="flex items-center justify-center gap-2.5 mb-6">
-      <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC" class="w-10 h-10 object-contain">
-      <div>
-        <p class="font-display font-bold text-[18px] tracking-tight leading-none">CRM Commande</p>
-        <p class="text-[11px] text-mute mt-0.5">Meyrin FC · Stock, commandes & budgets</p>
-      </div>
-    </div>
-
-    <div id="loginCard" class="hidden bg-white border border-line rounded-xl2 shadow-card p-6 fade-up">
-      <h1 class="font-display font-bold text-[17px] tracking-tight">Connexion</h1>
-      <p class="text-[12.5px] text-mute mt-0.5 mb-5">Accédez à la gestion du stock et des commandes.</p>
-      <div class="space-y-3.5">
-        <div><label class="lbl" for="loginEmail">E-mail</label><input id="loginEmail" type="email" class="field" autocomplete="username" placeholder="prenom@meyrinfc.ch"></div>
-        <div><label class="lbl" for="loginPass">Mot de passe</label><input id="loginPass" type="password" class="field" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
-        <p id="loginError" class="hidden text-[12px] text-rose2-600 font-medium"></p>
-        <button onclick="doLogin()" class="w-full h-10 rounded-xl bg-brand-600 text-[#15140F] text-[13px] font-semibold hover:bg-brand-700 shadow-card transition">Se connecter</button>
-      </div>
-    </div>
-
-    <div id="setupCard" class="hidden bg-white border border-line rounded-xl2 shadow-card p-6 fade-up">
-      <span class="inline-block text-[10px] font-bold bg-brand-50 text-brand-700 px-2 py-0.5 rounded-md mb-2">PREMIER LANCEMENT</span>
-      <h1 class="font-display font-bold text-[17px] tracking-tight">Créer le compte administrateur</h1>
-      <p class="text-[12.5px] text-mute mt-0.5 mb-5">Ce compte gérera les utilisateurs et leurs droits d'accès.</p>
-      <div class="space-y-3.5">
-        <div><label class="lbl" for="setupName">Nom complet</label><input id="setupName" type="text" class="field" placeholder="Valentino A."></div>
-        <div><label class="lbl" for="setupEmail">E-mail</label><input id="setupEmail" type="email" class="field" placeholder="valentino@meyrinfc.ch"></div>
-        <div><label class="lbl" for="setupPass">Mot de passe <span class="font-normal text-mute">(8 caractères min.)</span></label><input id="setupPass" type="password" class="field" placeholder="••••••••" onkeydown="if(event.key==='Enter')doSetup()"></div>
-        <p id="setupError" class="hidden text-[12px] text-rose2-600 font-medium"></p>
-        <button onclick="doSetup()" class="w-full h-10 rounded-xl bg-brand-600 text-[#15140F] text-[13px] font-semibold hover:bg-brand-700 shadow-card transition">Créer et accéder à l'application</button>
-      </div>
-    </div>
-    <p class="text-center text-[11px] text-mute mt-4">CRM Commande · usage interne Meyrin FC</p>
-  </div>
-</div>
-
-<!-- ============ APPLICATION ============ -->
+<!-- Ecran de connexion supprime : l'authentification est centralisee dans l'ERP. -->
 <div id="app" class="hidden">
 <div class="flex h-screen overflow-hidden">
 
@@ -695,8 +658,10 @@ async function api(action, method = 'GET', body = null, isForm = false) {
   let data = {};
   try { data = await r.json(); } catch (e) { /* réponse non-JSON (erreur serveur brute, ex. fatal PHP) */ }
   if (!r.ok) {
-    if (r.status === 401 && action !== 'login' && action !== 'status') showAuth();
-    throw new Error(data.error || ('Erreur serveur (HTTP ' + r.status + ')'));
+    const err = new Error(data.error || ('Erreur serveur (HTTP ' + r.status + ')'));
+    err.status = r.status;   // exploite par apiSoft() pour distinguer refus et panne
+    if (r.status === 401) toErp();
+    throw err;
   }
   return data;
 }
@@ -718,13 +683,79 @@ function toast(msg, isErr = false) {
   box.appendChild(el);
   setTimeout(() => el.remove(), 3200);
 }
-function isStaff() { return S.user && ['responsable','admin'].includes(S.user.role); }
-function isAdmin() { return S.user && S.user.role === 'admin'; }
-function isDemandeur() { return S.user && S.user.role === 'demandeur'; }
+/* Permissions injectees par index.php. Leur absence signifie que la page n'a
+   PAS ete servie par index.php : on repasse une fois par lui, puis on le dit. */
+if (!window.MFC) {
+  if (!/[?&]wrapped=1/.test(location.search)) {
+    location.replace('index.php?wrapped=1&_=' + Date.now());
+  } else {
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.innerHTML =
+        '<div style="font-family:system-ui;max-width:520px;margin:80px auto;padding:28px;'
+      + 'background:#fff;border-radius:14px;line-height:1.6">'
+      + '<h2 style="margin:0 0 10px">Configuration incomplete</h2>'
+      + "<p>Cette page n'a pas recu vos droits d'acces. Signalez-le a l'administrateur.</p></div>";
+    });
+  }
+}
+const MFC = window.MFC || {};
+
+function toErp() {
+  location.href = 'https://erp.meyrinfc.ch/?redirect=' + encodeURIComponent(location.href);
+}
+
+/* Appel dont un refus de droit n'est pas fatal : renvoie une valeur de repli et
+   l'ecran se dessine sans ce bloc. Une vraie panne remonte toujours. */
+async function apiSoft(action, fallback, allowed = true) {
+  if (!allowed) return fallback;
+  try { return await api(action); }
+  catch (e) {
+    if (e.status === 403) { console.warn('Bloc ignore, droit manquant :', action); return fallback; }
+    throw e;
+  }
+}
+
+/* L'ancien modele demandeur/responsable/admin local a disparu. Ces trois
+   fonctions gardent leur nom pour ne pas reecrire l'interface, mais reposent
+   desormais sur les permissions du role ERP.
+   isStaff  : peut agir sur le stock ou les commandes, pas seulement demander.
+   isAdmin  : peut toucher aux parametres.
+   isDemandeur : ne fait que demander du materiel. */
+function isStaff()     { return !!(MFC.stockMove || MFC.ordersEdit || MFC.catalogEdit); }
+function isAdmin()     { return !!MFC.settingsManage; }
+function isDemandeur() { return !!MFC.requestsCreate && !isStaff(); }
+
 function applyRoleVisibility() {
   document.querySelectorAll('.staff-only').forEach(el => el.classList.toggle('hidden', !isStaff()));
   document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin()));
   document.querySelectorAll('.demandeur-hide').forEach(el => el.classList.toggle('hidden', isDemandeur()));
+
+  /* Chaque ecran est lie a sa propre permission, la ou tout dependait d'un
+     unique role local. Le serveur revalide chaque appel : ceci evite d'ouvrir
+     un ecran qui ne renverrait que des refus. */
+  const viewPerm = {
+    dashboard:    MFC.reportsView,
+    catalogue:    MFC.catalogView,
+    stock:        MFC.stockView,
+    demandes:     MFC.requestsCreate,
+    commandes:    MFC.ordersView,
+    fournisseurs: MFC.catalogView,
+    budgets:      MFC.budgetsView,
+    rapports:     MFC.reportsView,
+    promos:       MFC.settingsManage,
+    parametres:   MFC.settingsManage,
+  };
+  Object.entries(viewPerm).forEach(([v, ok]) => {
+    document.querySelectorAll('[data-nav="' + v + '"], .nav-' + v).forEach(el => el.classList.toggle('hidden', !ok));
+  });
+  window.__viewPerm = viewPerm;
+}
+
+/* Premier ecran auquel la personne a droit, dans un ordre utile. */
+function firstAllowedView() {
+  const order = ['dashboard', 'demandes', 'catalogue', 'stock', 'commandes', 'budgets', 'rapports', 'parametres'];
+  const vp = window.__viewPerm || {};
+  return order.find(v => vp[v]) || null;
 }
 
 /* ================================================================ NAVIGATION */
@@ -766,59 +797,60 @@ async function onGlobalScan(code) {
 }
 
 /* ================================================================ AUTH */
-function showAuth() {
-  document.getElementById('app').classList.add('hidden');
-  document.getElementById('authScreen').classList.remove('hidden');
-}
+/* Les ecrans de connexion et d'installation ont ete retires : arriver ici
+   signifie que la session ERP est deja validee par index.php. */
+function doLogout() { location.href = 'https://erp.meyrinfc.ch/logout.php'; }
+
 async function boot() {
   try {
-    const st = await api('status');
-    document.getElementById('authScreen').classList.remove('hidden');
-    if (st.installed) {
-      document.getElementById('setupCard').classList.add('hidden');
-      document.getElementById('loginCard').classList.remove('hidden');
-    } else {
-      document.getElementById('loginCard').classList.add('hidden');
-      document.getElementById('setupCard').classList.remove('hidden');
-    }
-    if (st.user) startApp(st.user);
-  } catch (e) { toast('Impossible de contacter le serveur', true); }
+    const me = await api('me');
+    await startApp(me.user);
+  } catch (e) {
+    if (e.status === 401) return;   // toErp() a deja pris le relais
+    toast('Impossible de charger les donnees : ' + e.message, true);
+  }
 }
-async function doLogin() {
-  try {
-    const r = await api('login', 'POST', { email: document.getElementById('loginEmail').value, password: document.getElementById('loginPass').value });
-    startApp(r.user);
-  } catch (e) { document.getElementById('loginError').textContent = e.message; document.getElementById('loginError').classList.remove('hidden'); }
-}
-async function doSetup() {
-  try {
-    const r = await api('setup', 'POST', { name: document.getElementById('setupName').value, email: document.getElementById('setupEmail').value, password: document.getElementById('setupPass').value });
-    startApp(r.user);
-  } catch (e) { document.getElementById('setupError').textContent = e.message; document.getElementById('setupError').classList.remove('hidden'); }
-}
-async function doLogout() { await api('logout', 'POST'); location.reload(); }
+
 async function startApp(user) {
   S.user = user;
-  document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  document.getElementById('meAvatar').textContent = initials(user.name);
-  document.getElementById('meName').textContent = user.name;
-  document.getElementById('meRole').textContent = { admin: 'Administrateur', responsable: 'Responsable achats', demandeur: 'Demandeur' }[user.role] || user.role;
+  const av = document.getElementById('meAvatar'); if (av) av.textContent = initials(MFC.name || '');
+  const nm = document.getElementById('meName');   if (nm) nm.textContent = MFC.name || '';
+  const rl = document.getElementById('meRole');   if (rl) rl.textContent = MFC.roleLabel || '';
   applyRoleVisibility();
-  await Promise.all([loadRefData()]);
-  go(isDemandeur() ? 'demandes' : 'dashboard');
+  await loadRefData();
+  const first = firstAllowedView();
+  if (first) go(first);
+  else document.getElementById('app').innerHTML =
+      '<div style="font-family:system-ui;max-width:520px;margin:80px auto;padding:28px;'
+    + 'background:#fff;border-radius:14px;line-height:1.6">'
+    + '<h2 style="margin:0 0 10px">Aucun ecran disponible</h2>'
+    + "<p>Votre role donne acces a cette application mais a aucun de ses ecrans. "
+    + "Demandez a un administrateur d'ajuster vos permissions.</p>"
+    + '<p><a href="https://erp.meyrinfc.ch">Retour a l&rsquo;ERP</a></p></div>';
 }
 
 /* ================================================================ RÉFÉRENTIELS */
 async function loadRefData() {
-  const [cats, deps, formes, locs, sups, attrs, seasons, vat] = await Promise.all([api('categories'), api('departments'), api('formes'), api('locations'), api('suppliers'), api('attributes'), api('seasons_list'), api('vat_rate')]);
+  /* Ces huit jeux de donnees etaient charges d'un bloc : un seul refus de droit
+     faisait echouer le lot entier et laissait l'application vide. */
+  const [cats, deps, formes, locs, sups, attrs, seasons, vat] = await Promise.all([
+    apiSoft('categories',   [], !!MFC.catalogView),
+    apiSoft('departments',  [], !!MFC.catalogView),
+    apiSoft('formes',       [], !!MFC.catalogView),
+    apiSoft('locations',    [], !!MFC.catalogView),
+    apiSoft('suppliers',    [], !!MFC.catalogView),
+    apiSoft('attributes',   [], !!MFC.catalogView),
+    apiSoft('seasons_list', []),
+    apiSoft('vat_rate',     { rate: 0 }),
+  ]);
   S.categories = cats; S.departments = deps; S.formes = formes; S.locations = locs; S.suppliers = sups; S.attributes = attrs;
   S.seasons = seasons; S.vatRate = vat.rate;
   if (!S.currentSeason) S.currentSeason = (seasons.find(s => s.is_current) || seasons[seasons.length - 1] || {}).value;
   const seasonSel = document.getElementById('seasonSelect');
   if (seasonSel) seasonSel.innerHTML = seasons.map(s => `<option value="${s.value}" ${s.value === S.currentSeason ? 'selected' : ''}>Saison ${s.label}</option>`).join('');
   const catSel = document.getElementById('articleCat');
-  catSel.innerHTML = '<option value="">Toutes catégories</option>' + cats.map(c => `<option value="${c.id}">${c.parent_id ? '— ' : ''}${esc(c.name)}</option>`).join('');
+  if (catSel) catSel.innerHTML = '<option value="">Toutes catégories</option>' + cats.map(c => `<option value="${c.id}">${c.parent_id ? '— ' : ''}${esc(c.name)}</option>`).join('');
 }
 async function changeSeason(value) {
   S.currentSeason = value;

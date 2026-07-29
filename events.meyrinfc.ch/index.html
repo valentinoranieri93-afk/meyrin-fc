@@ -1524,9 +1524,28 @@ window.addEventListener('resize',()=>{const a=document.querySelector('.nav-item.
 let ME   = {role:'viewer', name:'—', email:'', id:0};
 let SETTINGS = {};
 let USERS    = [];
-const RLVL = {viewer:1, editor:2, admin:3};
-const canEdit = ()=> (RLVL[ME.role]||0) >= 2;
-const isAdmin = ()=> ME.role === 'admin';
+/* Permissions injectees par index.php. Leur absence signifie que la page n'a
+   PAS ete servie par index.php : on repasse une fois par lui, puis on le dit. */
+if (!window.MFC) {
+  if (!/[?&]wrapped=1/.test(location.search)) {
+    location.replace('index.php?wrapped=1&_=' + Date.now());
+  } else {
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.innerHTML =
+        '<div style="font-family:system-ui;max-width:520px;margin:80px auto;padding:28px;'
+      + 'background:#fff;border-radius:14px;line-height:1.6">'
+      + '<h2 style="margin:0 0 10px">Configuration incomplete</h2>'
+      + "<p>Cette page n'a pas recu vos droits d'acces. Signalez-le a l'administrateur.</p></div>";
+    });
+  }
+}
+const MFC = window.MFC || {};
+
+/* L'ancien modele viewer/editor/admin local a disparu. canEdit() garde son nom
+   pour ne pas reecrire la vingtaine d'appels de l'interface, mais interroge
+   desormais le droit de modifier le planning. */
+const canEdit = ()=> !!MFC.planningEdit;
+const isAdmin = ()=> !!MFC.settingsManage;
 const ROLE_LABEL = {admin:'Administrateur', editor:'Éditeur', viewer:'Lecteur'};
 const ROLE_BADGE = {admin:'st-cours', editor:'st-preparation', viewer:'st-idee'};
 
@@ -1593,7 +1612,7 @@ async function api(route, opt){
   else if(opt.body!=null){ o.headers['Content-Type']='application/json'; o.body=JSON.stringify(opt.body); }
   const res=await fetch(url,o);
   let data; try{ data=await res.json(); }catch(_){ data={ok:false,error:'Réponse serveur invalide ('+res.status+')'}; }
-  if(res.status===401){ showGate('login'); throw new Error('Session expirée'); }
+  if(res.status===401){ location.href='https://erp.meyrinfc.ch/?redirect='+encodeURIComponent(location.href); throw new Error('Session expirée'); }
   if(!res.ok || (data&&data.error)) throw new Error((data&&data.error)||('Erreur '+res.status));
   return data;
 }
@@ -1612,13 +1631,12 @@ async function reloadData(){ const d=await api('data'); applyBoot({collections:d
 /* ---- Habillage utilisateur + droits ---- */
 function setUserChrome(){
   const fn=document.querySelector('.foot-name'); if(fn)fn.textContent=ME.name;
-  const fr=document.querySelector('.foot-role'); if(fr)fr.textContent=ROLE_LABEL[ME.role]||ME.role;
+  const fr=document.querySelector('.foot-role'); if(fr)fr.textContent=MFC.roleLabel||'';
   const av=document.querySelector('.sidebar-foot .avatar'); if(av)av.textContent=initials(ME.name);
 }
 function applyRoleUI(){
-  const lvl=RLVL[ME.role]||0;
-  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=lvl>=3?'':'none');
-  document.querySelectorAll('.editor-only').forEach(el=>el.style.display=lvl>=2?'':'none');
+  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin()?'':'none');
+  document.querySelectorAll('.editor-only').forEach(el=>el.style.display=canEdit()?'':'none');
 }
 
 /* ---- Modale générique ---- */
@@ -1969,12 +1987,7 @@ async function changePw(){
 /* =====================================================================
    DÉMARRAGE
    ===================================================================== */
-async function appLogout(){
-  try{ await api('logout'); }catch(_){}
-  ME = {role:'viewer', name:'—', email:'', id:0};
-  document.body.classList.add('preauth');
-  showGate('login');
-}
+function appLogout(){ location.href='https://erp.meyrinfc.ch/logout.php'; }
 async function loadApp(){
   const d = await api('data');
   ME = d.user || ME;
@@ -1998,60 +2011,25 @@ function hideGate(){ const g=document.getElementById('gate'); if(g) g.style.disp
 function gErr(m){ const e=document.getElementById('gateErr'); if(e){ e.textContent=m; e.style.display='block'; } }
 const GATE_BRAND='<div class="gate-brand"><img class="gate-logo" src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC"><div><div class="gate-name">Meyrin FC</div><div class="gate-sub">Hub \u00c9v\u00e9nements</div></div></div>';
 function showLoading(){ gateShell(GATE_BRAND+'<div class="gate-lead" style="margin-top:6px">Chargement\u2026</div>'); }
-function showGate(mode,msg){
-  const err='<div class="gate-err" id="gateErr"'+(msg?' style="display:block"':'')+'>'+(msg||'')+'</div>';
-  if(mode==='setup'){
-    gateShell(GATE_BRAND+
-      '<h1>Bienvenue \ud83d\udc4b</h1><div class="gate-lead">Cr\u00e9ez votre compte pour d\u00e9marrer. Vous serez l\u2019administrateur.</div>'+err+
-      '<label>Votre nom</label><input id="g_name" autocomplete="name">'+
-      '<label>Adresse e-mail</label><input id="g_email" type="email" autocomplete="username">'+
-      '<label>Mot de passe (8 caract\u00e8res min.)</label><input id="g_pass" type="password" autocomplete="new-password">'+
-      '<label>Confirmer le mot de passe</label><input id="g_pass2" type="password" autocomplete="new-password">'+
-      '<button id="g_btn" onclick="doRegister()">Cr\u00e9er mon compte</button>');
-    setTimeout(()=>{const e=document.getElementById('g_name');if(e)e.focus();},50);
-  } else {
-    gateShell(GATE_BRAND+
-      '<h1>Connexion</h1><div class="gate-lead">Acc\u00e9dez \u00e0 la gestion des \u00e9v\u00e9nements du club.</div>'+err+
-      '<label>Adresse e-mail</label><input id="g_email" type="email" autocomplete="username">'+
-      '<label>Mot de passe</label><input id="g_pass" type="password" autocomplete="current-password">'+
-      '<button id="g_btn" onclick="doLogin()">Se connecter</button>');
-    setTimeout(()=>{const e=document.getElementById('g_email');if(e)e.focus();},50);
-  }
-  const card=document.querySelector('#gate .gate-card');
-  if(card) card.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); const b=document.getElementById('g_btn'); if(b)b.click(); }});
-}
-async function doLogin(){
-  const btn=document.getElementById('g_btn'); btn.disabled=true; btn.textContent='Connexion\u2026';
-  try{
-    const res=await fetch('api.php?action=login',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:val('g_email'),password:document.getElementById('g_pass').value})});
-    const d=await res.json();
-    if(d.ok){ showLoading(); await loadApp(); return; }
-    gErr(d.error||'\u00c9chec de la connexion.');
-  }catch(_){ gErr('Erreur de connexion au serveur.'); }
-  btn.disabled=false; btn.textContent='Se connecter';
-}
-async function doRegister(){
-  const pass=document.getElementById('g_pass').value, pass2=document.getElementById('g_pass2').value;
-  if(pass!==pass2){ gErr('Les deux mots de passe ne correspondent pas.'); return; }
-  const btn=document.getElementById('g_btn'); btn.disabled=true; btn.textContent='Cr\u00e9ation\u2026';
-  try{
-    const res=await fetch('api.php?action=setup',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:val('g_name'),email:val('g_email'),password:pass})});
-    const d=await res.json();
-    if(d.ok){ showLoading(); await loadApp(); return; }
-    gErr(d.error||'\u00c9chec.');
-  }catch(_){ gErr('Erreur de connexion au serveur.'); }
-  btn.disabled=false; btn.textContent='Cr\u00e9er mon compte';
+/* L'ecran d'accueil ne sert plus a se connecter : la session vient de l'ERP.
+   Il ne reste qu'un affichage d'erreur, pour le cas ou les donnees ne se
+   chargent pas. */
+function showGate(mode, msg){
+  gateShell(GATE_BRAND
+    + '<h1>Chargement impossible</h1>'
+    + '<div class="gate-err" id="gateErr" style="display:block">'
+    + (msg || 'Impossible de charger les donnees.') + '</div>'
+    + '<button id="g_btn" onclick="location.reload()">Reessayer</button>'
+    + '<div class="gate-lead" style="margin-top:12px">'
+    + '<a href="https://erp.meyrinfc.ch">Retour &agrave; l&rsquo;ERP</a></div>');
 }
 
+/* Arriver ici signifie que la session ERP est deja validee par index.php :
+   il n'y a plus d'ecran de connexion ni d'installation a proposer. */
 async function init(){
   showLoading();
-  let st;
-  try{ st = await api('status'); }
-  catch(e){ showGate('login','Impossible de joindre le serveur.'); return; }
-  if(st.user){ ME = st.user; try{ await loadApp(); }catch(e){ showGate('login'); } }
-  else showGate(st.installed ? 'login' : 'setup');
+  try{ await loadApp(); }
+  catch(e){ showGate('login','Impossible de charger les donnees : '+e.message); }
 }
 init();
 /* =====================================================================

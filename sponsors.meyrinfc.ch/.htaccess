@@ -11,3 +11,12 @@ DirectoryIndex index.php
 <Files "index.html">
     Require all denied
 </Files>
+
+# 3. index.php porte les permissions de la personne connectee : il ne doit
+#    jamais rester en cache navigateur, sinon quelqu'un dont le role vient de
+#    changer continue de voir l'ancienne version, avec des droits perimes.
+<IfModule mod_headers.c>
+    <FilesMatch "index\.php$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate"
+    </FilesMatch>
+</IfModule>

@@ -27,14 +27,12 @@ register_shutdown_function(function () {
   }
 });
 
-session_set_cookie_params([
-  'lifetime' => 60 * 60 * 24 * 14, // 14 jours
-  'path' => '/',
-  'httponly' => true,
-  'samesite' => 'Lax',
-  'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-]);
-session_start();
+/* Plus de session PHP propre a l'application : l'identite vient de la session
+   unique de l'ERP (cookie JWT). Conserver une session PHP ici deviendrait
+   d'ailleurs dangereux le jour ou toutes les apps partageront le meme domaine,
+   puisqu'elles partageraient alors le meme $_SESSION et se prendraient
+   mutuellement pour d'autres utilisateurs. */
+require_once __DIR__ . '/mfc_boot.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -178,12 +176,22 @@ function fail(string $msg, int $code = 400): never {
   out(['error' => $msg], $code);
 }
 
+/**
+ * Ligne `users` locale correspondant a la personne connectee.
+ *
+ * La table `users` n'authentifie plus rien, mais elle reste indispensable :
+ * owner_id des opportunites, assignee_id des taches, uploaded_by des documents
+ * et user_id du journal pointent dessus. Elle sert donc d'annuaire local, et
+ * mfc_local_user() y rattache le compte ERP sans jamais toucher aux lignes
+ * existantes.
+ */
 function current_user(): ?array {
-  if (empty($_SESSION['uid'])) return null;
-  $st = db()->prepare('SELECT id, name, email, role, active FROM users WHERE id = ? AND active = 1');
-  $st->execute([$_SESSION['uid']]);
-  $u = $st->fetch();
-  return $u ?: null;
+  static $u = null;
+  if ($u !== null) return $u;
+  $s = mfc_session();
+  if (!$s) return null;
+  $u = mfc_local_user(db(), $s);
+  return $u;
 }
 
 function require_auth(): array {
@@ -192,16 +200,9 @@ function require_auth(): array {
   return $u;
 }
 
-/** Lecture : tous les rôles. Écriture métier : editor + admin. Gestion utilisateurs : admin. */
-function require_role(array $u, string $level): void {
-  $ok = match ($level) {
-    'view'  => in_array($u['role'], ['viewer', 'editor', 'admin'], true),
-    'edit'  => in_array($u['role'], ['editor', 'admin'], true),
-    'admin' => $u['role'] === 'admin',
-    default => false,
-  };
-  if (!$ok) fail('Droits insuffisants pour cette action', 403);
-}
+/* require_role() a disparu : les droits ne dependent plus d'un role local
+   (viewer/editor/admin) mais des permissions portees par le jeton, verifiees
+   en un seul point par la table SPONSORS_PERMS du routeur. */
 
 function log_activity(?int $uid, string $action, string $detail = ''): void {
   $st = db()->prepare('INSERT INTO activity (user_id, action, detail) VALUES (?,?,?)');
@@ -231,144 +232,82 @@ $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 $b = body();
 
+/* ---------------------------------------------------------------- Permissions
+ *
+ * Table déclarative, vérifiée en un seul point plutôt que dans chaque bloc.
+ * Format : action => permission, ou ['GET' => perm, 'write' => perm].
+ * 'write' couvre POST, PUT, PATCH et DELETE.
+ *
+ * REFUS PAR DÉFAUT : une action absente de cette table exige partners.edit.
+ * Ajouter un point d'entrée sans y penser le rend inaccessible, pas public.
+ *
+ * Choix à connaître : consulter le pipeline d'opportunités ou les tâches
+ * relève de la lecture du CRM (partners.view), alors que les modifier exige
+ * la permission dédiée. Sans ça, un profil en lecture seule ne verrait ni
+ * le pipeline ni les relances, ce qui viderait son écran d'accueil.
+ */
+const SPONSORS_PERMS = [
+  'me'            => null,
+  'users'         => ['GET' => 'partners.view', 'write' => null], // écriture traitée dans le bloc
+  'sponsors'      => ['GET' => 'partners.view',  'write' => 'partners.edit'],
+  'contacts'      => ['GET' => 'partners.view',  'write' => 'partners.edit'],
+  'products'      => ['GET' => 'contracts.view', 'write' => 'contracts.edit'],
+  'assignments'   => ['GET' => 'contracts.view', 'write' => 'contracts.edit'],
+  'contracts'     => ['GET' => 'contracts.view', 'write' => 'contracts.edit'],
+  'opportunities' => ['GET' => 'partners.view',  'write' => 'opportunities.manage'],
+  'tasks'         => ['GET' => 'partners.view',  'write' => 'tasks.manage'],
+  'documents'     => ['GET' => 'documents.view', 'write' => 'documents.upload'],
+  'download'      => 'documents.view',
+  'activity'      => 'dashboard.view',
+  'dashboard'     => 'dashboard.view',
+  'import'        => 'partners.edit',
+];
+
+/* Points d'entrée supprimés : l'authentification est désormais centralisée. */
+const SPONSORS_GONE = ['login', 'logout', 'setup', 'status', 'change_password'];
+if (in_array($action, SPONSORS_GONE, true)) {
+    fail("Cette application n'a plus de connexion propre. Utilisez l'ERP : " . ERP_URL, 410);
+}
+
+/* Session ERP + accès à l'application. Répond 401/403 en JSON sinon. */
+mfc_require_api('sponsors');
+
+$sp_rule = array_key_exists($action, SPONSORS_PERMS) ? SPONSORS_PERMS[$action] : 'partners.edit';
+if (is_array($sp_rule)) {
+    $sp_rule = ($method === 'GET') ? $sp_rule['GET'] : $sp_rule['write'];
+}
+if ($sp_rule !== null) {
+    mfc_require_perm('sponsors.' . $sp_rule);
+}
+
 switch ($action) {
 
-  /* ============ AUTH & SETUP ============ */
+  /* ============ SESSION ============ */
 
-  case 'status': {
-    $count = (int) db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
-    out(['installed' => $count > 0, 'user' => current_user()]);
-  }
-
-  case 'setup': {
-    // Création du premier compte admin — uniquement si aucun utilisateur n'existe.
-    $count = (int) db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
-    if ($count > 0) fail('L\'application est déjà installée', 403);
-    $name = s($b, 'name'); $email = strtolower(s($b, 'email')); $pass = (string)($b['password'] ?? '');
-    if (!$name || !filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Nom et e-mail valides requis');
-    if (strlen($pass) < 8) fail('Mot de passe : 8 caractères minimum');
-    $st = db()->prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?,?,?,?)');
-    $st->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), 'admin']);
-    $_SESSION['uid'] = (int) db()->lastInsertId();
-    session_regenerate_id(true);
-    log_activity($_SESSION['uid'], 'Installation', 'Compte administrateur créé');
-    out(['ok' => true, 'user' => current_user()]);
-  }
-
-  case 'login': {
-    $email = strtolower(s($b, 'email')); $pass = (string)($b['password'] ?? '');
-    $st = db()->prepare('SELECT * FROM users WHERE email = ? AND active = 1');
-    $st->execute([$email]);
-    $u = $st->fetch();
-    if (!$u || !password_verify($pass, $u['password_hash'])) {
-      usleep(400000); // freine la force brute
-      fail('E-mail ou mot de passe incorrect', 401);
-    }
-    $_SESSION['uid'] = (int) $u['id'];
-    session_regenerate_id(true);
-    out(['ok' => true, 'user' => current_user()]);
-  }
-
-  case 'logout': {
-    session_destroy();
-    out(['ok' => true]);
-  }
+  /* status, setup, login, logout et change_password ont ete supprimes :
+     l'authentification est centralisee dans l'ERP. Les appels a ces actions
+     sont interceptes plus haut et renvoient un 410 explicite. */
 
   case 'me': {
     out(['user' => require_auth()]);
   }
 
-  case 'change_password': {
-    $u = require_auth();
-    $old = (string)($b['old'] ?? ''); $new = (string)($b['new'] ?? '');
-    if (strlen($new) < 8) fail('Nouveau mot de passe : 8 caractères minimum');
-    $st = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
-    $st->execute([$u['id']]);
-    if (!password_verify($old, (string)$st->fetchColumn())) fail('Mot de passe actuel incorrect', 403);
-    db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
-        ->execute([password_hash($new, PASSWORD_DEFAULT), $u['id']]);
-    out(['ok' => true]);
-  }
-
   /* ============ UTILISATEURS (admin) ============ */
 
+  /* Annuaire local, en lecture seule : il alimente les listes « responsable »
+     et « assigné à ». La création et la modification des comptes se font
+     exclusivement dans l'ERP, seul endroit où vit désormais une identité. */
   case 'users': {
-    $u = require_auth();
+    require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       out(db()->query('SELECT id, name, email, role, active, created_at FROM users ORDER BY id')->fetchAll());
     }
-    require_role($u, 'admin');
-    if ($method === 'POST') {
-      $name = s($b, 'name'); $email = strtolower(s($b, 'email'));
-      $pass = (string)($b['password'] ?? ''); $role = s($b, 'role', 'viewer');
-      if (!$name || !filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Nom et e-mail valides requis');
-      if (strlen($pass) < 8) fail('Mot de passe : 8 caractères minimum');
-      if (!in_array($role, ['admin', 'editor', 'viewer'], true)) fail('Rôle invalide');
-      try {
-        db()->prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?,?,?,?)')
-            ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), $role]);
-      } catch (PDOException $e) { fail('Cet e-mail est déjà utilisé'); }
-      log_activity($u['id'], 'Utilisateur créé', "$name ($role)");
-      out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
-    }
-    if ($method === 'PUT') {
-      $id = i($b, 'id');
-      $target = db()->prepare('SELECT * FROM users WHERE id = ?');
-      $target->execute([$id]);
-      if (!$target->fetch()) fail('Utilisateur introuvable', 404);
-      $fields = []; $vals = [];
-      if (isset($b['name']))  { $fields[] = 'name = ?';  $vals[] = s($b, 'name'); }
-      if (isset($b['email'])) { $fields[] = 'email = ?'; $vals[] = strtolower(s($b, 'email')); }
-      if (isset($b['role'])) {
-        $role = s($b, 'role');
-        if (!in_array($role, ['admin', 'editor', 'viewer'], true)) fail('Rôle invalide');
-        // Empêche de retirer le dernier admin
-        if ($role !== 'admin') {
-          $admins = (int) db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
-          $isAdmin = (int) db()->query("SELECT COUNT(*) FROM users WHERE id=$id AND role='admin'")->fetchColumn();
-          if ($isAdmin && $admins <= 1) fail('Impossible : il doit rester au moins un administrateur');
-        }
-        $fields[] = 'role = ?'; $vals[] = $role;
-      }
-      if (isset($b['active'])) {
-        $act = i($b, 'active');
-        if (!$act) {
-          $admins = (int) db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
-          $isAdmin = (int) db()->query("SELECT COUNT(*) FROM users WHERE id=$id AND role='admin'")->fetchColumn();
-          if ($isAdmin && $admins <= 1) fail('Impossible de désactiver le dernier administrateur');
-        }
-        $fields[] = 'active = ?'; $vals[] = $act;
-      }
-      if (isset($b['password']) && $b['password'] !== '') {
-        if (strlen((string)$b['password']) < 8) fail('Mot de passe : 8 caractères minimum');
-        $fields[] = 'password_hash = ?'; $vals[] = password_hash((string)$b['password'], PASSWORD_DEFAULT);
-      }
-      if (!$fields) fail('Rien à modifier');
-      $vals[] = $id;
-      db()->prepare('UPDATE users SET ' . implode(', ', $fields) . ' WHERE id = ?')->execute($vals);
-      log_activity($u['id'], 'Utilisateur modifié', "ID $id");
-      out(['ok' => true]);
-    }
-    if ($method === 'DELETE') {
-      $id = i($_GET, 'id');
-      if ($id === (int)$u['id']) fail('Vous ne pouvez pas supprimer votre propre compte');
-      $isAdmin = (int) db()->query("SELECT COUNT(*) FROM users WHERE id=$id AND role='admin'")->fetchColumn();
-      $admins = (int) db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
-      if ($isAdmin && $admins <= 1) fail('Impossible de supprimer le dernier administrateur');
-      db()->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
-      log_activity($u['id'], 'Utilisateur supprimé', "ID $id");
-      out(['ok' => true]);
-    }
-    fail('Méthode non supportée', 405);
+    fail("Les comptes se gèrent dans l'ERP : " . ERP_URL, 403);
   }
-
-  /* ============ SPONSORS & CONTACTS ============ */
 
   case 'sponsors': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       $sponsors = db()->query('SELECT * FROM sponsors ORDER BY name COLLATE NOCASE')->fetchAll();
       $contacts = db()->query('SELECT * FROM contacts ORDER BY is_primary DESC, name')->fetchAll();
       $bySponsor = [];
@@ -380,7 +319,6 @@ switch ($action) {
       }
       out($sponsors);
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $name = s($b, 'name');
       if (!$name) fail('Le nom du sponsor est requis');
@@ -409,7 +347,6 @@ switch ($action) {
 
   case 'contacts': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $sid = i($b, 'sponsor_id'); $name = s($b, 'name');
       if (!$sid || !$name) fail('Sponsor et nom requis');
@@ -440,7 +377,6 @@ switch ($action) {
   case 'products': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       $products = db()->query('SELECT * FROM products ORDER BY category, name')->fetchAll();
       $assign = db()->query('SELECT a.*, s.name AS sponsor_name FROM assignments a JOIN sponsors s ON s.id = a.sponsor_id')->fetchAll();
       $byProduct = [];
@@ -452,7 +388,6 @@ switch ($action) {
       }
       out($products);
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $name = s($b, 'name');
       if (!$name) fail('Le nom du support est requis');
@@ -475,7 +410,6 @@ switch ($action) {
 
   case 'assignments': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $pid = i($b, 'product_id'); $sid = i($b, 'sponsor_id');
       if (!$pid || !$sid) fail('Support et sponsor requis');
@@ -499,10 +433,8 @@ switch ($action) {
   case 'contracts': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       out(db()->query('SELECT c.*, s.name AS sponsor_name FROM contracts c JOIN sponsors s ON s.id = c.sponsor_id ORDER BY c.end_date IS NULL, c.end_date')->fetchAll());
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $sid = i($b, 'sponsor_id'); $label = s($b, 'label');
       if (!$sid || !$label) fail('Sponsor et libellé requis');
@@ -529,10 +461,8 @@ switch ($action) {
   case 'opportunities': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       out(db()->query('SELECT o.*, u.name AS owner_name FROM opportunities o LEFT JOIN users u ON u.id = o.owner_id ORDER BY o.stage, o.created_at DESC')->fetchAll());
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $name = s($b, 'name');
       if (!$name) fail('Le nom de l\'opportunité est requis');
@@ -563,13 +493,11 @@ switch ($action) {
   case 'tasks': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       out(db()->query('SELECT t.*, u.name AS assignee_name, s.name AS sponsor_name
                        FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id
                        LEFT JOIN sponsors s ON s.id = t.sponsor_id
                        ORDER BY t.done, t.due_date IS NULL, t.due_date')->fetchAll());
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       $title = s($b, 'title');
       if (!$title) fail('Le titre de la tâche est requis');
@@ -599,13 +527,11 @@ switch ($action) {
   case 'documents': {
     $u = require_auth();
     if ($method === 'GET') {
-      require_role($u, 'view');
       out(db()->query('SELECT d.*, s.name AS sponsor_name, u.name AS uploader
                        FROM documents d LEFT JOIN sponsors s ON s.id = d.sponsor_id
                        LEFT JOIN users u ON u.id = d.uploaded_by
                        ORDER BY d.created_at DESC')->fetchAll());
     }
-    require_role($u, 'edit');
     if ($method === 'POST') {
       if (empty($_FILES['file'])) fail('Aucun fichier reçu');
       $f = $_FILES['file'];
@@ -635,7 +561,6 @@ switch ($action) {
 
   case 'download': {
     $u = require_auth();
-    require_role($u, 'view');
     $id = i($_GET, 'id');
     $st = db()->prepare('SELECT * FROM documents WHERE id = ?');
     $st->execute([$id]);
@@ -655,13 +580,11 @@ switch ($action) {
 
   case 'activity': {
     $u = require_auth();
-    require_role($u, 'view');
     out(db()->query('SELECT a.*, u.name AS user_name FROM activity a LEFT JOIN users u ON u.id = a.user_id ORDER BY a.id DESC LIMIT 20')->fetchAll());
   }
 
   case 'dashboard': {
     $u = require_auth();
-    require_role($u, 'view');
     $d = db();
     $active = (int) $d->query("SELECT COUNT(*) FROM sponsors WHERE status != 'Inactif'")->fetchColumn();
     $revenue = (float) $d->query("SELECT COALESCE(SUM(amount),0) FROM contracts WHERE status != 'Archivé'")->fetchColumn();
@@ -696,7 +619,6 @@ switch ($action) {
 
   case 'import': {
     $u = require_auth();
-    require_role($u, 'edit');
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $sponsors = $b['sponsors'] ?? null;
     if (!is_array($sponsors) || !count($sponsors)) fail('Aucun sponsor à importer');

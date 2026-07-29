@@ -11,14 +11,9 @@ declare(strict_types=1);
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
-session_set_cookie_params([
-  'lifetime' => 60 * 60 * 24 * 14, // 14 jours
-  'path' => '/',
-  'httponly' => true,
-  'samesite' => 'Lax',
-  'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-]);
-session_start();
+/* Plus de session PHP propre a l'application : l'identite vient de la session
+   unique de l'ERP (cookie JWT). */
+require_once __DIR__ . '/mfc_boot.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -104,21 +99,41 @@ function s(array $b, string $k, string $def = ''): string { return trim((string)
 function n(array $b, string $k, float $def = 0): float { return (float)($b[$k] ?? $def); }
 function i(array $b, string $k, int $def = 0): int { return (int)($b[$k] ?? $def); }
 
+/**
+ * Ligne `users` locale de la personne connectee. La table n'authentifie plus
+ * rien mais reste l'annuaire auquel se rattachent les donnees existantes.
+ */
 function current_user(): ?array {
-  if (empty($_SESSION['uid'])) return null;
-  $st = db()->prepare('SELECT id, name, email, role, active FROM users WHERE id = ? AND active = 1');
-  $st->execute([$_SESSION['uid']]);
-  return $st->fetch() ?: null;
+  static $u = null;
+  if ($u !== null) return $u;
+  $s = mfc_session();
+  if (!$s) return null;
+  $u = mfc_local_user(db(), $s);
+  return $u;
 }
 function require_auth(): array { $u = current_user(); if (!$u) fail('Non authentifié', 401); return $u; }
-function require_role(array $u, string $level): void {
-  $ok = match ($level) {
-    'view'  => in_array($u['role'], ['benevole', 'viewer', 'editor', 'admin'], true),
-    'edit'  => in_array($u['role'], ['editor', 'admin'], true),
-    'admin' => $u['role'] === 'admin',
-    default => false,
-  };
-  if (!$ok) fail('Droits insuffisants pour cette action', 403);
+
+/**
+ * Permission requise par collection.
+ *
+ * Ici les droits portent sur la COLLECTION et non sur l'action, parce que
+ * `data`, `save` et `delete` sont generiques et servent les cinq collections.
+ * La liste des sponsors cote evenements fait partie du planning : elle n'a
+ * rien a voir avec le CRM Sponsoring, qui a ses propres droits.
+ *
+ * REFUS PAR DEFAUT : une collection absente de cette table est inaccessible.
+ */
+const COLLECTION_PERMS = [
+  'events'     => ['view' => 'planning.view', 'edit' => 'planning.edit'],
+  'sponsors'   => ['view' => 'planning.view', 'edit' => 'planning.edit'],
+  'volunteers' => ['view' => 'planning.view', 'edit' => 'volunteers.manage'],
+  'materiel'   => ['view' => 'planning.view', 'edit' => 'materiel.manage'],
+  'documents'  => ['view' => 'planning.view', 'edit' => 'documents.manage'],
+];
+
+function collection_perm(string $c, string $level): string {
+  if (!isset(COLLECTION_PERMS[$c])) fail('Collection inconnue', 400);
+  return 'events.' . COLLECTION_PERMS[$c][$level];
 }
 
 function load_collection(string $c): array {
@@ -157,139 +172,52 @@ $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 $b = body();
 
+/* Points d'entree supprimes : l'authentification est centralisee dans l'ERP. */
+if (in_array($action, ['login', 'logout', 'setup', 'status', 'change_password'], true)) {
+  fail("Cette application n'a plus de connexion propre. Utilisez l'ERP : " . ERP_URL, 410);
+}
+
+/* Session ERP + acces a l'application. Repond 401/403 en JSON sinon. */
+mfc_require_api('events');
+
 switch ($action) {
 
-  /* ============ AUTH & SETUP ============ */
+  /* ============ SESSION ============ */
 
-  case 'status': {
-    $count = (int) db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
-    out(['installed' => $count > 0, 'user' => current_user()]);
-  }
-
-  case 'setup': {
-    // Création du premier compte (administrateur) — uniquement si aucun utilisateur n'existe.
-    $count = (int) db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
-    if ($count > 0) fail('L\'application est déjà installée', 403);
-    $name = s($b, 'name'); $email = strtolower(s($b, 'email')); $pass = (string)($b['password'] ?? '');
-    if ($name === '') $name = 'Administrateur';
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Adresse e-mail valide requise');
-    if (strlen($pass) < 8) fail('Mot de passe : 8 caractères minimum');
-    db()->prepare('INSERT INTO users (name, email, password_hash, role, last_login) VALUES (?,?,?,?,datetime(\'now\'))')
-        ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), 'admin']);
-    $_SESSION['uid'] = (int) db()->lastInsertId();
-    session_regenerate_id(true);
-    seed_demo();
-    out(['ok' => true, 'user' => current_user()]);
-  }
-
-  case 'login': {
-    $email = strtolower(s($b, 'email')); $pass = (string)($b['password'] ?? '');
-    $st = db()->prepare('SELECT * FROM users WHERE email = ? AND active = 1');
-    $st->execute([$email]);
-    $u = $st->fetch();
-    if (!$u || !password_verify($pass, $u['password_hash'])) { usleep(400000); fail('E-mail ou mot de passe incorrect', 401); }
-    $_SESSION['uid'] = (int) $u['id'];
-    session_regenerate_id(true);
-    db()->prepare('UPDATE users SET last_login = datetime(\'now\') WHERE id = ?')->execute([(int)$u['id']]);
-    out(['ok' => true, 'user' => current_user()]);
-  }
-
-  case 'logout': { session_destroy(); out(['ok' => true]); }
+  /* status, setup, login, logout et change_password ont ete supprimes :
+     l'authentification est centralisee dans l'ERP. Les appels a ces actions
+     sont interceptes plus haut et renvoient un 410 explicite. */
 
   case 'me': { out(['user' => require_auth()]); }
 
-  case 'change_password': {
-    $u = require_auth();
-    $old = (string)($b['old'] ?? ($b['current'] ?? '')); $new = (string)($b['new'] ?? '');
-    if (strlen($new) < 8) fail('Nouveau mot de passe : 8 caractères minimum');
-    $st = db()->prepare('SELECT password_hash FROM users WHERE id = ?'); $st->execute([$u['id']]);
-    if (!password_verify($old, (string)$st->fetchColumn())) fail('Mot de passe actuel incorrect', 403);
-    db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([password_hash($new, PASSWORD_DEFAULT), $u['id']]);
-    out(['ok' => true]);
-  }
-
   /* ============ UTILISATEURS (admin) ============ */
 
+  /* Annuaire local, en lecture seule : il alimente les listes de benevoles et
+     de responsables. Les comptes se gerent exclusivement dans l'ERP. */
   case 'users': {
-    $u = require_auth();
-    if ($method === 'GET') { require_role($u, 'view'); out(list_users()); }
-    require_role($u, 'admin');
-    if ($method === 'POST') {
-      $name = s($b, 'name'); $email = strtolower(s($b, 'email'));
-      $pass = (string)($b['password'] ?? ''); $role = s($b, 'role', 'viewer');
-      if (!$name || !filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Nom et e-mail valides requis');
-      if (strlen($pass) < 8) fail('Mot de passe : 8 caractères minimum');
-      if (!in_array($role, ['admin', 'editor', 'viewer', 'benevole'], true)) fail('Rôle invalide');
-      try {
-        db()->prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?,?,?,?,?)')
-            ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), $role, i($b,'active',1)]);
-      } catch (PDOException $e) { fail('Cet e-mail est déjà utilisé'); }
-      out(['ok' => true, 'id' => (int) db()->lastInsertId(), 'users' => list_users()]);
-    }
-    if ($method === 'PUT') {
-      $id = i($b, 'id');
-      $t = db()->prepare('SELECT * FROM users WHERE id = ?'); $t->execute([$id]);
-      if (!$t->fetch()) fail('Utilisateur introuvable', 404);
-      $fields = []; $vals = [];
-      if (isset($b['name']))  { $fields[] = 'name = ?';  $vals[] = s($b, 'name'); }
-      if (isset($b['email'])) { $fields[] = 'email = ?'; $vals[] = strtolower(s($b, 'email')); }
-      if (isset($b['role'])) {
-        $role = s($b, 'role');
-        if (!in_array($role, ['admin', 'editor', 'viewer', 'benevole'], true)) fail('Rôle invalide');
-        if ($role !== 'admin') {
-          $admins = (int) db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
-          $isAdmin = (int) db()->query("SELECT COUNT(*) FROM users WHERE id=$id AND role='admin'")->fetchColumn();
-          if ($isAdmin && $admins <= 1) fail('Il doit rester au moins un administrateur');
-        }
-        $fields[] = 'role = ?'; $vals[] = $role;
-      }
-      if (isset($b['active'])) {
-        $act = i($b, 'active');
-        if (!$act) {
-          $admins = (int) db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
-          $isAdmin = (int) db()->query("SELECT COUNT(*) FROM users WHERE id=$id AND role='admin'")->fetchColumn();
-          if ($isAdmin && $admins <= 1) fail('Impossible de désactiver le dernier administrateur');
-        }
-        $fields[] = 'active = ?'; $vals[] = $act;
-      }
-      if (isset($b['password']) && $b['password'] !== '') {
-        if (strlen((string)$b['password']) < 8) fail('Mot de passe : 8 caractères minimum');
-        $fields[] = 'password_hash = ?'; $vals[] = password_hash((string)$b['password'], PASSWORD_DEFAULT);
-      }
-      if (!$fields) fail('Rien à modifier');
-      $vals[] = $id;
-      try { db()->prepare('UPDATE users SET ' . implode(', ', $fields) . ' WHERE id = ?')->execute($vals); }
-      catch (PDOException $e) { fail('Cet e-mail est déjà utilisé'); }
-      out(['ok' => true, 'users' => list_users()]);
-    }
-    if ($method === 'DELETE') {
-      $id = i($_GET, 'id');
-      if ($id === (int)$u['id']) fail('Vous ne pouvez pas supprimer votre propre compte');
-      $isAdmin = (int) db()->query("SELECT COUNT(*) FROM users WHERE id=$id AND role='admin'")->fetchColumn();
-      $admins = (int) db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
-      if ($isAdmin && $admins <= 1) fail('Impossible de supprimer le dernier administrateur');
-      db()->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
-      out(['ok' => true, 'users' => list_users()]);
-    }
-    fail('Méthode non supportée', 405);
+    require_auth();
+    if ($method === 'GET') out(list_users());
+    fail("Les comptes se gèrent dans l'ERP : " . ERP_URL, 403);
   }
 
-  /* ============ DONNÉES (events, volunteers, sponsors, materiel, documents) ============ */
-
   case 'data': {
-    $u = require_auth(); require_role($u, 'view');
+    $u = require_auth();
+    /* Une collection interdite est renvoyee vide plutot que de faire echouer
+       tout l'appel : l'interface se dessine sans ce bloc au lieu de rester
+       blanche. C'est le meme point d'entree qui alimente tous les ecrans. */
     $res = ['user' => $u, 'collections' => [], 'settings' => load_settings()];
-    foreach (COLLECTIONS as $c) $res['collections'][$c] = load_collection($c);
-    if ($u['role'] === 'admin') $res['users'] = list_users();
+    foreach (COLLECTIONS as $c) {
+      $res['collections'][$c] = mfc_can(collection_perm($c, 'view')) ? load_collection($c) : [];
+    }
+    $res['users'] = list_users();   // annuaire, alimente les listes deroulantes
     out($res);
   }
 
   case 'save': {
-    $u = require_auth(); require_role($u, 'edit');
-    // Benevole peut sauvegarder uniquement ses propres données bénévoles (ses dispos)
-    // Cette logique est gérée côté client ; le serveur autorise editor+
+    $u = require_auth();
     $c = $_GET['collection'] ?? '';
     if (!in_array($c, COLLECTIONS, true)) fail('Collection inconnue');
+    mfc_require_perm(collection_perm($c, 'edit'));
     $rec = $b;
     $id = i($rec, 'id');
     if ($id <= 0) { $id = next_id($c); }
@@ -299,17 +227,18 @@ switch ($action) {
   }
 
   case 'delete': {
-    $u = require_auth(); require_role($u, 'edit');
+    $u = require_auth();
     $c = $_GET['collection'] ?? ''; $id = i($_GET, 'id');
     if (!in_array($c, COLLECTIONS, true)) fail('Collection inconnue');
+    mfc_require_perm(collection_perm($c, 'edit'));
     db()->prepare('DELETE FROM records WHERE collection = ? AND rec_id = ?')->execute([$c, $id]);
     out(['ok' => true]);
   }
 
   case 'settings': {
-    $u = require_auth();
-    if ($method === 'GET') { require_role($u, 'view'); out(load_settings()); }
-    require_role($u, 'admin');
+    require_auth();
+    if ($method === 'GET') { mfc_require_perm('events.planning.view'); out(load_settings()); }
+    mfc_require_perm('events.settings.manage');
     foreach ($b as $k => $v) set_setting(substr((string)$k, 0, 60), $v);
     out(['ok' => true, 'settings' => load_settings()]);
   }
@@ -317,7 +246,7 @@ switch ($action) {
   /* ============ DOCUMENTS (téléversement) ============ */
 
   case 'upload': {
-    $u = require_auth(); require_role($u, 'edit');
+    $u = require_auth(); mfc_require_perm('events.documents.manage');
     if (empty($_FILES['file'])) fail('Aucun fichier reçu');
     $f = $_FILES['file'];
     if ($f['error'] !== UPLOAD_ERR_OK) fail('Erreur de téléversement (code ' . $f['error'] . ')');

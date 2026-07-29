@@ -82,45 +82,7 @@ tailwind.config = {
 </head>
 <body class="bg-canvas text-ink font-sans text-[14px] leading-relaxed">
 
-<!-- ============ ÉCRAN AUTH ============ -->
-<div id="authScreen" class="hidden min-h-screen grid place-items-center p-4">
-  <div class="w-full max-w-sm">
-    <div class="flex items-center justify-center gap-2.5 mb-6">
-      <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC" class="w-10 h-10 object-contain">
-      <div>
-        <p class="font-display font-bold text-[18px] tracking-tight leading-none">SponsorFlow</p>
-        <p class="text-[11px] text-mute mt-0.5">Meyrin FC · Gestion des sponsors</p>
-      </div>
-    </div>
-
-    <!-- Connexion -->
-    <div id="loginCard" class="hidden bg-white border border-line rounded-xl2 shadow-card p-6 fade-up">
-      <h1 class="font-display font-bold text-[17px] tracking-tight">Connexion</h1>
-      <p class="text-[12.5px] text-mute mt-0.5 mb-5">Accédez à l'espace sponsoring du club.</p>
-      <div class="space-y-3.5">
-        <div><label class="lbl" for="loginEmail">E-mail</label><input id="loginEmail" type="email" class="field" autocomplete="username" placeholder="prenom@meyrinfc.ch"></div>
-        <div><label class="lbl" for="loginPass">Mot de passe</label><input id="loginPass" type="password" class="field" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
-        <p id="loginError" class="hidden text-[12px] text-rose2-600 font-medium"></p>
-        <button onclick="doLogin()" id="loginBtn" class="w-full h-10 rounded-xl bg-brand-600 text-[#15140F] text-[13px] font-semibold hover:bg-brand-700 shadow-card transition">Se connecter</button>
-      </div>
-    </div>
-
-    <!-- Installation (premier lancement) -->
-    <div id="setupCard" class="hidden bg-white border border-line rounded-xl2 shadow-card p-6 fade-up">
-      <span class="inline-block text-[10px] font-bold bg-brand-50 text-brand-700 px-2 py-0.5 rounded-md mb-2">PREMIER LANCEMENT</span>
-      <h1 class="font-display font-bold text-[17px] tracking-tight">Créer le compte administrateur</h1>
-      <p class="text-[12.5px] text-mute mt-0.5 mb-5">Ce compte gérera les utilisateurs et leurs droits d'accès.</p>
-      <div class="space-y-3.5">
-        <div><label class="lbl" for="setupName">Nom complet</label><input id="setupName" type="text" class="field" placeholder="Valentino A."></div>
-        <div><label class="lbl" for="setupEmail">E-mail</label><input id="setupEmail" type="email" class="field" placeholder="valentino@meyrinfc.ch"></div>
-        <div><label class="lbl" for="setupPass">Mot de passe <span class="font-normal text-mute">(8 caractères min.)</span></label><input id="setupPass" type="password" class="field" placeholder="••••••••" onkeydown="if(event.key==='Enter')doSetup()"></div>
-        <p id="setupError" class="hidden text-[12px] text-rose2-600 font-medium"></p>
-        <button onclick="doSetup()" class="w-full h-10 rounded-xl bg-brand-600 text-[#15140F] text-[13px] font-semibold hover:bg-brand-700 shadow-card transition">Créer et accéder à l'application</button>
-      </div>
-    </div>
-    <p class="text-center text-[11px] text-mute mt-4">SponsorFlow · usage interne Meyrin FC</p>
-  </div>
-</div>
+<!-- Ecran de connexion supprime : l'authentification est centralisee dans l'ERP. -->
 
 <!-- ============ APPLICATION ============ -->
 <div id="app" class="hidden">
@@ -509,11 +471,8 @@ tailwind.config = {
           <div class="space-y-3.5">
             <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
               <h2 class="font-semibold text-[14.5px] mb-4">Mon compte</h2>
-              <div class="space-y-3.5">
-                <div><label class="lbl">Mot de passe actuel</label><input id="pwOld" type="password" class="field" autocomplete="current-password"></div>
-                <div><label class="lbl">Nouveau mot de passe (8 car. min.)</label><input id="pwNew" type="password" class="field" autocomplete="new-password"></div>
-                <button onclick="changePassword()" class="h-9 px-4 rounded-lg bg-ink text-white text-[12.5px] font-semibold hover:bg-slate-800 transition">Changer le mot de passe</button>
-              </div>
+              <p class="text-[12.5px] text-mute leading-relaxed">Votre identifiant et votre mot de passe sont ceux de l'ERP.
+              <a href="https://erp.meyrinfc.ch" class="underline">Gerer mon compte dans l'ERP</a>.</p>
             </div>
             <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
               <h2 class="font-semibold text-[14.5px] mb-2">Sauvegarde des données</h2>
@@ -567,8 +526,10 @@ async function api(action, method = 'GET', body = null, isForm = false) {
   const r = await fetch('api.php?action=' + action, opt);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
-    if (r.status === 401 && action !== 'login' && action !== 'status') { showAuth(); }
-    throw new Error(data.error || 'Erreur serveur');
+    const err = new Error(data.error || 'Erreur serveur');
+    err.status = r.status;   // exploite par apiSoft() pour distinguer refus et panne
+    if (r.status === 401) toErp();
+    throw err;
   }
   return data;
 }
@@ -588,8 +549,42 @@ const dBadge = dl => dl === null ? '<span class="text-mute">—</span>'
   : dl <= 30 ? '<span class="inline-flex items-center gap-1 text-[11px] font-bold text-rose2-600"><i class="w-1.5 h-1.5 rounded-full bg-rose2-600 animate-pulse"></i>J-' + dl + '</span>'
   : dl <= 90 ? '<span class="text-[11px] font-bold text-amber2-600">J-' + dl + '</span>'
   : '<span class="text-[11px] font-semibold text-mute">J-' + dl + '</span>';
-const canEdit = () => S.user && ['editor','admin'].includes(S.user.role);
-const isAdmin = () => S.user && S.user.role === 'admin';
+/* Permissions injectees par index.php.
+   Leur absence signifie que la page n'a PAS ete servie par index.php : soit le
+   serveur a livre index.html directement, soit le navigateur affiche une
+   version en cache. On ne devine pas de droits, on repasse une fois par
+   index.php, puis on le dit clairement. */
+if (!window.MFC) {
+  if (!/[?&]wrapped=1/.test(location.search)) {
+    location.replace('index.php?wrapped=1&_=' + Date.now());
+  } else {
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.innerHTML =
+        '<div style="font-family:system-ui;max-width:520px;margin:80px auto;padding:28px;'
+      + 'background:#fff;border-radius:14px;line-height:1.6">'
+      + '<h2 style="margin:0 0 10px">Configuration incomplete</h2>'
+      + "<p>Cette page n'a pas recu vos droits d'acces. Signalez-le a l'administrateur.</p></div>";
+    });
+  }
+}
+const MFC = window.MFC || {};
+
+/* L'ancien modele viewer/editor/admin local a disparu : les droits viennent
+   des permissions du role ERP. canEdit() garde son nom pour ne pas reecrire
+   les 25 appels de l'interface, mais interroge desormais partners.edit. */
+const canEdit = () => !!MFC.partnersEdit;
+const isAdmin = () => false;   // la gestion des comptes se fait dans l'ERP
+
+/* Appel dont un refus de droit n'est pas fatal : renvoie une valeur de repli
+   et la page se dessine sans ce bloc. Une vraie panne remonte toujours. */
+async function apiSoft(action, fallback, allowed = true) {
+  if (!allowed) return fallback;
+  try { return await api(action); }
+  catch (e) {
+    if (e.status === 403) { console.warn('Bloc ignore, droit manquant :', action); return fallback; }
+    throw e;
+  }
+}
 
 /* ---- Statuts de contrat ---- */
 const CONTRACT_STATUSES = ['Contrat à envoyer', 'Facture à envoyer', 'Attente de paiement', 'Actif', 'Archivé'];
@@ -740,53 +735,31 @@ const sponsorOptions = sel => '<option value="">— Choisir —</option>' + S.sp
 const userOptions = sel => S.users.filter(u=>u.active).map(u => `<option value="${u.id}" ${u.id==sel?'selected':''}>${esc(u.name)}</option>`).join('');
 
 /* ================================================================ AUTH */
+/* L'application n'a plus de connexion propre : arriver ici signifie que la
+   session ERP est deja validee par index.php. Les ecrans de connexion et
+   d'installation ont ete retires, ainsi que le changement de mot de passe,
+   qui se fait desormais dans l'ERP. */
 async function boot() {
   try {
-    const st = await api('status');
-    if (!st.installed) { showAuth('setup'); return; }
-    if (!st.user) { showAuth('login'); return; }
-    S.user = st.user;
+    const me = await api('me');
+    S.user = me.user;
     await enterApp();
   } catch (e) {
-    showAuth('login');
-    toast('Impossible de joindre le serveur — vérifiez que api.php est bien en ligne', true);
+    if (e.status === 401) { toErp(); return; }
+    toast('Impossible de joindre le serveur : ' + e.message, true);
   }
 }
-function showAuth(mode = 'login') {
-  document.getElementById('app').classList.add('hidden');
-  document.getElementById('authScreen').classList.remove('hidden');
-  document.getElementById('loginCard').classList.toggle('hidden', mode !== 'login');
-  document.getElementById('setupCard').classList.toggle('hidden', mode !== 'setup');
-}
-async function doLogin() {
-  const err = document.getElementById('loginError'); err.classList.add('hidden');
-  try {
-    const r = await api('login', 'POST', { email: f('loginEmail'), password: document.getElementById('loginPass').value });
-    S.user = r.user; await enterApp();
-  } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
-}
-async function doSetup() {
-  const err = document.getElementById('setupError'); err.classList.add('hidden');
-  try {
-    const r = await api('setup', 'POST', { name: f('setupName'), email: f('setupEmail'), password: document.getElementById('setupPass').value });
-    S.user = r.user; await enterApp();
-    toast('Bienvenue dans SponsorFlow, ' + S.user.name.split(' ')[0] + ' !');
-  } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
-}
-async function doLogout() { await api('logout', 'POST'); location.reload(); }
-async function changePassword() {
-  try {
-    await api('change_password', 'POST', { old: document.getElementById('pwOld').value, new: document.getElementById('pwNew').value });
-    document.getElementById('pwOld').value = ''; document.getElementById('pwNew').value = '';
-    toast('Mot de passe modifié');
-  } catch (e) { toast(e.message, true); }
+
+function toErp() {
+  location.href = 'https://erp.meyrinfc.ch/?redirect=' + encodeURIComponent(location.href);
 }
 
+function doLogout() { location.href = 'https://erp.meyrinfc.ch/logout.php'; }
+
 async function enterApp() {
-  document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('meName').textContent = S.user.name;
-  document.getElementById('meRole').textContent = { admin:'Administrateur', editor:'Éditeur', viewer:'Lecture' }[S.user.role];
+  document.getElementById('meRole').textContent = MFC.roleLabel || '';
   document.getElementById('meAvatar').textContent = initials(S.user.name);
   document.querySelectorAll('.edit-only').forEach(el => el.classList.toggle('hidden', !canEdit()));
   document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin()));
@@ -797,9 +770,19 @@ async function enterApp() {
 
 /* ================================================================ CHARGEMENT */
 async function loadAll() {
+  /* Ces neuf jeux de donnees etaient charges d'un bloc : un seul refus de droit
+     (contrats, documents ou tableau de bord) faisait echouer le lot entier et
+     laissait l'application entierement vide. */
   const [sponsors, contracts, products, opps, tasks, docs, users, dash, activity] = await Promise.all([
-    api('sponsors'), api('contracts'), api('products'), api('opportunities'),
-    api('tasks'), api('documents'), api('users'), api('dashboard'), api('activity'),
+    apiSoft('sponsors',      [], !!MFC.partnersView),
+    apiSoft('contracts',     [], !!MFC.contractsView),
+    apiSoft('products',      [], !!MFC.contractsView),
+    apiSoft('opportunities', [], !!MFC.partnersView),
+    apiSoft('tasks',         [], !!MFC.partnersView),
+    apiSoft('documents',     [], !!MFC.documentsView),
+    apiSoft('users',         [], !!MFC.partnersView),
+    apiSoft('dashboard',     {}, !!MFC.dashboardView),
+    apiSoft('activity',      [], !!MFC.dashboardView),
   ]);
   Object.assign(S, { sponsors, contracts, products, opps, tasks, docs, users, dash, activity });
   renderAll();
@@ -1563,7 +1546,12 @@ async function deleteUser(id) {
 
 /* ================================================================ RAFRAÎCHISSEMENT LÉGER */
 async function refreshLight() {
-  const [dash, activity, opps, tasks] = await Promise.all([api('dashboard'), api('activity'), api('opportunities'), api('tasks')]);
+  const [dash, activity, opps, tasks] = await Promise.all([
+    apiSoft('dashboard',     {}, !!MFC.dashboardView),
+    apiSoft('activity',      [], !!MFC.dashboardView),
+    apiSoft('opportunities', [], !!MFC.partnersView),
+    apiSoft('tasks',         [], !!MFC.partnersView),
+  ]);
   Object.assign(S, { dash, activity, opps, tasks });
   renderBadges(); renderNotifs();
   if (document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();

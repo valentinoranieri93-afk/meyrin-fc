@@ -10,14 +10,9 @@ declare(strict_types=1);
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
-session_set_cookie_params([
-    'lifetime' => 60 * 60 * 24 * 14,
-    'path'     => '/',
-    'httponly' => true,
-    'samesite' => 'Lax',
-    'secure'   => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-]);
-session_start();
+/* Plus de session PHP propre a l'application : l'identite vient de la session
+   unique de l'ERP (cookie JWT). */
+require_once __DIR__ . '/mfc_boot.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -162,11 +157,24 @@ function resolve_season_id(PDO $pdo, int $season_id): int {
     return $row ? (int) $row['id'] : 0;
 }
 
+/**
+ * Identite de la personne connectee, lue directement dans le jeton.
+ *
+ * Contrairement a Sponsors, Events ou Commandes, AUCUNE table de cette base ne
+ * reference users(id) : rien n'a besoin d'un identifiant local. On ne cree donc
+ * volontairement aucune ligne ici, pour ne pas polluer l'annuaire existant avec
+ * des comptes techniques sans utilite.
+ */
 function current_user(): ?array {
-    if (empty($_SESSION['uid'])) return null;
-    $st = db()->prepare('SELECT id, name, email, role, active FROM users WHERE id = ? AND active = 1');
-    $st->execute([$_SESSION['uid']]);
-    return $st->fetch() ?: null;
+    $s = mfc_session();
+    if (!$s) return null;
+    return [
+        'id'     => 0,
+        'name'   => $s['name']  ?? '',
+        'email'  => $s['login'] ?? '',
+        'role'   => $s['role']  ?? '',
+        'active' => 1,
+    ];
 }
 
 function require_auth(): array {
@@ -249,50 +257,55 @@ $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 $b      = body();
 
+/* ---------------------------------------------------------------- Permissions
+ *
+ * Table declarative, verifiee en un seul point.
+ * Format : action => permission, ou ['GET' => perm, 'write' => perm].
+ *
+ * REFUS PAR DEFAUT : une action absente exige teams.manage, le droit le plus
+ * large du module. Ajouter un point d'entree sans y penser le rend
+ * inaccessible, pas public.
+ *
+ * Choix a connaitre : consulter les equipes, categories et saisons releve de
+ * matches.view, parce que ces listes sont indispensables pour simplement lire
+ * un calendrier de matchs. Les modifier demande le droit dedie.
+ */
+const ARB_PERMS = [
+    'me'              => null,
+    'users'           => ['GET' => 'matches.view', 'write' => null], // ecriture traitee dans le bloc
+    'teams'           => ['GET' => 'matches.view', 'write' => 'teams.manage'],
+    'teams_bulk_save' => 'teams.manage',
+    'categories'      => ['GET' => 'matches.view', 'write' => 'teams.manage'],
+    'seasons'         => ['GET' => 'matches.view', 'write' => 'seasons.manage'],
+    'matches'         => ['GET' => 'matches.view', 'write' => 'matches.edit'],
+    'matches_bulk_pay'=> 'matches.pay',
+    'import_csv'      => 'import.run',
+    'stats'           => 'stats.view',
+];
+
+/* Points d'entree supprimes : l'authentification est centralisee dans l'ERP. */
+if (in_array($action, ['login', 'logout', 'setup', 'status', 'change_password'], true)) {
+    fail("Cette application n'a plus de connexion propre. Utilisez l'ERP : " . ERP_URL, 410);
+}
+
+/* Session ERP + acces a l'application. Repond 401/403 en JSON sinon. */
+mfc_require_api('arbitrage');
+
+$arb_rule = array_key_exists($action, ARB_PERMS) ? ARB_PERMS[$action] : 'teams.manage';
+if (is_array($arb_rule)) {
+    $arb_rule = ($method === 'GET') ? $arb_rule['GET'] : $arb_rule['write'];
+}
+if ($arb_rule !== null) {
+    mfc_require_perm('arbitrage.' . $arb_rule);
+}
+
 switch ($action) {
 
     /* ============ AUTH & SETUP ============ */
 
-    case 'status': {
-        $count = (int) db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
-        out(['installed' => $count > 0, 'user' => current_user()]);
-    }
-
-    case 'setup': {
-        $count = (int) db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
-        if ($count > 0) fail('Application déjà installée', 403);
-        $name  = s($b, 'name') ?: 'Administrateur';
-        $email = strtolower(s($b, 'email'));
-        $pass  = (string)($b['password'] ?? '');
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Adresse e-mail invalide');
-        if (strlen($pass) < 8) fail('Mot de passe : 8 caractères minimum');
-        db()->prepare("INSERT INTO users (name, email, password_hash, role, last_login) VALUES (?,?,?,?,datetime('now'))")
-            ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), 'admin']);
-        $_SESSION['uid'] = (int) db()->lastInsertId();
-        session_regenerate_id(true);
-        out(['ok' => true, 'user' => current_user()]);
-    }
-
-    case 'login': {
-        $email = strtolower(s($b, 'email'));
-        $pass  = (string)($b['password'] ?? '');
-        $st    = db()->prepare('SELECT * FROM users WHERE email = ? AND active = 1');
-        $st->execute([$email]);
-        $u = $st->fetch();
-        if (!$u || !password_verify($pass, $u['password_hash'])) {
-            usleep(400000);
-            fail('E-mail ou mot de passe incorrect', 401);
-        }
-        $_SESSION['uid'] = (int) $u['id'];
-        session_regenerate_id(true);
-        db()->prepare("UPDATE users SET last_login = datetime('now') WHERE id = ?")->execute([(int)$u['id']]);
-        out(['ok' => true, 'user' => current_user()]);
-    }
-
-    case 'logout': {
-        session_destroy();
-        out(['ok' => true]);
-    }
+    /* status, setup, login et logout ont ete supprimes : l'authentification est
+       centralisee dans l'ERP. Les appels a ces actions sont interceptes plus
+       haut et renvoient un 410 explicite. */
 
     case 'me': {
         out(['user' => require_auth()]);
@@ -768,87 +781,15 @@ switch ($action) {
 
     /* ============ UTILISATEURS ============ */
 
+    /* Annuaire local conserve en lecture seule pour l'historique. Aucune table
+       de cette base ne le reference, et les comptes se gerent dans l'ERP. */
     case 'users': {
         require_auth();
-        $me = current_user();
-        if ($me['role'] !== 'admin') fail('Accès réservé aux administrateurs', 403);
-
         if ($method === 'GET') {
-            $rows = db()->query('SELECT id, name, email, role, active, last_login, created_at FROM users ORDER BY created_at')->fetchAll();
-            out($rows);
+            out(db()->query('SELECT id, name, email, role, active FROM users ORDER BY id')->fetchAll());
         }
-
-        if ($method === 'POST') {
-            $name  = s($b, 'name');
-            $email = strtolower(s($b, 'email'));
-            $pass  = (string)($b['password'] ?? '');
-            $role  = s($b, 'role', 'viewer');
-            if (!$name)  fail('Nom requis');
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Adresse e-mail invalide');
-            if (strlen($pass) < 8) fail('Mot de passe : 8 caractères minimum');
-            if (!in_array($role, ['admin', 'viewer'], true)) fail('Rôle invalide');
-            try {
-                db()->prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?,?,?,?)')
-                    ->execute([$name, $email, password_hash($pass, PASSWORD_DEFAULT), $role]);
-                out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
-            } catch (\Exception $e) { fail('Cette adresse e-mail est déjà utilisée'); }
-        }
-
-        if ($method === 'PUT') {
-            $id = i($b, 'id');
-            if (!$id) fail('ID requis');
-            $fields = [];
-            $vals   = [];
-            if (array_key_exists('name', $b))   { $fields[] = 'name = ?';  $vals[] = s($b, 'name'); }
-            if (array_key_exists('email', $b))  {
-                $email = strtolower(s($b, 'email'));
-                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Adresse e-mail invalide');
-                $fields[] = 'email = ?'; $vals[] = $email;
-            }
-            if (array_key_exists('role', $b)) {
-                if ($id === $me['id']) fail('Vous ne pouvez pas modifier votre propre rôle');
-                $role = s($b, 'role');
-                if (!in_array($role, ['admin', 'viewer'], true)) fail('Rôle invalide');
-                $fields[] = 'role = ?'; $vals[] = $role;
-            }
-            if (array_key_exists('active', $b)) {
-                if ($id === $me['id']) fail('Vous ne pouvez pas désactiver votre propre compte');
-                $fields[] = 'active = ?'; $vals[] = i($b, 'active');
-            }
-            if (!empty($b['password'])) {
-                $pass = (string)$b['password'];
-                if (strlen($pass) < 8) fail('Mot de passe : 8 caractères minimum');
-                $fields[] = 'password_hash = ?'; $vals[] = password_hash($pass, PASSWORD_DEFAULT);
-            }
-            if (!$fields) fail('Rien à modifier');
-            $vals[] = $id;
-            try {
-                db()->prepare('UPDATE users SET ' . implode(', ', $fields) . ' WHERE id = ?')->execute($vals);
-                out(['ok' => true]);
-            } catch (\Exception $e) { fail('Cette adresse e-mail est déjà utilisée'); }
-        }
-
-        if ($method === 'DELETE') {
-            $id = i($_GET, 'id');
-            if (!$id) fail('ID requis');
-            if ($id === $me['id']) fail('Vous ne pouvez pas supprimer votre propre compte');
-            $st = db()->prepare("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1");
-            $st->execute();
-            $adminCount = (int) $st->fetchColumn();
-            $tr = db()->prepare('SELECT role FROM users WHERE id=?');
-            $tr->execute([$id]);
-            $target = $tr->fetch();
-            if ($target && $target['role'] === 'admin' && $adminCount <= 1) {
-                fail('Impossible de supprimer le dernier administrateur');
-            }
-            db()->prepare('DELETE FROM users WHERE id=?')->execute([$id]);
-            out(['ok' => true]);
-        }
-
-        fail('Méthode non supportée', 405);
+        fail("Les comptes se gèrent dans l'ERP : " . ERP_URL, 403);
     }
-
-    /* ============ CATÉGORIES ============ */
 
     case 'categories': {
         require_auth();
