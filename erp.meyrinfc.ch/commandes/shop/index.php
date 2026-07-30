@@ -1,9 +1,30 @@
 <?php
 /**
- * Boutique publique — commandes.meyrinfc.ch/shop
- * Page volontairement indépendante de index.php/guard.php : accessible sans compte ni SSO ERP.
- * Consomme uniquement les 3 actions publiques de api.php (shop_catalog, shop_request, shop_cancel).
+ * Boutique publique — erp.meyrinfc.ch/commandes/shop, exposée sur boutique.meyrinfc.ch
+ * Page volontairement indépendante de index.php : accessible sans compte ni SSO ERP.
+ * Consomme uniquement les actions publiques de api.php (shop_catalog, shop_validate_promo,
+ * shop_request, shop_cancel).
  */
+
+/**
+ * Cette page est servie de deux façons, et l'adresse de l'API en dépend :
+ *
+ *  - sur boutique.meyrinfc.ch, dont la racine du site EST ce dossier. Un
+ *    « ../api.php » sortirait alors du site et ne résoudrait rien : il faut
+ *    viser l'ERP en absolu, ce que la politique CORS de l'API autorise pour
+ *    cette origine précise.
+ *  - sous erp.meyrinfc.ch/commandes/shop/, où le chemin relatif fonctionne et
+ *    évite tout appel inter-domaine. C'est aussi le cas en développement local,
+ *    où l'URL absolue pointerait à tort vers la production.
+ */
+const SHOP_ERP_ORIGIN = 'https://erp.meyrinfc.ch';
+$shopHost   = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
+$shopRemote = str_starts_with($shopHost, 'boutique.');
+$shopApi    = $shopRemote ? SHOP_ERP_ORIGIN . '/commandes/api.php' : '../api.php';
+/* Les photos d'articles vivent dans commandes/uploads, un dossier au-dessus de
+   celui-ci : meme raisonnement que pour l'API. Les images sont servies
+   directement, sans CORS (une balise <img> n'y est pas soumise). */
+$shopUploads = $shopRemote ? SHOP_ERP_ORIGIN . '/commandes/uploads' : '../uploads';
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -118,7 +139,8 @@ tailwind.config = {
 <div id="toastHost" class="fixed bottom-4 right-4 z-[60] space-y-2"></div>
 
 <script>
-const API = '../api.php';
+const API = <?= json_encode($shopApi, JSON_UNESCAPED_SLASHES) ?>;
+const UPLOADS = <?= json_encode($shopUploads, JSON_UNESCAPED_SLASHES) ?>;
 const LS_KEY = 'mfc_shop_requests';
 let S = { articles: [], cart: [], promo: null };
 
@@ -163,7 +185,7 @@ function renderShopGrid() {
   const arts = S.articles.filter(a => !q || a.name.toLowerCase().includes(q) || (a.article_number||'').toLowerCase().includes(q));
   document.getElementById('shopGrid').innerHTML = arts.map(a => `
     <div class="border border-line rounded-xl p-3 flex gap-3">
-      ${a.photo ? `<img src="../uploads/${a.photo}" class="w-16 h-16 rounded-lg object-cover border border-line shrink-0">` : `<div class="w-16 h-16 rounded-lg bg-canvas border border-line grid place-items-center text-mute text-[10px] shrink-0">—</div>`}
+      ${a.photo ? `<img src="${UPLOADS}/${a.photo}" class="w-16 h-16 rounded-lg object-cover border border-line shrink-0">` : `<div class="w-16 h-16 rounded-lg bg-canvas border border-line grid place-items-center text-mute text-[10px] shrink-0">—</div>`}
       <div class="flex-1 min-w-0 flex flex-col">
         <p class="font-medium text-[13px] truncate" title="${esc(a.name)}">${esc(a.name)}</p>
         <p class="text-[12px] text-mute mb-1.5">${chf(a.sale_price_ttc)} CHF</p>
@@ -217,7 +239,7 @@ function pickerBody() {
       const active = primaryValue === v;
       const ring = active ? 'border-brand-600 border-2' : 'border-line';
       let visual;
-      if (cp) visual = `<img src="../uploads/${cp.photo}" class="w-9 h-9 rounded-lg object-cover border ${ring}">`;
+      if (cp) visual = `<img src="${UPLOADS}/${cp.photo}" class="w-9 h-9 rounded-lg object-cover border ${ring}">`;
       else if (code) visual = `<span class="w-9 h-9 rounded-lg border ${ring} block" style="background:${esc(code)}"></span>`;
       else visual = `<span class="w-9 h-9 rounded-lg border ${ring} bg-canvas grid place-items-center text-[9px] text-mute">${esc(v).slice(0,3)}</span>`;
       return `<button type="button" onclick="pickPrimary('${esc(v).replace(/'/g,"\\'")}')" class="flex flex-col items-center gap-1" title="${esc(v)}">${visual}<span class="text-[10.5px] ${active ? 'font-semibold text-brand-700' : 'text-mute'}">${esc(v)}</span></button>`;

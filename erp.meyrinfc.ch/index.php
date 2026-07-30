@@ -124,6 +124,51 @@ function erp_safe_redirect(string $to): string {
     return ($okScheme && $okHost) ? $to : '/';
 }
 
+/**
+ * Une application est-elle servie par l'ERP lui-même ?
+ *
+ * Vrai pour un chemin relatif ("/arbitrage") comme pour une URL absolue qui
+ * pointe vers le domaine courant ("https://erp.meyrinfc.ch/arbitrage"). Les
+ * deux formes cohabitent dans apps.json au fil de la consolidation des
+ * micro-SaaS en modules : ne reconnaître que le chemin relatif ferait ouvrir un
+ * module interne dans un nouvel onglet, comme s'il s'agissait d'un site tiers.
+ */
+function erp_app_is_internal(string $url): bool {
+    if ($url === '') return false;
+    if (str_starts_with($url, '//')) return false;
+    if (str_starts_with($url, '/'))  return true;
+    $authority = erp_url_authority($url);
+    return $authority !== '' && $authority === erp_current_authority();
+}
+
+/**
+ * Domaine d'une URL, port compris.
+ *
+ * parse_url() rend le port séparément alors que HTTP_HOST le contient : les
+ * comparer sans recoller le port ferait passer une adresse du domaine courant
+ * pour un site tiers dès qu'un port non standard est en jeu.
+ */
+function erp_url_authority(string $url): string {
+    $host = strtolower((string)parse_url($url, PHP_URL_HOST));
+    $port = parse_url($url, PHP_URL_PORT);
+    return ($host !== '' && $port) ? $host . ':' . $port : $host;
+}
+
+/** Domaine courant, port compris, dans la même forme que erp_url_authority(). */
+function erp_current_authority(): string {
+    return strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
+}
+
+/**
+ * Adresse lisible affichée sur la tuile : domaine + chemin, sans le protocole.
+ * Le chemin compte ici, c'est lui qui distingue un module de l'ERP racine.
+ */
+function erp_app_display_url(string $url): string {
+    $host = erp_url_authority($url) ?: erp_current_authority();
+    $path = rtrim((string)parse_url($url, PHP_URL_PATH), '/');
+    return $host . $path;
+}
+
 function erp_log(string $user, string $name, string $action): void {
     $f    = DATA_DIR . 'logs.json';
     $logs = json_decode(file_get_contents($f), true) ?: [];
@@ -427,7 +472,7 @@ $user_apps  = $session['apps'] ?? [];
       $c = htmlspecialchars($app['color']);
       $cb = htmlspecialchars($app['color_bg']);
     ?>
-    <a class="app-card" href="<?= htmlspecialchars($app['url']) ?>" <?= str_starts_with($app['url'], '/') ? '' : 'target="_blank"' ?>
+    <a class="app-card" href="<?= htmlspecialchars($app['url']) ?>" <?= erp_app_is_internal($app['url']) ? '' : 'target="_blank" rel="noopener"' ?>
        style="--card-accent:<?= $c ?>;--card-icon-bg:<?= $cb ?>">
       <div class="card-top">
         <div class="card-icon"><?= app_icon($app['icon'], $app['color']) ?></div>
@@ -440,7 +485,7 @@ $user_apps  = $session['apps'] ?? [];
         <div class="card-desc"><?= htmlspecialchars($app['description']) ?></div>
       </div>
       <div class="card-footer">
-        <span class="card-url"><?= htmlspecialchars(parse_url($app['url'], PHP_URL_HOST) ?: $_SERVER['HTTP_HOST'] . $app['url']) ?></span>
+        <span class="card-url"><?= htmlspecialchars(erp_app_display_url($app['url'])) ?></span>
         <span class="card-status" style="--card-status-bg:<?= $cb ?>;--card-status-color:<?= $c ?>">
           <span class="card-status-dot"></span>En ligne
         </span>

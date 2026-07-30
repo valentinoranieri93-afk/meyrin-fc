@@ -89,6 +89,13 @@ tailwind.config = {
 <div class="flex h-screen overflow-hidden">
 
   <aside id="sidebar" class="hidden md:flex w-[248px] shrink-0 flex-col bg-[#15140F] border-r border-[#28261E]">
+    <!-- Retour au portail. Sponsors est desormais un module servi par l'ERP et
+         s'ouvre dans le meme onglet : sans ce lien, la seule facon de revenir
+         serait le bouton Precedent du navigateur. -->
+    <a href="/" class="flex items-center gap-1.5 px-5 pt-3.5 text-[12px] font-semibold text-[#8C897C] hover:text-white transition-colors">
+      <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Retour à l'ERP
+    </a>
     <div class="h-16 flex items-center gap-2.5 px-5 border-b border-[#28261E]">
       <img src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC" class="w-8 h-8 object-contain">
       <div>
@@ -476,7 +483,7 @@ tailwind.config = {
             </div>
             <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
               <h2 class="font-semibold text-[14.5px] mb-2">Sauvegarde des données</h2>
-              <p class="text-[12.5px] text-mute leading-relaxed">Toutes les données sont enregistrées dans la base <code class="text-[11px] bg-canvas border border-line rounded px-1">data/sponsorflow.sqlite</code> sur votre hébergement. Pour une sauvegarde complète, téléchargez ce fichier ainsi que le dossier <code class="text-[11px] bg-canvas border border-line rounded px-1">uploads/</code> via FTP ou le gestionnaire de fichiers Infomaniak.</p>
+              <p class="text-[12.5px] text-mute leading-relaxed">Toutes les données sont enregistrées dans la base <code class="text-[11px] bg-canvas border border-line rounded px-1">erp.meyrinfc.ch/sponsors/data/sponsorflow.sqlite</code> sur votre hébergement. Pour une sauvegarde complète, téléchargez ce fichier ainsi que le dossier <code class="text-[11px] bg-canvas border border-line rounded px-1">uploads/</code> via FTP ou le gestionnaire de fichiers Infomaniak.</p>
             </div>
           </div>
         </div>

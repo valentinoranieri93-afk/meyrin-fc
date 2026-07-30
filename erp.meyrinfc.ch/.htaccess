@@ -1,12 +1,26 @@
 # erp.meyrinfc.ch — service des fichiers
 #
-# S'applique aussi aux modules internes (rh/), dont l'interface est un gabarit
-# index.html lu par index.php et qui ne doit jamais être servi directement.
+# Ce fichier gouverne l'ERP et TOUS ses modules internes (rh/, arbitrage/, ...),
+# dont l'interface est un gabarit index.html lu par index.php et qui ne doit
+# jamais être servi directement. Les règles d'un .htaccess s'appliquent au
+# répertoire et à ses sous-répertoires : un module n'a donc pas besoin de son
+# propre .htaccess pour être couvert.
 DirectoryIndex index.php
 
 <Files "index.html">
     Require all denied
 </Files>
+
+# index.php porte les permissions de la personne connectée : il ne doit jamais
+# rester en cache navigateur, sinon quelqu'un dont le rôle vient de changer
+# continue de voir l'ancienne version, avec des droits périmés. C'est aussi ce
+# qui évite la page blanche à la première visite après une migration, quand le
+# navigateur ressert l'ancien index.html mis en cache.
+<IfModule mod_headers.c>
+    <FilesMatch "index\.php$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate"
+    </FilesMatch>
+</IfModule>
 
 # Les outils de migration ne sont accessibles qu'aux administrateurs (contrôle
 # fait en PHP). Cette règle interdit en plus de lister le dossier.

@@ -542,6 +542,12 @@ switch ($action) {
       if (!in_array($ext, $allowed, true)) fail('Type de fichier non autorisé (.' . $ext . ')');
       $dir = __DIR__ . '/uploads';
       if (!is_dir($dir)) { mkdir($dir, 0775, true); file_put_contents($dir . '/index.html', ''); }
+      /* Les fichiers ne sont servis que par l'action `download`, qui revérifie
+         le droit documents.view. Interdire l'accès direct compte doublement
+         ici : le .svg est accepté à l'envoi, et un SVG ouvert directement dans
+         le navigateur peut exécuter du script. La lecture depuis le disque par
+         PHP n'est pas concernée par cette règle. */
+      if (!file_exists("$dir/.htaccess")) file_put_contents("$dir/.htaccess", "Require all denied\n");
       $stored = bin2hex(random_bytes(12)) . '.' . $ext;
       if (!move_uploaded_file($f['tmp_name'], "$dir/$stored")) fail('Impossible d\'enregistrer le fichier', 500);
       db()->prepare('INSERT INTO documents (sponsor_id, label, category, filename, size, uploaded_by) VALUES (?,?,?,?,?,?)')

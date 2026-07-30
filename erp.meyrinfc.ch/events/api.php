@@ -257,6 +257,12 @@ switch ($action) {
     $dir = __DIR__ . '/uploads';
     if (!is_dir($dir)) { mkdir($dir, 0775, true); }
     if (!file_exists("$dir/index.html")) file_put_contents("$dir/index.html", '');
+    /* Les fichiers ne sont jamais servis par leur URL directe : ils passent par
+       l'action `download`, qui revérifie les droits. On pose le garde-fou ici
+       aussi, pour qu'un dossier recréé sur un nouveau serveur ne reparte jamais
+       ouvert en attendant qu'on y pense. Le fichier est lu depuis le disque par
+       PHP, ce que cette règle n'empêche pas. */
+    if (!file_exists("$dir/.htaccess")) file_put_contents("$dir/.htaccess", "Require all denied\n");
     $stored = bin2hex(random_bytes(12)) . '.' . $ext;
     if (!move_uploaded_file($f['tmp_name'], "$dir/$stored")) fail('Impossible d\'enregistrer le fichier', 500);
     $colMap = ['PDF'=>'#D8463A','PNG'=>'#7B59D8','JPG'=>'#7B59D8','JPEG'=>'#7B59D8','WEBP'=>'#7B59D8','XLSX'=>'#1F9D5B','XLS'=>'#1F9D5B','DOCX'=>'#3B6FE0','DOC'=>'#3B6FE0'];
@@ -274,6 +280,66 @@ switch ($action) {
     ];
     upsert_record('documents', $rec);
     out(['ok' => true, 'record' => $rec]);
+  }
+
+  /* ============ DOCUMENTS (téléchargement) ============ */
+
+  /**
+   * Sert un document via PHP plutôt que par son URL directe dans uploads/.
+   *
+   * Le nom stocké est imprévisible (96 bits d'aléa), donc le risque n'était pas
+   * qu'on devine l'adresse : c'est qu'un lien, une fois connu, restait valable
+   * pour toujours et pour tout le monde. Retirer ses droits à quelqu'un ne lui
+   * retirait pas les liens déjà en sa possession, et un lien transféré par
+   * message continuait d'ouvrir le fichier. Or ces documents contiennent des
+   * listes de participants, donc des données personnelles.
+   *
+   * Passer par ici rétablit trois choses : la permission est revérifiée à
+   * chaque téléchargement, la révocation d'un compte prend effet immédiatement,
+   * et l'accès devient traçable.
+   */
+  case 'download': {
+    require_auth();
+    mfc_require_perm(collection_perm('documents', 'view'));
+
+    $id  = i($_GET, 'id');
+    $rec = null;
+    foreach (load_collection('documents') as $d) {
+      if ((int)($d['id'] ?? 0) === $id) { $rec = $d; break; }
+    }
+    if (!$rec) fail('Document introuvable', 404);
+
+    /* basename() neutralise toute tentative de remontée de dossier, et on ne
+       sert que ce qui est réellement référencé en base : un fichier orphelin
+       ou déposé par un autre moyen dans uploads/ n'est pas servi. */
+    $stored = basename((string)($rec['file'] ?? ''));
+    $path   = __DIR__ . '/uploads/' . $stored;
+    if ($stored === '' || !is_file($path)) fail('Fichier introuvable', 404);
+
+    /* Les extensions acceptées à l'envoi excluent déjà tout format exécutable
+       par le navigateur (ni .html ni .svg). On peut donc afficher PDF et images
+       dans l'onglet, comme le faisait le lien direct, et forcer le
+       téléchargement pour le reste. nosniff empêche le navigateur de deviner un
+       type autre que celui annoncé. */
+    $ext    = strtolower(pathinfo($stored, PATHINFO_EXTENSION));
+    $inline = ['pdf' => 'application/pdf', 'png' => 'image/png', 'jpg' => 'image/jpeg',
+               'jpeg' => 'image/jpeg', 'webp' => 'image/webp'];
+    $type   = $inline[$ext] ?? 'application/octet-stream';
+    $dispo  = isset($inline[$ext]) ? 'inline' : 'attachment';
+
+    /* Nom lisible pour l'utilisateur, débarrassé de tout ce qui pourrait
+       casser l'en-tête ou suggérer un autre dossier. */
+    $nom = preg_replace('~[^\w .\-]+~u', '_', (string)($rec['n'] ?? 'document'));
+    $nom = trim((string)$nom) !== '' ? $nom . '.' . $ext : $stored;
+
+    header_remove('Content-Type');
+    header('Content-Type: ' . $type);
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Disposition: ' . $dispo . '; filename="' . $nom . '"');
+    header('Content-Length: ' . filesize($path));
+    header('Cache-Control: private, no-store');
+    readfile($path);
+    exit;
   }
 
   default:

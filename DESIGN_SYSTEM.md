@@ -206,10 +206,12 @@ Contenu principal :  padding 22–26px, max-width selon app
 
 | App | Stack | Fichier principal |
 |---|---|---|
-| `arbitrage.meyrinfc.ch` | CSS custom (variables) | index.html |
-| `caisse.meyrinfc.ch` | CSS custom (variables) | index.html |
-| `events.meyrinfc.ch` | CSS custom (variables) | index.html |
-| `sponsors.meyrinfc.ch` | Tailwind CDN + CSS custom | index.html |
+| `erp.meyrinfc.ch/arbitrage` | CSS custom (variables) | index.html (sert via index.php) |
+| `erp.meyrinfc.ch/caisse` | CSS custom (variables) | index.html (sert via index.php) |
+| `erp.meyrinfc.ch/events` | CSS custom (variables) | index.html (sert via index.php) |
+| `erp.meyrinfc.ch/sponsors` | Tailwind CDN + CSS custom | index.html (sert via index.php) |
+| `erp.meyrinfc.ch/commandes` | Tailwind CDN + CSS custom | index.html (sert via index.php) |
+| `erp.meyrinfc.ch/commandes/shop` | Tailwind CDN | index.php (boutique publique, sans session) |
 | `erp.meyrinfc.ch` | CSS custom (variables) | index.php |
 | `erp.meyrinfc.ch/rh` | CSS custom (variables) | index.html (SPA, sert via index.php) |
 

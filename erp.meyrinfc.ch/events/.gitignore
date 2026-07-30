@@ -1,0 +1,13 @@
+﻿# Serveur
+.user.ini
+.infomaniak-maintenance.html
+
+# Base de données
+data/*.sqlite
+
+# Fichiers téléversés — listes de participants, factures : données personnelles
+# qui ne doivent jamais entrer dans l'historique du dépôt. Seuls les garde-fous
+# du dossier sont versionnés, pour qu'un déploiement le recrée déjà protégé.
+uploads/*
+!uploads/.htaccess
+!uploads/index.html

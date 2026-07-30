@@ -76,6 +76,14 @@ textarea.form-input{resize:vertical;min-height:90px}
 .brand-logo{width:40px;height:40px;object-fit:contain;flex-shrink:0}
 .brand-name{font-family:"Sora";font-weight:700;font-size:14.5px;letter-spacing:-.2px;line-height:1.1}
 .brand-sub{font-size:11px;color:#8C897C;margin-top:2px;font-weight:500}
+/* Retour au portail. Arbitrage est desormais un module servi par l'ERP et
+   s'ouvre dans le meme onglet : sans ce lien, la seule facon de revenir au
+   portail serait le bouton Precedent du navigateur. Meme repere visuel que
+   dans le module RH. */
+.sb-back{display:flex;align-items:center;gap:6px;padding:14px 18px 0;font-size:12px;color:#8C897C;font-weight:600;transition:color .15s}
+.sb-back:hover{color:#fff}
+.sb-back svg{width:14px;height:14px;flex-shrink:0}
+.sb-back + .brand{padding-top:10px}
 .season-picker{padding:0 18px 14px}
 .season-picker-label{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:#75736A;font-weight:700;margin-bottom:6px}
 .season-sel{width:100%;background:#211F18;border:1.5px solid #34322a;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;color:#E8E6DD;cursor:pointer;transition:.13s}
@@ -319,6 +327,10 @@ th.chk-col,td.chk-col{width:40px}
 
   <!-- Sidebar -->
   <aside class="sidebar">
+    <a href="/" class="sb-back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Retour à l'ERP
+    </a>
     <div class="brand">
       <img class="brand-logo" src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC">
       <div>
@@ -1559,12 +1571,18 @@ function renderCoaches() {
   }).join('');
 }
 
+/* Préfixe de stockage local. Toutes les applications partagent désormais la
+   même origine (erp.meyrinfc.ch), donc le même localStorage : une clé générique
+   comme « panel-dash-teams » finirait par entrer en collision avec une autre
+   application qui utiliserait le même nom de panneau. */
+const LS_PREFIX = 'mfc_arbitrage_';
+
 function togglePanel(head) {
   const panelId = head.dataset.panelId;
   const body    = document.getElementById(panelId);
   const collapsed = head.classList.toggle('collapsed');
   body.style.display = collapsed ? 'none' : '';
-  try { localStorage.setItem('panel-' + panelId, collapsed ? '1' : '0'); } catch(e) {}
+  try { localStorage.setItem(LS_PREFIX + 'panel-' + panelId, collapsed ? '1' : '0'); } catch(e) {}
 }
 
 function restorePanels() {
@@ -1572,7 +1590,7 @@ function restorePanels() {
     const panelId = head.dataset.panelId;
     const body    = document.getElementById(panelId);
     try {
-      if (localStorage.getItem('panel-' + panelId) === '1') {
+      if (localStorage.getItem(LS_PREFIX + 'panel-' + panelId) === '1') {
         head.classList.add('collapsed');
         body.style.display = 'none';
       }

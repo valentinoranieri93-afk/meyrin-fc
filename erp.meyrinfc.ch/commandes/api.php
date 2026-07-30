@@ -29,21 +29,36 @@ register_shutdown_function(function () {
    unique de l'ERP (cookie JWT). Cette app conserve trois regimes d'acces
    distincts, voir la table CMD_PERMS plus bas :
      - la boutique publique, sans aucune authentification ;
-     - deux points d'entree machine a machine appeles par la Caisse, authentifies
-       par cle API et non par cookie ;
+     - deux points d'entree machine a machine appeles par la Caisse, acceptant
+       soit une session ERP avec acces a la Caisse, soit une cle API ;
      - tout le reste, sous session ERP et permission. */
 require_once __DIR__ . '/mfc_boot.php';
+
+/* Ces deux listes sont declarees ici, et non plus bas avec CMD_PERMS, parce que
+   la politique CORS ci-dessous en depend et s'applique avant tout traitement. */
+const CMD_PUBLIC  = ['shop_catalog', 'shop_validate_promo', 'shop_request', 'shop_cancel'];
+const CMD_MACHINE = ['vendable_articles', 'decrement_stock'];
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 header('Pragma: no-cache');
 
-/* CORS restreint aux endpoints appelés par caisse.meyrinfc.ch (auth par clé API, pas par cookie) */
-if (in_array($_GET['action'] ?? '', ['decrement_stock', 'vendable_articles'], true)) {
-  header('Access-Control-Allow-Origin: https://caisse.meyrinfc.ch');
+/* CORS reserve a la boutique publique, desormais seul appelant d'une autre
+   origine : elle est servie sur boutique.meyrinfc.ch alors que cette API vit
+   sous erp.meyrinfc.ch. La Caisse, elle, a rejoint ce meme domaine et
+   s'authentifie par la session ERP ; elle n'a donc plus besoin ni de CORS ni
+   de cle, ce qui evite d'exposer un secret dans son JavaScript.
+   Aucun Allow-Credentials : la boutique est anonyme, aucun cookie ne doit
+   accompagner ces requetes. */
+const CMD_SHOP_ORIGIN = 'https://boutique.meyrinfc.ch';
+if (in_array($_GET['action'] ?? '', CMD_PUBLIC, true)
+    && ($_SERVER['HTTP_ORIGIN'] ?? '') === CMD_SHOP_ORIGIN) {
+  header('Access-Control-Allow-Origin: ' . CMD_SHOP_ORIGIN);
+  header('Vary: Origin');
   header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-  header('Access-Control-Allow-Headers: Content-Type, X-Api-Key');
+  header('Access-Control-Allow-Headers: Content-Type');
+  header('Access-Control-Max-Age: 600');
 }
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
@@ -781,9 +796,9 @@ $b = body();
  *
  *  1. CMD_PUBLIC   : la boutique publique. Aucune authentification, par
  *                    conception : n'importe qui doit pouvoir commander.
- *  2. CMD_MACHINE  : appels de la Caisse, authentifies par cle API (X-Api-Key)
- *                    verifiee dans le bloc de chaque action. Ce n'est pas un
- *                    utilisateur, il n'y a donc ni session ni permission.
+ *  2. CMD_MACHINE  : appels de la Caisse. Acceptent une session ERP donnant
+ *                    acces a la Caisse, ou a defaut la cle API (X-Api-Key),
+ *                    verifiees par cmd_require_caisse() dans chaque action.
  *  3. tout le reste : session ERP + permission listee dans CMD_PERMS.
  *
  * Format d'une entree de CMD_PERMS :
@@ -795,9 +810,30 @@ $b = body();
  * REFUS PAR DEFAUT : une action absente exige settings.manage, le droit le plus
  * eleve. Sur 63 points d'entree, en oublier un est certain ; le defaut doit donc
  * etre ferme.
+ *
+ * CMD_PUBLIC et CMD_MACHINE sont declarees en tete de fichier, la politique
+ * CORS en dependant avant tout traitement.
  */
-const CMD_PUBLIC  = ['shop_catalog', 'shop_validate_promo', 'shop_request', 'shop_cancel'];
-const CMD_MACHINE = ['vendable_articles', 'decrement_stock'];
+
+/**
+ * Autorise un appel de la Caisse vers les points d'entree machine.
+ *
+ * Deux voies, dans cet ordre :
+ *   1. session ERP avec acces a l'application Caisse. C'est la voie utilisee
+ *      par l'interface : les deux applications partagent desormais le meme
+ *      domaine, le cookie de session suffit. Aucun secret ne transite donc
+ *      plus par le JavaScript, et retirer ses droits a quelqu'un lui retire
+ *      aussi cet acces, immediatement.
+ *   2. cle API, conservee pour un eventuel appel serveur a serveur qui n'a pas
+ *      de session. hash_equals compare en temps constant.
+ */
+function cmd_require_caisse(): void {
+  if (mfc_session() && mfc_can_access('caisse')) return;
+  $key = $_SERVER['HTTP_X_API_KEY'] ?? '';
+  $expected = (string) setting('caisse_api_key');
+  if ($key !== '' && $expected !== '' && hash_equals($expected, $key)) return;
+  fail('Acces refuse : session Caisse ou cle API requise', 401);
+}
 
 const CMD_PERMS = [
   /* --- session suffisante ------------------------------------------------ */
@@ -3032,8 +3068,7 @@ switch ($action) {
    * boutique (une ligne stock_levels usage='boutique' existe pour sa variante, même si la quantité
    * actuelle est retombée à 0 suite aux ventes). */
   case 'vendable_articles': {
-    $key = $_SERVER['HTTP_X_API_KEY'] ?? '';
-    if (!$key || !hash_equals(setting('caisse_api_key'), $key)) fail('Clé API invalide', 401);
+    cmd_require_caisse();
     out(db()->query("SELECT v.id, v.barcode, a.sale_price_ttc,
                              (a.name || CASE WHEN v.label != '' AND v.label != 'Standard' THEN ' — ' || v.label ELSE '' END) AS name
                       FROM article_variants v JOIN articles a ON a.id = v.article_id
@@ -3044,8 +3079,7 @@ switch ($action) {
 
   case 'decrement_stock': {
     if ($method !== 'POST') fail('Méthode non supportée', 405);
-    $key = $_SERVER['HTTP_X_API_KEY'] ?? '';
-    if (!$key || !hash_equals(setting('caisse_api_key'), $key)) fail('Clé API invalide', 401);
+    cmd_require_caisse();
     $barcode = s($b, 'barcode'); $qty = n($b, 'quantity', 1);
     if (!$barcode || $qty <= 0) fail('Code-barres et quantité requis');
     $st = db()->prepare("SELECT v.* FROM article_variants v

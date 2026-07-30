@@ -2,7 +2,7 @@
   {
     "slug": "events",
     "name": "Hub Événements",
-    "url": "https://events.meyrinfc.ch",
+    "url": "/events",
     "description": "Gestion des événements du club, billetterie et planning",
     "icon": "calendar",
     "color": "#3B6FE0",
@@ -12,7 +12,7 @@
   {
     "slug": "sponsors",
     "name": "CRM Sponsoring",
-    "url": "https://sponsors.meyrinfc.ch",
+    "url": "/sponsors",
     "description": "Gestion des partenaires, contrats et contreparties",
     "icon": "users",
     "color": "#E8902A",
@@ -22,7 +22,7 @@
   {
     "slug": "caisse",
     "name": "Gestion Caisse",
-    "url": "https://caisse.meyrinfc.ch",
+    "url": "/caisse",
     "description": "Encaissements, dépenses et mouvements de trésorerie",
     "icon": "credit-card",
     "color": "#1F9D5B",
@@ -32,7 +32,7 @@
   {
     "slug": "arbitrage",
     "name": "Arbitrage",
-    "url": "https://arbitrage.meyrinfc.ch",
+    "url": "/arbitrage",
     "description": "Gestion des arbitres, affectations et indemnités",
     "icon": "whistle",
     "color": "#7B59D8",
@@ -42,7 +42,7 @@
   {
     "slug": "commandes",
     "name": "CRM Commande",
-    "url": "https://commandes.meyrinfc.ch",
+    "url": "/commandes",
     "description": "Stock, commandes fournisseurs et budgets par catégorie",
     "icon": "package",
     "color": "#D8463A",

@@ -15,7 +15,8 @@
  *   $user = mfc_require_api('sponsors');     // renvoie 401 JSON si non connecté
  *   mfc_require_perm('sponsors.edit');       // renvoie 403 JSON si droit manquant
  *
- * ÉTAPE 1 : ce fichier est déposé mais n'est encore branché sur aucune app.
+ * Toutes les applications du club sont branchées dessus ; plus aucune ne gère
+ * sa propre authentification.
  */
 
 if (defined('MFC_AUTH_LOADED')) return;
@@ -43,13 +44,28 @@ function mfc_sites_root(): string {
 }
 
 /**
+ * Dossiers de l'ERP qui ne sont pas des applications. Sans cette liste, un slug
+ * malencontreux ("lib", "data") ferait passer un dossier interne pour une app.
+ */
+const MFC_ERP_RESERVED_DIRS = ['lib', 'data', 'tools'];
+
+/**
  * Chemin disque d'une app à partir de son slug, ou null si introuvable.
- * Le module RH est un sous-dossier de l'ERP, les autres sont des dossiers frères.
+ *
+ * Deux emplacements possibles, testés dans cet ordre :
+ *   1. module interne de l'ERP (erp.meyrinfc.ch/<slug>) — cible de la
+ *      consolidation en cours, et déjà le cas de rh/ ;
+ *   2. application encore sur son propre sous-domaine, dossier frère de l'ERP.
+ *
+ * L'ordre compte : pendant la migration progressive, l'ancien dossier de
+ * sous-domaine peut encore exister à côté. Tester le module interne en premier
+ * garantit qu'on désigne bien la version en service, pas la dépouille.
  */
 function mfc_app_path(string $slug): ?string {
-    if ($slug === 'rh')  return is_dir(mfc_erp_root() . '/rh')  ? mfc_erp_root() . '/rh'  : null;
     if ($slug === 'erp') return mfc_erp_root();
+    if (in_array($slug, MFC_ERP_RESERVED_DIRS, true)) return null;
     $candidates = [
+        mfc_erp_root() . '/' . $slug,
         mfc_sites_root() . '/' . $slug . '.meyrinfc.ch',
         mfc_sites_root() . '/' . ucfirst($slug) . '.meyrinfc.ch', // certaines sauvegardes sont capitalisées
         mfc_sites_root() . '/' . $slug,

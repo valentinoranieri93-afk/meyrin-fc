@@ -1,0 +1,14 @@
+﻿# Serveur
+.user.ini
+.infomaniak-maintenance.html
+
+# Base de données
+data/*.sqlite
+
+# Fichiers téléversés — contrats, factures, logos. La règle visait auparavant
+# data/uploads/, qui n'existe pas : le dossier réel est uploads/ à la racine de
+# l'app, et un fichier s'y était retrouvé versionné. Seuls les garde-fous du
+# dossier sont suivis, pour qu'un déploiement le recrée déjà protégé.
+uploads/*
+!uploads/.htaccess
+!uploads/index.html

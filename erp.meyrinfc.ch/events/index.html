@@ -67,6 +67,13 @@ a{color:inherit;text-decoration:none}
 .brand-logo{width:40px;height:40px;object-fit:contain;flex-shrink:0}
 .brand-name{font-family:"Sora";font-weight:700;font-size:15px;letter-spacing:-.2px;line-height:1.1}
 .brand-sub{font-size:11px;color:#8C897C;margin-top:2px;font-weight:500}
+/* Retour au portail. Events est desormais un module servi par l'ERP et s'ouvre
+   dans le meme onglet : sans ce lien, la seule facon de revenir au portail
+   serait le bouton Precedent du navigateur. Meme repere visuel que dans RH. */
+.sb-back{display:flex;align-items:center;gap:6px;padding:14px 18px 0;font-size:12px;color:#8C897C;font-weight:600;transition:color .15s}
+.sb-back:hover{color:#fff}
+.sb-back svg{width:14px;height:14px;flex-shrink:0}
+.sb-back + .brand{padding-top:10px}
 .nav{flex:1;overflow-y:auto;padding:4px 12px 12px}
 .nav::-webkit-scrollbar-thumb{background:#3a382e;border-color:var(--noir)}
 .nav-label{font-size:10.5px;text-transform:uppercase;letter-spacing:1.2px;color:#75736A;
@@ -538,6 +545,10 @@ tbody tr:last-child td{border-bottom:none}
 
   <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar" id="sidebar">
+    <a href="/" class="sb-back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Retour à l'ERP
+    </a>
     <div class="brand">
       <img class="brand-logo" src="https://meyrinfc.ch/wp-content/uploads/2025/06/MeyrinFC_logo_RGB.svg" alt="Meyrin FC">
       <div>
@@ -1339,7 +1350,7 @@ RENDER.documents=function(){
     <div class="grid-2" style="grid-template-columns:1fr 1fr;margin-bottom:0">${docs.map(d=>`<div class="list-card" style="margin-bottom:0">
       <div class="doc-ico" style="background:${d.c||'#9A988C'}">${d.type}</div>
       <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.n)}</div><div style="font-size:12px;color:var(--gris)">${d.size} \u00b7 ${d.date}</div></div>
-      ${d.file?`<a class="icon-btn" style="width:32px;height:32px" href="${esc(d.file)}" target="_blank" title="Ouvrir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></a>`:''}
+      ${d.file?`<a class="icon-btn" style="width:32px;height:32px" href="api.php?action=download&id=${encodeURIComponent(d.id)}" target="_blank" rel="noopener" title="Ouvrir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></a>`:''}
       <button class="icon-btn editor-only" style="width:32px;height:32px;color:var(--rouge)" onclick="delDoc(${d.id})" title="Supprimer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
     </div>`).join('')}</div>`;
   }).join('');
