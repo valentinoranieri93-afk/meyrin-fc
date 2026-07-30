@@ -1,30 +1,149 @@
 {
-  "admin": {
-    "label": "Administrateur",
-    "color": "#7B59D8",
-    "color_bg": "#EEE8FB",
-    "apps": ["events", "sponsors", "caisse", "arbitrage", "commandes", "rh"],
-    "can_access_settings": true
-  },
-  "staff": {
-    "label": "Staff",
-    "color": "#3B6FE0",
-    "color_bg": "#E6EDFB",
-    "apps": ["events", "sponsors", "arbitrage", "commandes"],
-    "can_access_settings": false
-  },
-  "stagiaire": {
-    "label": "Stagiaire",
-    "color": "#E8902A",
-    "color_bg": "#FCEEDB",
-    "apps": ["events"],
-    "can_access_settings": false
-  },
-  "coach": {
-    "label": "Coach",
-    "color": "#D8463A",
-    "color_bg": "#FBE7E4",
-    "apps": ["commandes"],
-    "can_access_settings": false
-  }
+    "admin": {
+        "label": "Administrateur",
+        "color": "#7B59D8",
+        "color_bg": "#EEE8FB",
+        "apps": [
+            "events",
+            "sponsors",
+            "caisse",
+            "arbitrage",
+            "commandes",
+            "rh"
+        ],
+        "can_access_settings": true
+    },
+    "staff": {
+        "label": "Staff",
+        "color": "#3B6FE0",
+        "color_bg": "#E6EDFB",
+        "apps": [
+            "events",
+            "sponsors",
+            "caisse",
+            "arbitrage",
+            "commandes"
+        ],
+        "can_access_settings": false,
+        "perms": {
+            "events": [
+                "planning.view",
+                "planning.edit",
+                "volunteers.manage",
+                "materiel.manage",
+                "documents.manage",
+                "settings.manage"
+            ],
+            "sponsors": [
+                "partners.view",
+                "partners.edit",
+                "contracts.view",
+                "contracts.edit",
+                "opportunities.manage",
+                "tasks.manage",
+                "documents.view",
+                "documents.upload",
+                "dashboard.view"
+            ],
+            "caisse": [
+                "register.use",
+                "register.close",
+                "register.reports"
+            ],
+            "arbitrage": [
+                "matches.view",
+                "matches.edit",
+                "matches.pay",
+                "teams.manage",
+                "seasons.manage",
+                "import.run",
+                "stats.view"
+            ],
+            "commandes": [
+                "catalog.view",
+                "catalog.edit",
+                "stock.view",
+                "stock.move",
+                "requests.create",
+                "requests.validate",
+                "orders.view",
+                "orders.edit",
+                "orders.receive",
+                "suppliers.manage",
+                "budgets.view",
+                "budgets.edit",
+                "invoices.manage",
+                "reports.view",
+                "settings.manage"
+            ]
+        }
+    },
+    "stagiaire": {
+        "label": "Stagiaire",
+        "color": "#E8902A",
+        "color_bg": "#FCEEDB",
+        "apps": [
+            "events"
+        ],
+        "can_access_settings": false
+    },
+    "coach": {
+        "label": "Coach",
+        "color": "#D8463A",
+        "color_bg": "#FBE7E4",
+        "apps": [
+            "commandes"
+        ],
+        "can_access_settings": false,
+        "perms": {
+            "commandes": [
+                "catalog.view",
+                "catalog.edit",
+                "stock.view",
+                "stock.move",
+                "requests.create",
+                "requests.validate",
+                "orders.view",
+                "orders.edit",
+                "orders.receive",
+                "suppliers.manage",
+                "budgets.view",
+                "budgets.edit",
+                "invoices.manage",
+                "reports.view",
+                "settings.manage"
+            ]
+        }
+    },
+    "aissier": {
+        "label": "Caissier",
+        "color": "#6E6C61",
+        "color_bg": "#F0EDE4",
+        "apps": [
+            "caisse"
+        ],
+        "can_access_settings": false,
+        "perms": {
+            "caisse": [
+                "register.use",
+                "register.close",
+                "register.reports"
+            ]
+        }
+    },
+    "oach": {
+        "label": "Coach RH",
+        "color": "#D8463A",
+        "color_bg": "#FBE7E4",
+        "apps": [
+            "rh"
+        ],
+        "can_access_settings": false,
+        "perms": {
+            "rh": [
+                "teams.view",
+                "employees.view"
+            ]
+        }
+    }
 }

@@ -192,6 +192,7 @@ const ICONS = {
   employees: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/>',
   players: '<path d="M12 2l2.4 4.8 5.3.8-3.8 3.7.9 5.3-4.8-2.5-4.8 2.5.9-5.3-3.8-3.7 5.3-.8z"/>',
   primes: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+  payments: '<rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/><path d="M6 15h4"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.23.5.5.8 1.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/>',
   back: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
   upload: '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
@@ -224,6 +225,7 @@ const NAV_ALL = [
   { id: 'employees', label: 'Employés',              icon: 'employees', need: 'employeesView' },
   { id: 'players',   label: 'Joueurs (1ère équipe)', icon: 'players',   need: 'employeesView' },
   { id: 'primes',    label: 'Primes de match',       icon: 'primes',    need: 'employeesView' },
+  { id: 'payments',  label: 'Paiements',             icon: 'payments',  need: 'payrollView' },
   /* Les paramètres regroupent barème d'indemnités et règles de paie : on ne
      les propose qu'à qui peut agir sur au moins l'un des deux. */
   { id: 'settings',  label: 'Paramètres',            icon: 'settings',
@@ -281,7 +283,7 @@ async function renderPage() {
   const y = window.scrollY;
   document.getElementById('page-title').textContent = NAV.find(n => n.id === STATE.page)?.label || '';
   const c = document.getElementById('content');
-  const pages = { dashboard: renderDashboard, teams: renderTeams, employees: renderEmployees, players: renderPlayers, primes: renderPrimes, settings: renderSettings };
+  const pages = { dashboard: renderDashboard, teams: renderTeams, employees: renderEmployees, players: renderPlayers, primes: renderPrimes, payments: renderPayments, settings: renderSettings };
   await (pages[STATE.page] || renderDashboard)(c);
   window.scrollTo(0, y);
 }
@@ -628,14 +630,14 @@ function categorySlotsBlock(cat){
   return `
     <div style="padding:4px 18px 16px 36px;border-top:1px solid var(--ligne-2)">
       <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--gris-2);margin:10px 0 6px">Postes de la catégorie (ex: Directeur Technique)</div>
-      ${slots.length ? slots.map(sl => categorySlotRow(sl, cat.id)).join('') : `<div class="empty" style="padding:6px 0">Aucun poste rattaché directement à cette catégorie.</div>`}
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:10px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-bottom:10px">
         <select id="ncs-poste-${cat.id}" style="flex:1;min-width:140px;padding:7px 8px;border:1.5px solid var(--ligne);border-radius:8px">
           ${STATE.postes.map(p=>`<option value="${p.id}">${esc(p.label)}</option>`).join('')}
         </select>
         <input id="ncs-montant-${cat.id}" type="number" step="0.05" placeholder="Montant annuel CHF" style="width:130px;padding:7px 8px;border:1.5px solid var(--ligne);border-radius:8px">
         <button class="btn btn-primary btn-sm" onclick="addCategorySlot(${cat.id})">+ Ajouter un poste</button>
       </div>
+      ${slots.length ? slots.map(sl => categorySlotRow(sl, cat.id)).join('') : `<div class="empty" style="padding:6px 0">Aucun poste rattaché directement à cette catégorie.</div>`}
     </div>
   `;
 }
@@ -819,8 +821,10 @@ async function employeeDetailModal(ee, seasonId){
         <span style="font-weight:700">${periodLabel}</span>
         <strong>${chf(periodValue)} ${periodSuffix} <span style="font-weight:500;color:var(--gris)">(${chf(totalAnnuel)} CHF/an)</span></strong>
       </div>` : ''}
-    <h4 style="font-size:13px;font-weight:700;margin:16px 0 8px">Règles de paie activées</h4>
-    <div id="pr-rules-${ee.id}">${rulesBlock || `<div class="empty" style="padding:10px 0">Aucune règle configurée (Paramètres &gt; Paie).</div>`}</div>
+    <details style="margin:16px 0 8px">
+      <summary style="font-size:13px;font-weight:700;cursor:pointer">Règles de paie activées</summary>
+      <div id="pr-rules-${ee.id}" style="margin-top:8px">${rulesBlock || `<div class="empty" style="padding:10px 0">Aucune règle configurée (Paramètres &gt; Paie).</div>`}</div>
+    </details>
     <h4 style="font-size:13px;font-weight:700;margin:16px 0 8px">Décomptes</h4>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0">
       <span class="hint" style="margin:0">Génère la fiche de paie ${isSemestriel?'semestrielle':'mensuelle'} de cet employé (indemnités et retenues ajustables avant impression).</span>
@@ -918,24 +922,74 @@ async function saveIndemnite(employee_id){
 
 /* ============================================================ JOUEURS */
 
+let PLAYERS_SEARCH = '';
+let PLAYERS_POSTE_FILTER = '';
+const POSTE_LABELS = { gardien: 'Gardien', defenseur: 'Défenseur', milieu: 'Milieu', attaquant: 'Attaquant' };
+const POSTE_COLORS = { gardien: 'orange', defenseur: 'bleu', milieu: 'vert', attaquant: 'violet' };
+
 async function renderPlayers(c){
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="playerModal()">+ Nouveau joueur</button>`;
   c.innerHTML = `<div class="empty"><span class="spinner"></span></div>`;
   STATE.players = await api('players');
-  c.innerHTML = `<div class="card"><div class="card-body pad0">
-    ${STATE.players.length ? `<table><thead><tr><th>Joueur</th><th>Salaire mensuel</th><th>Contact</th><th>Statut</th><th></th></tr></thead><tbody>
-      ${STATE.players.map(p => `<tr>
-        <td><strong>${esc(p.first_name)} ${esc(p.last_name)}</strong></td>
-        <td>${chf(p.salaire_mensuel)} CHF</td>
-        <td style="font-size:12.5px;color:var(--gris)">${esc(p.email)}${p.email&&p.phone?' · ':''}${esc(p.phone)}</td>
-        <td>${p.active==1 ? `<span class="badge" style="background:var(--vert-bg);color:var(--vert)"><span class="badge-dot"></span>Actif</span>` : `<span class="badge" style="background:var(--rouge-bg);color:var(--rouge)"><span class="badge-dot"></span>Inactif</span>`}</td>
-        <td><div class="tbl-actions">
-          <button class="icon-btn" data-obj="${esc(JSON.stringify(p))}" onclick="playerModal(JSON.parse(this.dataset.obj))">✎</button>
-          <button class="icon-btn" onclick="deletePlayer(${p.id})">✕</button>
-        </div></td>
-      </tr>`).join('')}
-    </tbody></table>` : `<div class="empty">Aucun joueur salarié enregistré.</div>`}
-  </div></div>`;
+  c.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <input id="pl-search" value="${esc(PLAYERS_SEARCH)}" placeholder="Rechercher un nom…" style="padding:7px 10px;border:1.5px solid var(--ligne);border-radius:8px;font-size:13px;min-width:220px">
+      <select id="pl-poste-filter" style="padding:7px 10px;border:1.5px solid var(--ligne);border-radius:8px;font-size:13px">
+        <option value="">Tous les postes</option>
+        ${Object.entries(POSTE_LABELS).map(([k,l])=>`<option value="${k}" ${PLAYERS_POSTE_FILTER===k?'selected':''}>${l}</option>`).join('')}
+      </select>
+    </div>
+    <div id="players-list"></div>
+  `;
+  document.getElementById('pl-search').oninput = e => { PLAYERS_SEARCH = e.target.value; renderPlayersList(); };
+  document.getElementById('pl-poste-filter').onchange = e => { PLAYERS_POSTE_FILTER = e.target.value; renderPlayersList(); };
+  renderPlayersList();
+}
+
+function renderPlayersList(){
+  const el = document.getElementById('players-list');
+  const q = normalizeFr(PLAYERS_SEARCH.trim());
+  let list = STATE.players;
+  if (q) list = list.filter(p => normalizeFr(`${p.first_name} ${p.last_name}`).includes(q));
+  if (PLAYERS_POSTE_FILTER) list = list.filter(p => p.poste === PLAYERS_POSTE_FILTER);
+  const filtered = !!(q || PLAYERS_POSTE_FILTER);
+  const active = list.filter(p => p.active == 1);
+  const inactive = list.filter(p => p.active != 1);
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-head"><h3>Joueurs actifs (${active.length})</h3></div>
+      <div class="card-body pad0">
+      ${active.length ? `<table><thead><tr><th>Joueur</th><th>Poste</th><th>Salaire mensuel</th><th>Contact</th><th>Statut</th><th></th></tr></thead><tbody>
+        ${active.map(p => playerRow(p)).join('')}
+      </tbody></table>` : `<div class="empty">${filtered ? 'Aucun résultat pour ce filtre.' : 'Aucun joueur actif enregistré.'}</div>`}
+    </div></div>
+    ${inactive.length ? `<details style="margin-top:14px">
+      <summary style="font-size:13px;font-weight:700;cursor:pointer;padding:4px 0">Joueurs inactifs (${inactive.length})</summary>
+      <div class="card" style="margin-top:10px"><div class="card-body pad0">
+        <table><thead><tr><th>Joueur</th><th>Poste</th><th>Salaire mensuel</th><th>Contact</th><th>Statut</th><th></th></tr></thead><tbody>
+          ${inactive.map(p => playerRow(p)).join('')}
+        </tbody></table>
+      </div></div>
+    </details>` : ''}
+  `;
+}
+function posteBadge(poste){
+  if (!poste || !POSTE_LABELS[poste]) return '<span style="color:var(--gris-2)">—</span>';
+  const c = POSTE_COLORS[poste];
+  return `<span class="pill" style="background:var(--${c}-bg);color:var(--${c})">${POSTE_LABELS[poste]}</span>`;
+}
+function playerRow(p){
+  return `<tr>
+    <td><strong>${esc(p.first_name)} ${esc(p.last_name)}</strong></td>
+    <td>${posteBadge(p.poste)}</td>
+    <td>${chf(p.salaire_mensuel)} CHF</td>
+    <td style="font-size:12.5px;color:var(--gris)">${esc(p.email)}${p.email&&p.phone?' · ':''}${esc(p.phone)}</td>
+    <td>${p.active==1 ? `<span class="badge" style="background:var(--vert-bg);color:var(--vert)"><span class="badge-dot"></span>Actif</span>` : `<span class="badge" style="background:var(--rouge-bg);color:var(--rouge)"><span class="badge-dot"></span>Inactif</span>`}</td>
+    <td><div class="tbl-actions">
+      <button class="icon-btn" data-obj="${esc(JSON.stringify(p))}" onclick="playerModal(JSON.parse(this.dataset.obj))">✎</button>
+      <button class="icon-btn" onclick="deletePlayer(${p.id})">✕</button>
+    </div></td>
+  </tr>`;
 }
 function playerModal(p){
   openModal(`
@@ -945,13 +999,28 @@ function playerModal(p){
       <div class="field"><label>Prénom</label><input id="pm-first" value="${p?esc(p.first_name):''}"></div>
       <div class="field"><label>Nom</label><input id="pm-last" value="${p?esc(p.last_name):''}"></div>
     </div>
-    <div class="field"><label>Salaire mensuel CHF</label><input id="pm-salaire" type="number" step="0.05" value="${p?p.salaire_mensuel:''}"></div>
+    <div class="field"><label>Date de naissance</label><input id="pm-naissance" type="date" value="${p?esc(p.date_naissance):''}"></div>
+    <div class="field"><label>Rue + N°</label><input id="pm-adresse" value="${p?esc(p.adresse):''}"></div>
+    <div class="field-row">
+      <div class="field"><label>Code postal</label><input id="pm-npa" value="${p?esc(p.npa):''}"></div>
+      <div class="field"><label>Ville</label><input id="pm-ville" value="${p?esc(p.ville):''}"></div>
+    </div>
     <div class="field"><label>E-mail</label><input id="pm-email" value="${p?esc(p.email):''}"></div>
     <div class="field-row">
       <div class="field"><label>Téléphone</label><input id="pm-phone" value="${p?esc(p.phone):''}"></div>
       <div class="field"><label>IBAN</label><input id="pm-iban" value="${p?esc(p.iban):''}"></div>
     </div>
-    ${p ? `<div class="field check-row"><input type="checkbox" id="pm-active" ${p.active==1?'checked':''}><label style="margin:0" for="pm-active">Joueur actif</label></div>` : ''}
+    <div style="background:var(--bg);border:1px solid var(--ligne);border-radius:10px;padding:14px;margin-top:6px">
+      <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin-bottom:10px">Aspect sportif</h4>
+      <div class="field-row">
+        <div class="field"><label>Poste</label><select id="pm-poste">
+          <option value="" ${!p||!p.poste?'selected':''}>—</option>
+          ${Object.entries(POSTE_LABELS).map(([k,l])=>`<option value="${k}" ${p&&p.poste===k?'selected':''}>${l}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Salaire mensuel brut CHF</label><input id="pm-salaire" type="number" step="0.05" value="${p?p.salaire_mensuel:''}"></div>
+      </div>
+    </div>
+    ${p ? `<div class="field check-row" style="margin-top:12px"><input type="checkbox" id="pm-active" ${p.active==1?'checked':''}><label style="margin:0" for="pm-active">Joueur actif</label></div>` : ''}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" onclick="savePlayer(${p?p.id:'null'})">Enregistrer</button>
@@ -963,7 +1032,9 @@ async function savePlayer(id){
   const last_name = document.getElementById('pm-last').value.trim();
   if (!last_name) return modalErr('Le nom est requis.');
   const payload = { first_name, last_name, salaire_mensuel: Number(document.getElementById('pm-salaire').value)||0,
-    email: document.getElementById('pm-email').value.trim(), phone: document.getElementById('pm-phone').value.trim(), iban: document.getElementById('pm-iban').value.trim() };
+    email: document.getElementById('pm-email').value.trim(), phone: document.getElementById('pm-phone').value.trim(), iban: document.getElementById('pm-iban').value.trim(),
+    poste: document.getElementById('pm-poste').value, date_naissance: document.getElementById('pm-naissance').value,
+    adresse: document.getElementById('pm-adresse').value.trim(), npa: document.getElementById('pm-npa').value.trim(), ville: document.getElementById('pm-ville').value.trim() };
   try {
     if (id) { payload.id = id; payload.active = document.getElementById('pm-active').checked; await api('players', { method: 'PUT', body: payload }); }
     else { await api('players', { method: 'POST', body: payload }); }
@@ -1522,6 +1593,148 @@ async function deletePayrollRule(id){
   if (!confirm('Supprimer cette règle de paie ? Elle sera retirée des fiches employés où elle est activée.')) return;
   try { await api('payroll_rules', { method: 'DELETE', params: { id } }); closeModal(); await refreshSettings(); }
   catch (e) { alert(e.message); }
+}
+
+/* ============================================================ PAIEMENTS (suivi mensuel employés + joueurs) */
+
+let PAYMENTS_DATA = null;
+let PAYMENTS_SEARCH = '';
+let PAYMENTS_STATUS_FILTER = '';
+
+async function renderPayments(c){
+  document.getElementById('topbar-actions').innerHTML = `<div class="month-picker"><input type="month" id="pay-month" value="${STATE.month}"></div>`;
+  document.getElementById('pay-month').onchange = e => { STATE.month = e.target.value; renderPage(); };
+  c.innerHTML = `<div class="empty"><span class="spinner"></span> Chargement…</div>`;
+  try { PAYMENTS_DATA = await api('payments', { params: { month: STATE.month, season_id: STATE.seasonId } }); }
+  catch (e) { c.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  renderPaymentsTable(c);
+}
+
+function renderPaymentsTable(c){
+  const d = PAYMENTS_DATA;
+  const restant = d.total_du - d.total_paye;
+  c.innerHTML = `
+    <div class="stats-row" style="margin-bottom:18px">
+      <div class="stat-card"><div class="stat-label">Dû ce mois</div><div class="stat-value">${chf(d.total_du)} CHF</div></div>
+      <div class="stat-card"><div class="stat-label">Payé ce mois</div><div class="stat-value">${chf(d.total_paye)} CHF</div></div>
+      <div class="stat-card"><div class="stat-label">Restant ce mois</div><div class="stat-value">${chf(restant)} CHF</div></div>
+      <div class="stat-card">
+        <div class="stat-label">Année ${esc(d.month.slice(0,4))}</div>
+        <div class="budget-row"><span class="budget-row-label">Dû</span><span class="budget-row-value">${chfSmart(d.annee_du)} CHF</span></div>
+        <div class="budget-row"><span class="budget-row-label">Payé</span><span class="budget-row-value">${chfSmart(d.annee_paye)} CHF</span></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <input id="pay-search" value="${esc(PAYMENTS_SEARCH)}" placeholder="Rechercher un nom…" style="padding:7px 10px;border:1.5px solid var(--ligne);border-radius:8px;font-size:13px;min-width:240px">
+      <select id="pay-status-filter" style="padding:7px 10px;border:1.5px solid var(--ligne);border-radius:8px;font-size:13px">
+        <option value="" ${PAYMENTS_STATUS_FILTER===''?'selected':''}>Tous</option>
+        <option value="paid" ${PAYMENTS_STATUS_FILTER==='paid'?'selected':''}>Payé</option>
+        <option value="unpaid" ${PAYMENTS_STATUS_FILTER==='unpaid'?'selected':''}>Non payé</option>
+      </select>
+    </div>
+    <div id="payments-rows"></div>
+  `;
+  document.getElementById('pay-search').oninput = e => { PAYMENTS_SEARCH = e.target.value; renderPaymentsRows(); };
+  document.getElementById('pay-status-filter').onchange = e => { PAYMENTS_STATUS_FILTER = e.target.value; renderPaymentsRows(); };
+  renderPaymentsRows();
+}
+
+function renderPaymentsRows(){
+  const d = PAYMENTS_DATA;
+  const el = document.getElementById('payments-rows');
+  const q = normalizeFr(PAYMENTS_SEARCH.trim());
+  let rows = q ? d.rows.filter(r => normalizeFr(r.name).includes(q)) : d.rows;
+  if (PAYMENTS_STATUS_FILTER === 'paid') rows = rows.filter(r => r.paid);
+  else if (PAYMENTS_STATUS_FILTER === 'unpaid') rows = rows.filter(r => !r.paid);
+  el.innerHTML = `
+    <div class="card"><div class="card-body pad0">
+      ${rows.length ? `<table><thead><tr><th>Personne</th><th>Détail</th><th>Montant</th><th>Payé</th><th>Note</th><th>Fiche de paie</th><th>Espace perso</th></tr></thead><tbody>
+        ${rows.map(r => paymentRow(r)).join('')}
+      </tbody></table>` : `<div class="empty">${q || PAYMENTS_STATUS_FILTER ? 'Aucun résultat pour ce filtre.' : 'Aucun paiement dû ce mois-ci.'}</div>`}
+    </div></div>
+  `;
+}
+
+function paymentRow(r){
+  return `<tr style="${r.paid?'background:var(--vert-bg)':''}">
+    <td style="font-weight:600">${esc(r.name)}${r.person_type==='player'?' <span class="pill" style="background:var(--bleu-bg);color:var(--bleu);margin-left:6px">Joueur</span>':''}</td>
+    <td style="font-size:12.5px;color:var(--gris)">${esc(r.detail)}</td>
+    <td><strong>${chf(r.montant)} CHF</strong></td>
+    <td><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${r.paid?'checked':''} onchange="togglePaymentPaid('${r.person_type}',${r.person_id},this.checked)">Payé</label></td>
+    <td><input value="${esc(r.note||'')}" placeholder="Note (facultatif)…" style="width:100%;min-width:160px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:7px;font-size:12.5px" onchange="updatePaymentNote('${r.person_type}',${r.person_id},this.value)"></td>
+    <td>${paymentSlipCell(r)}</td>
+    <td><button class="btn btn-ghost btn-sm" onclick="copyPersonLink('${r.person_type}',${r.person_id})">Copier le lien</button></td>
+  </tr>`;
+}
+
+async function copyPersonLink(personType, personId){
+  try {
+    const res = await api('person_link', { params: { person_type: personType, person_id: personId } });
+    await navigator.clipboard.writeText(res.url);
+    alert('Lien copié : ' + res.url + '\n\nÀ transmettre une seule fois à la personne (il reste valable pour tous les mois à venir).');
+  } catch (e) { alert('Échec : ' + e.message); }
+}
+
+function paymentSlipCell(r){
+  const fileUrl = `api.php?action=payments_file&person_type=${r.person_type}&person_id=${r.person_id}&period=${PAYMENTS_DATA.month}`;
+  const viewLink = r.payslip_filename
+    ? `<a href="${fileUrl}" target="_blank" style="font-size:12px;color:var(--bleu);display:block;margin-bottom:4px;word-break:break-all">${esc(r.payslip_filename)}</a>`
+    : `<div style="font-size:12px;color:var(--gris-2);margin-bottom:4px">Aucun fichier</div>`;
+  const sentInfo = r.sent_at ? `<div style="font-size:11px;color:var(--gris)">Envoyé le ${esc(r.sent_at.slice(0,10))}</div>` : '';
+  return `
+    <div style="min-width:180px">
+      ${viewLink}
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+          ${r.payslip_filename ? 'Remplacer' : '+ Fichier'}
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadPayslip('${r.person_type}',${r.person_id},this)">
+        </label>
+        ${r.payslip_filename ? `<button class="btn btn-primary btn-sm" onclick="sendPayslipEmail('${r.person_type}',${r.person_id})">Envoyer</button>` : ''}
+      </div>
+      ${sentInfo}
+    </div>
+  `;
+}
+
+function findPaymentRow(personType, personId){ return PAYMENTS_DATA.rows.find(r => r.person_type === personType && r.person_id === personId); }
+
+async function uploadPayslip(personType, personId, input){
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('person_type', personType);
+  fd.append('person_id', personId);
+  fd.append('period', PAYMENTS_DATA.month);
+  try {
+    await api('payments_upload', { method: 'POST', form: fd });
+    await renderPayments(document.getElementById('content'));
+  } catch (e) { alert('Échec du dépôt : ' + e.message); }
+}
+
+async function sendPayslipEmail(personType, personId){
+  const r = findPaymentRow(personType, personId);
+  if (!confirm(`Envoyer la fiche de paie à ${r ? r.name : 'cette personne'} par e-mail ?`)) return;
+  try {
+    const res = await api('payments_send_email', { method: 'POST', body: { person_type: personType, person_id: personId, period: PAYMENTS_DATA.month } });
+    alert('Fiche de paie envoyée à ' + res.sent_to + '.');
+    await renderPayments(document.getElementById('content'));
+  } catch (e) { alert('Échec de l\'envoi : ' + e.message); }
+}
+
+async function togglePaymentPaid(personType, personId, paid){
+  const r = findPaymentRow(personType, personId);
+  try {
+    await api('payments', { method: 'POST', body: { person_type: personType, person_id: personId, period: PAYMENTS_DATA.month, paid, note: r ? r.note : '' } });
+    await renderPayments(document.getElementById('content'));
+  } catch (e) { alert(e.message); }
+}
+async function updatePaymentNote(personType, personId, note){
+  const r = findPaymentRow(personType, personId);
+  try {
+    await api('payments', { method: 'POST', body: { person_type: personType, person_id: personId, period: PAYMENTS_DATA.month, paid: r ? r.paid : false, note } });
+    if (r) r.note = note;
+  } catch (e) { alert(e.message); }
 }
 
 /* ============================================================ DÉCOMPTE DE PAIE (page autonome, nouvel onglet) */

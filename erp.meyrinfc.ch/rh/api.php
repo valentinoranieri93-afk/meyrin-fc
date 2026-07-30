@@ -154,6 +154,8 @@ function init_schema(PDO $pdo): void {
   // Échéance de versement (mensuel/semestriel) : propriété de l'employé (comment on le paie), pas du poste
   // (le montant d'un poste est toujours annuel, voir plus bas).
   ensure_column($pdo, 'employees', 'paiement', "TEXT NOT NULL DEFAULT 'mensuel'");
+  // Token d'accès à l'espace documents personnel (fiches de paie), généré à la demande depuis l'onglet Paiements.
+  ensure_column($pdo, 'employees', 'access_token', "TEXT NOT NULL DEFAULT ''");
 
   // employee_assignments = un "poste" au sein d'une équipe (rôle + employé optionnel + sa propre indemnité).
   // L'ancien barème séparé (indemnite_bareme, poste x équipe) est abandonné : le montant/périodicité vit
@@ -291,6 +293,12 @@ function init_schema(PDO $pdo): void {
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )");
   ensure_column($pdo, 'players', 'is_guest', 'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'poste', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'players', 'date_naissance', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'players', 'adresse', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'players', 'npa', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'players', 'ville', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'players', 'access_token', "TEXT NOT NULL DEFAULT ''");
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS matches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -325,6 +333,22 @@ function init_schema(PDO $pdo): void {
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(match_id, player_id)
   )", 'id, match_id, player_id, montant, source, created_at');
+
+  // Suivi mensuel des paiements (employés + joueurs) : coché "Payé" et note libre, un par personne et par mois.
+  $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_type TEXT NOT NULL CHECK(person_type IN ('employee','player')),
+    person_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    paid INTEGER NOT NULL DEFAULT 0,
+    paid_at TEXT,
+    note TEXT NOT NULL DEFAULT '',
+    UNIQUE(person_type, person_id, period)
+  )");
+  // Fiche de paie déposée manuellement (générée en externe) et suivi de son envoi par e-mail.
+  ensure_column($pdo, 'payroll_payments', 'payslip_path', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'payroll_payments', 'payslip_filename', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'payroll_payments', 'sent_at', 'TEXT');
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS imports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -374,6 +398,14 @@ function monthly_equiv(float $montant): float {
   return $montant / 12;
 }
 
+/** URL publique de l'espace documents personnel, construite à partir de l'hôte/chemin courants (rh/). */
+function person_link_url(string $token): string {
+  $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+  $host = $_SERVER['HTTP_HOST'] ?? 'erp.meyrinfc.ch';
+  $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/rh/api.php')), '/');
+  return "$scheme://$host$dir/mes-documents.php?token=$token";
+}
+
 /** Normalise un nom pour comparaison floue (minuscule, sans accents, sans espaces superflus). */
 function normalize_name(string $n): string {
   $n = mb_strtolower(trim($n));
@@ -403,7 +435,7 @@ function match_player_name(string $name, array $players): array {
 /** Calcule le total mensuel des indemnités par employé pour une saison donnée (état courant, non historisé). */
 function compute_employee_indemnites(PDO $pdo, string $month, int $season_id): array {
   $st = $pdo->prepare("
-    SELECT e.id AS employee_id, e.first_name, e.last_name,
+    SELECT e.id AS employee_id, e.first_name, e.last_name, e.paiement,
            ea.team_id, t.name AS team_name, ea.category_id, tc.name AS category_name, ea.poste_id, po.label AS poste_label,
            ea.montant
     FROM employee_assignments ea
@@ -416,15 +448,20 @@ function compute_employee_indemnites(PDO $pdo, string $month, int $season_id): a
   $st->execute([$season_id]);
   $rows = $st->fetchAll();
 
+  // Un employé payé "semestriel" n'est dû qu'en juin et décembre, pour le montant du semestre (annuel / 2) ;
+  // les autres mois, ses postes ne comptent pas dans le total dû.
+  $monthNum = (int)substr($month, 5, 2);
   $byEmployee = [];
   $alerts = [];
   foreach ($rows as $r) {
+    $isSemestriel = $r['paiement'] === 'semestriel';
+    if ($isSemestriel && !in_array($monthNum, [6, 12], true)) continue;
     $eid = (int)$r['employee_id'];
     if (!isset($byEmployee[$eid])) {
       $byEmployee[$eid] = ['employee_id' => $eid, 'name' => $r['first_name'] . ' ' . $r['last_name'], 'total' => 0.0, 'lignes' => []];
     }
     $label = $r['poste_label'] . ($r['team_name'] ? ' — ' . $r['team_name'] : ($r['category_name'] ? ' — ' . $r['category_name'] . ' (catégorie)' : ''));
-    $montant = round(monthly_equiv((float)$r['montant']), 2);
+    $montant = round($isSemestriel ? ((float)$r['montant'] / 2) : monthly_equiv((float)$r['montant']), 2);
     $byEmployee[$eid]['total'] += $montant;
     $byEmployee[$eid]['lignes'][] = ['type' => 'poste', 'label' => $label, 'montant' => $montant];
   }
@@ -499,6 +536,151 @@ function compute_player_pay(PDO $pdo, string $month): array {
   $guestTotal = (float)($stg->fetchColumn() ?: 0);
 
   return ['joueurs' => $out, 'primes_ponctuels' => $guestTotal];
+}
+
+/** Liste unifiée employés + joueurs à payer pour un mois donné (montant > 0 uniquement), pour l'onglet Paiements. */
+function compute_month_payments(PDO $pdo, string $month, int $season_id): array {
+  $employeeData = compute_employee_indemnites($pdo, $month, $season_id);
+  $playerData = compute_player_pay($pdo, $month);
+  $out = [];
+  foreach ($employeeData['par_employee'] as $e) {
+    if ($e['total'] <= 0) continue;
+    $detail = implode(', ', array_map(fn($l) => $l['label'], $e['lignes']));
+    $out[] = ['person_type' => 'employee', 'person_id' => $e['employee_id'], 'name' => $e['name'], 'detail' => $detail, 'montant' => round($e['total'], 2)];
+  }
+  foreach ($playerData['joueurs'] as $p) {
+    if ($p['total'] <= 0) continue;
+    $parts = [];
+    if ($p['salaire'] > 0) $parts[] = 'Salaire';
+    if ($p['primes'] > 0) $parts[] = 'Primes de match';
+    $out[] = ['person_type' => 'player', 'person_id' => $p['player_id'], 'name' => $p['name'], 'detail' => implode(' + ', $parts), 'montant' => round($p['total'], 2)];
+  }
+
+  // Ajoute l'e-mail de chaque personne (utilisé côté client pour le bouton "envoyer via ma messagerie").
+  $empIds = array_values(array_unique(array_column(array_filter($out, fn($r) => $r['person_type'] === 'employee'), 'person_id')));
+  $playerIds = array_values(array_unique(array_column(array_filter($out, fn($r) => $r['person_type'] === 'player'), 'person_id')));
+  $emails = [];
+  if ($empIds) {
+    $ph = implode(',', array_fill(0, count($empIds), '?'));
+    $st = $pdo->prepare("SELECT id, email FROM employees WHERE id IN ($ph)");
+    $st->execute($empIds);
+    foreach ($st->fetchAll() as $r) $emails['employee-' . $r['id']] = $r['email'];
+  }
+  if ($playerIds) {
+    $ph = implode(',', array_fill(0, count($playerIds), '?'));
+    $st = $pdo->prepare("SELECT id, email FROM players WHERE id IN ($ph)");
+    $st->execute($playerIds);
+    foreach ($st->fetchAll() as $r) $emails['player-' . $r['id']] = $r['email'];
+  }
+  foreach ($out as &$r) $r['email'] = $emails[$r['person_type'] . '-' . $r['person_id']] ?? '';
+  unset($r);
+
+  return $out;
+}
+
+/** Envoi d'un e-mail avec une pièce jointe via mail() natif, sans dépendance externe (multipart/mixed construit à la main). */
+function send_mail_with_attachment(string $to, string $subject, string $bodyText, string $filePath, string $fileName, ?string &$error = null): bool {
+  $boundary = md5(uniqid((string)microtime(), true));
+  $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+  $mime = ['pdf' => 'application/pdf', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png'][$ext] ?? 'application/octet-stream';
+  $fileContent = chunk_split(base64_encode((string)file_get_contents($filePath)));
+
+  $headers = "From: " . RH_MAIL_FROM_NAME . " <" . RH_MAIL_FROM_ADDRESS . ">\r\n";
+  $headers .= "MIME-Version: 1.0\r\n";
+  $headers .= "Content-Type: multipart/mixed; boundary=\"$boundary\"\r\n";
+
+  $message = "--$boundary\r\n";
+  $message .= "Content-Type: text/plain; charset=UTF-8\r\n";
+  $message .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
+  $message .= $bodyText . "\r\n\r\n";
+  $message .= "--$boundary\r\n";
+  $message .= "Content-Type: $mime; name=\"$fileName\"\r\n";
+  $message .= "Content-Transfer-Encoding: base64\r\n";
+  $message .= "Content-Disposition: attachment; filename=\"$fileName\"\r\n\r\n";
+  $message .= $fileContent . "\r\n";
+  $message .= "--$boundary--";
+
+  $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
+  return smtp_send($to, $encodedSubject, $headers, $message, $error);
+}
+
+/**
+ * Envoi via SMTP authentifié (mail() est désactivé sur cet hébergement, comme sur beaucoup de mutualisés
+ * Infomaniak). Client minimal par socket, sans dépendance externe. Identifiants dans les constantes
+ * RH_SMTP_* (config.php), elles-mêmes lues depuis les variables d'environnement de l'hébergement.
+ * $error est renseigné avec la raison précise de l'échec, pour l'afficher directement dans l'app
+ * (l'accès aux logs serveur n'étant pas toujours pratique).
+ */
+function smtp_send(string $to, string $encodedSubject, string $headers, string $message, ?string &$error = null): bool {
+  if (!RH_SMTP_USER || !RH_SMTP_PASS) {
+    $error = 'Identifiants SMTP manquants (RH_SMTP_USER / RH_SMTP_PASS non renseignés dans config.php).';
+    return false;
+  }
+  $host = RH_SMTP_HOST; $port = RH_SMTP_PORT;
+  $scheme = ($port === 465) ? 'ssl://' : 'tcp://';
+
+  $errno = 0; $errstr = '';
+  $socket = @stream_socket_client("$scheme$host:$port", $errno, $errstr, 15);
+  if (!$socket) { $error = "Connexion au serveur SMTP $host:$port impossible : $errstr"; return false; }
+  stream_set_timeout($socket, 15);
+
+  $read = function () use ($socket): string {
+    $data = '';
+    while (($line = fgets($socket, 515)) !== false) {
+      $data .= $line;
+      if (isset($line[3]) && $line[3] === ' ') break;
+    }
+    return $data;
+  };
+  $write = function (string $cmd) use ($socket): void { fwrite($socket, $cmd . "\r\n"); };
+  $expect = function (string $data, string $code, string $step) use ($socket, &$error): bool {
+    if (substr($data, 0, 3) === $code) return true;
+    $error = "Étape $step : réponse SMTP inattendue : " . trim($data);
+    fclose($socket);
+    return false;
+  };
+
+  if (!$expect($read(), '220', 'connexion')) return false;
+
+  $write('EHLO meyrinfc.ch');
+  if (!$expect($read(), '250', 'EHLO')) return false;
+
+  if ($port !== 465) {
+    $write('STARTTLS');
+    if (!$expect($read(), '220', 'STARTTLS')) return false;
+    if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) { $error = 'Échec de la négociation TLS (STARTTLS).'; fclose($socket); return false; }
+    $write('EHLO meyrinfc.ch');
+    if (!$expect($read(), '250', 'EHLO post-TLS')) return false;
+  }
+
+  $write('AUTH LOGIN');
+  if (!$expect($read(), '334', 'AUTH LOGIN')) return false;
+  $write(base64_encode(RH_SMTP_USER));
+  if (!$expect($read(), '334', 'envoi utilisateur')) return false;
+  $write(base64_encode(RH_SMTP_PASS));
+  if (!$expect($read(), '235', 'authentification (identifiants refusés ?)')) {
+    // Diagnostic : révèle la source et la forme des identifiants réellement envoyés (jamais le mot de passe en clair),
+    // pour détecter une variable d'environnement qui écraserait silencieusement la valeur de config.php.
+    $userSource = getenv('RH_SMTP_USER') !== false && getenv('RH_SMTP_USER') !== '' ? 'variable d\'environnement de l\'hébergement' : 'config.php';
+    $passSource = getenv('RH_SMTP_PASS') !== false && getenv('RH_SMTP_PASS') !== '' ? 'variable d\'environnement de l\'hébergement' : 'config.php';
+    $error .= " [Diagnostic : identifiant envoyé = \"" . RH_SMTP_USER . "\" (source : $userSource) ; mot de passe envoyé = " . strlen(RH_SMTP_PASS) . " caractère(s) (source : $passSource, premier caractère : \"" . substr(RH_SMTP_PASS, 0, 1) . "\")]";
+    return false;
+  }
+
+  $write('MAIL FROM: <' . RH_SMTP_USER . '>');
+  if (!$expect($read(), '250', 'MAIL FROM')) return false;
+  $write('RCPT TO: <' . $to . '>');
+  if (!$expect($read(), '250', 'RCPT TO')) return false;
+  $write('DATA');
+  if (!$expect($read(), '354', 'DATA')) return false;
+
+  $data = "To: $to\r\nSubject: $encodedSubject\r\n$headers\r\n$message\r\n";
+  $data = preg_replace('/\r\n\./', "\r\n..", $data); // dot-stuffing RFC 5321
+  $write($data . '.');
+  $ok = $expect($read(), '250', 'envoi du message');
+  $write('QUIT');
+  fclose($socket);
+  return $ok;
 }
 
 /* ---------------------------------------------------------------- Import Excel/CSV */
@@ -812,6 +994,20 @@ const RH_PERMS = [
   'import_discard'         => 'imports.run',
   'import_employees_file'  => 'imports.run',
   'export_compta'          => 'export.compta',
+
+  /* --- Paiements et fiches de paie (ajoutes le 30.07.2026) ---------------
+     Ces six actions tombaient sur le refus par defaut, donc sur payroll.edit :
+     invisible pour un administrateur, mais un comptable en lecture seule ne
+     pouvait pas consulter la liste des paiements ni ouvrir une fiche. */
+  'payments'               => ['GET' => 'payroll.view', 'write' => 'payroll.edit'],
+  'payments_file'          => 'payroll.view',
+  'payments_upload'        => 'payroll.edit',
+  'payments_send_email'    => 'payroll.edit',
+  /* Le lien personnel donne acces aux fiches de paie de la personne sans
+     compte : le consulter revient a pouvoir le transmettre, d'ou payroll.view.
+     Le regenerer invalide l'ancien lien, c'est une modification. */
+  'person_link'            => 'payroll.view',
+  'person_link_regenerate' => 'payroll.edit',
 ];
 
 $rh_rule = array_key_exists($action, RH_PERMS)
@@ -1033,7 +1229,7 @@ switch ($action) {
         $st = db()->prepare("SELECT ea.*, po.label AS poste_label, e.first_name, e.last_name
           FROM employee_assignments ea JOIN postes po ON po.id = ea.poste_id
           LEFT JOIN employees e ON e.id = ea.employee_id
-          WHERE ea.category_id = ? AND ea.season_id = ? ORDER BY ea.created_at");
+          WHERE ea.category_id = ? AND ea.season_id = ? ORDER BY ea.created_at DESC");
         $st->execute([$category_id, $season_id]);
       }
       out($st->fetchAll());
@@ -1208,18 +1404,22 @@ switch ($action) {
 
   case 'players': {
     if ($method === 'GET') {
-      out(db()->query('SELECT * FROM players WHERE is_guest = 0 ORDER BY active DESC, last_name')->fetchAll());
+      out(db()->query('SELECT * FROM players WHERE is_guest = 0 ORDER BY active DESC, first_name')->fetchAll());
     }
     if ($method === 'POST') {
       $ln = s($b, 'last_name'); if (!$ln) fail('Nom requis');
-      $st = db()->prepare('INSERT INTO players (first_name,last_name,email,phone,iban,salaire_mensuel,is_guest) VALUES (?,?,?,?,?,?,?)');
-      $st->execute([s($b,'first_name'), $ln, s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'is_guest',false)?1:0]);
+      $poste = s($b, 'poste');
+      if ($poste !== '' && !in_array($poste, ['gardien', 'defenseur', 'milieu', 'attaquant'], true)) fail('poste invalide');
+      $st = db()->prepare('INSERT INTO players (first_name,last_name,email,phone,iban,salaire_mensuel,is_guest,poste,date_naissance,adresse,npa,ville) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+      $st->execute([s($b,'first_name'), $ln, s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'is_guest',false)?1:0, $poste, s($b,'date_naissance'), s($b,'adresse'), s($b,'npa'), s($b,'ville')]);
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
       $id = i($b, 'id'); if (!$id) fail('id requis');
-      $st = db()->prepare('UPDATE players SET first_name=?,last_name=?,email=?,phone=?,iban=?,salaire_mensuel=?,active=? WHERE id=?');
-      $st->execute([s($b,'first_name'), s($b,'last_name'), s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'active',true)?1:0, $id]);
+      $poste = s($b, 'poste');
+      if ($poste !== '' && !in_array($poste, ['gardien', 'defenseur', 'milieu', 'attaquant'], true)) fail('poste invalide');
+      $st = db()->prepare('UPDATE players SET first_name=?,last_name=?,email=?,phone=?,iban=?,salaire_mensuel=?,active=?,poste=?,date_naissance=?,adresse=?,npa=?,ville=? WHERE id=?');
+      $st->execute([s($b,'first_name'), s($b,'last_name'), s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'active',true)?1:0, $poste, s($b,'date_naissance'), s($b,'adresse'), s($b,'npa'), s($b,'ville'), $id]);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
@@ -1538,6 +1738,208 @@ switch ($action) {
       'joueurs' => $playerData['joueurs'],
       'alerts' => array_values($alerts),
     ]);
+  }
+
+  /* ============ SUIVI DES PAIEMENTS (employés + joueurs, coché "Payé" par mois) ============ */
+
+  case 'payments': {
+    $pdo = db();
+    if ($method === 'GET') {
+      $month = s($_GET, 'month') ?: date('Y-m');
+      $season_id = i($_GET, 'season_id') ?: ensure_current_season($pdo);
+      $year = substr($month, 0, 4);
+
+      // Calcule les 12 mois de l'année une seule fois (réutilisé pour le total annuel dû et payé).
+      $allMonthRows = [];
+      $anneeDu = 0.0;
+      for ($m = 1; $m <= 12; $m++) {
+        $mm = $year . '-' . str_pad((string)$m, 2, '0', STR_PAD_LEFT);
+        $allMonthRows[$mm] = compute_month_payments($pdo, $mm, $season_id);
+        foreach ($allMonthRows[$mm] as $r) $anneeDu += $r['montant'];
+      }
+
+      $st = $pdo->prepare('SELECT person_type, person_id, paid, note, payslip_filename, sent_at FROM payroll_payments WHERE period = ?');
+      $st->execute([$month]);
+      $status = [];
+      foreach ($st->fetchAll() as $r) $status[$r['person_type'] . '-' . $r['person_id']] = $r;
+
+      $rows = $allMonthRows[$month] ?? [];
+      $totalDu = 0.0; $totalPaye = 0.0;
+      foreach ($rows as &$r) {
+        $key = $r['person_type'] . '-' . $r['person_id'];
+        $st2 = $status[$key] ?? null;
+        $r['paid'] = $st2 ? (bool)$st2['paid'] : false;
+        $r['note'] = $st2 ? $st2['note'] : '';
+        $r['payslip_filename'] = $st2 ? $st2['payslip_filename'] : '';
+        $r['sent_at'] = $st2 ? $st2['sent_at'] : null;
+        $totalDu += $r['montant'];
+        if ($r['paid']) $totalPaye += $r['montant'];
+      }
+      unset($r);
+
+      $anneePaye = 0.0;
+      $stYear = $pdo->prepare("SELECT person_type, person_id, period FROM payroll_payments WHERE period LIKE ? AND paid = 1");
+      $stYear->execute([$year . '-%']);
+      foreach ($stYear->fetchAll() as $pm) {
+        foreach ($allMonthRows[$pm['period']] ?? [] as $r) {
+          if ($r['person_type'] === $pm['person_type'] && (int)$r['person_id'] === (int)$pm['person_id']) { $anneePaye += $r['montant']; break; }
+        }
+      }
+
+      out([
+        'month' => $month, 'rows' => $rows,
+        'total_du' => round($totalDu, 2), 'total_paye' => round($totalPaye, 2),
+        'annee_du' => round($anneeDu, 2), 'annee_paye' => round($anneePaye, 2),
+      ]);
+    }
+    if ($method === 'POST') {
+      $person_type = s($b, 'person_type'); $person_id = i($b, 'person_id'); $period = s($b, 'period');
+      if (!in_array($person_type, ['employee', 'player'], true)) fail('person_type invalide');
+      if (!$person_id || !$period) fail('person_id et period requis');
+      $paid = bo($b, 'paid', false);
+      $note = s($b, 'note');
+      $exists = $pdo->prepare('SELECT id FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
+      $exists->execute([$person_type, $person_id, $period]);
+      $id = $exists->fetchColumn();
+      if ($id) {
+        $pdo->prepare('UPDATE payroll_payments SET paid=?, paid_at=?, note=? WHERE id=?')
+          ->execute([$paid ? 1 : 0, $paid ? date('Y-m-d H:i:s') : null, $note, $id]);
+      } else {
+        $pdo->prepare('INSERT INTO payroll_payments (person_type, person_id, period, paid, paid_at, note) VALUES (?,?,?,?,?,?)')
+          ->execute([$person_type, $person_id, $period, $paid ? 1 : 0, $paid ? date('Y-m-d H:i:s') : null, $note]);
+      }
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  /* Dépôt manuel d'une fiche de paie (générée en externe) pour un mois donné. */
+  case 'payments_upload': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $person_type = s($b, 'person_type'); $person_id = i($b, 'person_id'); $period = s($b, 'period');
+    if (!in_array($person_type, ['employee', 'player'], true)) fail('person_type invalide');
+    if (!$person_id || !$period) fail('person_id et period requis');
+    if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) fail('Fichier manquant ou invalide.');
+    $origName = $_FILES['file']['name'];
+    $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+    if (!in_array($ext, ['pdf', 'jpg', 'jpeg', 'png'], true)) fail('Format non supporté (PDF, JPG ou PNG uniquement).');
+
+    $dir = DB_DIR . '/payslips';
+    if (!is_dir($dir)) mkdir($dir, 0775, true);
+    $ht = $dir . '/.htaccess';
+    if (!file_exists($ht)) file_put_contents($ht, "Require all denied\n");
+
+    $filename = "{$person_type}_{$person_id}_{$period}.{$ext}";
+    $path = $dir . '/' . $filename;
+
+    $existing = $pdo->prepare('SELECT id, payslip_path FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
+    $existing->execute([$person_type, $person_id, $period]);
+    $row = $existing->fetch();
+    // Retire l'ancien fichier s'il portait une autre extension, pour ne pas laisser d'orphelin.
+    if ($row && $row['payslip_path'] && $row['payslip_path'] !== $path && is_file($row['payslip_path'])) unlink($row['payslip_path']);
+
+    if (!move_uploaded_file($_FILES['file']['tmp_name'], $path)) fail("Échec de l'enregistrement du fichier.");
+
+    if ($row) {
+      $pdo->prepare('UPDATE payroll_payments SET payslip_path=?, payslip_filename=?, sent_at=NULL WHERE id=?')->execute([$path, $origName, $row['id']]);
+    } else {
+      $pdo->prepare('INSERT INTO payroll_payments (person_type, person_id, period, payslip_path, payslip_filename) VALUES (?,?,?,?,?)')
+        ->execute([$person_type, $person_id, $period, $path, $origName]);
+    }
+    out(['ok' => true, 'filename' => $origName]);
+  }
+
+  /* Téléchargement/consultation d'une fiche de paie déposée. */
+  case 'payments_file': {
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $person_type = s($_GET, 'person_type'); $person_id = i($_GET, 'person_id'); $period = s($_GET, 'period');
+    $st = db()->prepare('SELECT payslip_path, payslip_filename FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
+    $st->execute([$person_type, $person_id, $period]);
+    $row = $st->fetch();
+    if (!$row || !$row['payslip_path'] || !is_file($row['payslip_path'])) fail('Fichier introuvable.', 404);
+    $ext = strtolower(pathinfo($row['payslip_path'], PATHINFO_EXTENSION));
+    $mime = ['pdf' => 'application/pdf', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png'][$ext] ?? 'application/octet-stream';
+    if (ob_get_level() > 0) ob_clean();
+    $disposition = !empty($_GET['download']) ? 'attachment' : 'inline';
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: ' . $disposition . '; filename="' . rawurlencode($row['payslip_filename']) . '"');
+    header('Content-Length: ' . filesize($row['payslip_path']));
+    readfile($row['payslip_path']);
+    exit;
+  }
+
+  /* Envoi par e-mail de la fiche de paie déposée pour la personne et la période données. */
+  case 'payments_send_email': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $person_type = s($b, 'person_type'); $person_id = i($b, 'person_id'); $period = s($b, 'period');
+    if (!in_array($person_type, ['employee', 'player'], true)) fail('person_type invalide');
+    if (!$person_id || !$period) fail('person_id et period requis');
+
+    $st = $pdo->prepare('SELECT payslip_path, payslip_filename FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
+    $st->execute([$person_type, $person_id, $period]);
+    $row = $st->fetch();
+    if (!$row || !$row['payslip_path'] || !is_file($row['payslip_path'])) fail("Aucune fiche de paie n'a été déposée pour cette période.");
+
+    $table = $person_type === 'employee' ? 'employees' : 'players';
+    $p = $pdo->prepare("SELECT first_name, last_name, email FROM $table WHERE id = ?");
+    $p->execute([$person_id]);
+    $person = $p->fetch();
+    if (!$person || !$person['email']) fail("Cette personne n'a pas d'adresse e-mail enregistrée.");
+
+    $monthLabels = ['01'=>'janvier','02'=>'février','03'=>'mars','04'=>'avril','05'=>'mai','06'=>'juin','07'=>'juillet','08'=>'août','09'=>'septembre','10'=>'octobre','11'=>'novembre','12'=>'décembre'];
+    [$y, $m] = explode('-', $period);
+    $periodLabel = ($monthLabels[$m] ?? $m) . ' ' . $y;
+
+    $subject = 'Meyrin FC — Fiche de paie ' . $periodLabel;
+    $body = "Bonjour {$person['first_name']},\n\nVeuillez trouver ci-joint votre fiche de paie pour $periodLabel.\n\nCordialement,\nMeyrin FC";
+
+    $mailError = null;
+    if (!send_mail_with_attachment($person['email'], $subject, $body, $row['payslip_path'], $row['payslip_filename'], $mailError)) {
+      fail("Échec de l'envoi SMTP : " . ($mailError ?: 'raison inconnue') . '.');
+    }
+
+    $pdo->prepare('UPDATE payroll_payments SET sent_at=? WHERE person_type=? AND person_id=? AND period=?')
+      ->execute([date('Y-m-d H:i:s'), $person_type, $person_id, $period]);
+    out(['ok' => true, 'sent_to' => $person['email']]);
+  }
+
+  /* Lien permanent vers l'espace documents personnel (fiches de paie) d'un employé ou joueur.
+     Génère le token à la première demande, le réutilise ensuite (lien stable, à donner une seule fois). */
+  case 'person_link': {
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $person_type = s($_GET, 'person_type'); $person_id = i($_GET, 'person_id');
+    if (!in_array($person_type, ['employee', 'player'], true)) fail('person_type invalide');
+    if (!$person_id) fail('person_id requis');
+    $table = $person_type === 'employee' ? 'employees' : 'players';
+
+    $st = $pdo->prepare("SELECT access_token FROM $table WHERE id = ?");
+    $st->execute([$person_id]);
+    $token = $st->fetchColumn();
+    if ($token === false) fail('Personne introuvable.', 404);
+    if (!$token) {
+      $token = bin2hex(random_bytes(32));
+      $pdo->prepare("UPDATE $table SET access_token = ? WHERE id = ?")->execute([$token, $person_id]);
+    }
+    out(['url' => person_link_url($token)]);
+  }
+
+  /* Révoque l'ancien lien et en génère un nouveau (ex: lien transmis par erreur). */
+  case 'person_link_regenerate': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $person_type = s($b, 'person_type'); $person_id = i($b, 'person_id');
+    if (!in_array($person_type, ['employee', 'player'], true)) fail('person_type invalide');
+    if (!$person_id) fail('person_id requis');
+    $table = $person_type === 'employee' ? 'employees' : 'players';
+
+    $token = bin2hex(random_bytes(32));
+    $st = $pdo->prepare("UPDATE $table SET access_token = ? WHERE id = ?");
+    $st->execute([$token, $person_id]);
+    if ($st->rowCount() === 0) fail('Personne introuvable.', 404);
+    out(['url' => person_link_url($token)]);
   }
 
   /* ============ EXPORT COMPTA (CSV) ============ */

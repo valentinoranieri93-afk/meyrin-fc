@@ -24,3 +24,8 @@ _Backup/
 
 # Outils de diagnostic temporaires déposés à la racine d'une app
 mfc_check.php
+
+# Fiches de paie et documents personnels — donnees financieres nominatives,
+# ne doivent jamais quitter le serveur ni entrer dans l'historique du depot
+erp.meyrinfc.ch/rh/data/
+erp.meyrinfc.ch/data/general.json
