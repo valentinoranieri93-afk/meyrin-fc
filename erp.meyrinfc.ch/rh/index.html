@@ -34,8 +34,12 @@ table{border-collapse:collapse;width:100%}
 .app{display:flex;min-height:100vh}
 .sidebar{width:252px;flex-shrink:0;background:var(--noir);color:#C9C7BD;display:flex;flex-direction:column;border-right:1px solid var(--ligne-dark);position:sticky;top:0;height:100vh}
 .sb-head{padding:22px 20px 18px;border-bottom:1px solid var(--ligne-dark)}
-.sb-back{display:flex;align-items:center;gap:6px;font-size:12px;color:#8C897C;margin-bottom:12px;font-weight:600}
+.sb-back{display:flex;align-items:center;gap:6px;font-size:12px;color:#8C897C;margin-bottom:12px;font-weight:600;transition:color .15s}
 .sb-back:hover{color:#fff}
+/* ic() produit un <svg> sans width ni height : sans cette regle l'icone
+   s'affiche a sa taille par defaut et ecrase le libelle. Meme dimension que
+   dans les autres modules. */
+.sb-back svg{width:14px;height:14px;flex-shrink:0}
 .sb-name{font-family:"Sora";font-weight:800;font-size:15px;color:#fff}
 .sb-sub{font-size:10.5px;color:#8C897C;margin-top:2px}
 .season-picker{padding:14px 20px 4px}
@@ -244,7 +248,7 @@ function render() {
   app.innerHTML = `
     <div class="sidebar">
       <div class="sb-head">
-        <a href="https://erp.meyrinfc.ch" class="sb-back">${ic('back')} Retour à l'ERP</a>
+        <a href="/" class="sb-back">${ic('back')} Retour à l'ERP</a>
         <div class="sb-name">Ressources Humaines</div>
         <div class="sb-sub">Meyrin FC</div>
       </div>
