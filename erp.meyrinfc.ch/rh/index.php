@@ -12,6 +12,11 @@ require_once __DIR__ . '/mfc_boot.php';
 $user = mfc_require_login('rh');
 
 $perms = [
+    /* Les équipes et catégories viennent-elles du référentiel de l'ERP ?
+       Si oui, l'interface les affiche sans permettre de les renommer ici, et
+       renvoie vers l'ERP. api.php applique la même règle de son côté. */
+    'clubManaged'   => !mfc_club_is_empty(),
+    'erpUrl'        => ERP_URL,
     'teamsView'     => mfc_can('rh.teams.view'),
     'teamsEdit'     => mfc_can('rh.teams.edit'),
     'employeesView' => mfc_can('rh.employees.view'),

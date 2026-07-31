@@ -110,8 +110,32 @@ function mfc_app_permission_keys(string $slug): array {
  * actuel de roles.json, une simple liste d'apps) reçoit TOUTES les permissions
  * des apps auxquelles il a accès. Le comportement reste donc strictement
  * identique à aujourd'hui tant que les rôles n'ont pas été enrichis.
+ *
+ * CAS DU RÔLE SYSTÈME « admin » : ses droits sont calculés depuis le catalogue,
+ * jamais depuis sa liste d'apps enregistrée. L'écran Rôles & Accès le présente
+ * comme « Rôle système · tous droits » et verrouille ses interrupteurs : sa
+ * liste stockée n'est donc pas modifiable par l'interface. Tant qu'elle faisait
+ * foi, toute application ajoutée après la création du rôle lui restait
+ * inaccessible, sans aucun moyen de le corriger depuis l'ERP — c'est ce qui est
+ * arrivé au module Contacts. Le catalogue fait désormais autorité, et une
+ * future application sera accessible à l'administrateur dès son installation.
  */
-function mfc_role_permissions(array $role): array {
+function mfc_role_permissions(array $role, ?string $roleKey = null): array {
+    if ($roleKey === 'admin') {
+        $out = [];
+        foreach (mfc_permission_catalog() as $app => $meta) {
+            if ($app === '_comment' || !is_array($meta)) continue;
+            $keys = mfc_app_permission_keys($app);
+            $out[$app] = $keys ?: ['*'];
+        }
+        /* Une app présente dans apps.json mais pas encore dans le catalogue de
+           permissions ne doit pas disparaître des droits de l'administrateur. */
+        foreach ($role['apps'] ?? [] as $app) {
+            if (!isset($out[$app])) $out[$app] = mfc_app_permission_keys($app) ?: ['*'];
+        }
+        return $out;
+    }
+
     if (!empty($role['perms']) && is_array($role['perms'])) {
         $out = [];
         foreach ($role['perms'] as $app => $perms) {
@@ -169,8 +193,10 @@ function mfc_session_perms(): array {
     if (!$s) return [];
     if (!empty($s['perms']) && is_array($s['perms'])) return $s['perms'];
     /* Jeton émis avant la migration : on retombe sur la liste d'apps, avec
-       toutes les permissions. Évite de déconnecter tout le monde au déploiement. */
-    return mfc_role_permissions(['apps' => $s['apps'] ?? []]);
+       toutes les permissions. Évite de déconnecter tout le monde au déploiement.
+       Le rôle est transmis pour que l'administrateur bénéficie de la même règle
+       que ci-dessus, même sur un jeton ancien. */
+    return mfc_role_permissions(['apps' => $s['apps'] ?? []], $s['role'] ?? null);
 }
 
 /* ============================================================ VÉRIFICATIONS */
@@ -304,3 +330,13 @@ function mfc_local_user(PDO $pdo, array $session): array {
     $st->execute([$erp_id]);
     return $st->fetch();
 }
+
+/* ================================================== RÉFÉRENTIEL CLUB
+ *
+ * Chargé ici plutôt que par un chemin en dur dans chaque module : mfc_boot.php
+ * sait déjà localiser ce dossier, quel que soit l'emplacement de l'application.
+ * Une application qui n'a pas besoin du référentiel n'en paie que la définition
+ * des fonctions, la lecture du fichier restant à la demande.
+ */
+require_once __DIR__ . '/mfc_club.php';
+require_once __DIR__ . '/mfc_contacts.php';

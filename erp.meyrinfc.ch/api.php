@@ -6,6 +6,7 @@ define('ERP_ROOT', true);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/jwt.php';
 require_once __DIR__ . '/lib/mfc_auth.php';
+require_once __DIR__ . '/lib/mfc_club.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -347,6 +348,209 @@ switch ($action) {
         write_json('apps.json', $apps);
         erp_log($session['login'], $session['name'], "update_app:$slug");
         json_ok(['message' => "Application $slug mise à jour."]);
+
+    // ── RÉFÉRENTIEL CLUB (catégories & équipes) ─────────────────────────────
+    /*
+     * Source de vérité de la structure sportive, consommée par RH et Arbitrage.
+     * Lecture ouverte à toute session (les modules en ont besoin pour afficher
+     * leurs écrans), écriture réservée aux administrateurs de l'ERP.
+     */
+
+    case 'club_structure': {
+        require_auth();
+        $season = mfc_club_resolve_season($_GET['season_id'] ?? null);
+        json_ok([
+            'seasons'    => mfc_club_seasons(),
+            'categories' => mfc_club_categories(),
+            'season_id'  => $season,
+            'teams'      => $season === null ? [] : mfc_club_teams($season, false),
+            'is_empty'   => mfc_club_is_empty(),
+        ]);
+    }
+
+    case 'club_save_categories': {
+        require_admin();
+        $rows = $input['categories'] ?? null;
+        if (!is_array($rows)) json_die(400, 'Format invalide.');
+
+        $data    = mfc_club_read();
+        $before  = [];
+        foreach ($data['categories'] as $c) $before[$c['id']] = $c;
+
+        $kept = [];
+        $next = [];
+        foreach ($rows as $i => $r) {
+            $name = trim((string)($r['name'] ?? ''));
+            if ($name === '') continue;
+            if (mb_strlen($name) > 60) json_die(400, "Nom de catégorie trop long : $name");
+            $id = (string)($r['id'] ?? '');
+            if ($id === '' || !isset($before[$id])) $id = mfc_club_uid('cat');
+            if (isset($kept[$id])) continue; // doublon d'identifiant dans la requête
+            $kept[$id] = true;
+            $next[] = [
+                'id'         => $id,
+                'name'       => $name,
+                'sort_order' => (int)($r['sort_order'] ?? $i),
+                'active'     => (bool)($r['active'] ?? true),
+            ];
+        }
+
+        /* Une catégorie retirée de la liste est supprimée. Refuser tant que des
+           équipes s'y rattachent, sur n'importe quelle saison : sans ce contrôle
+           ces équipes se retrouveraient sans catégorie en silence, y compris sur
+           des saisons passées que l'administrateur ne regardait pas. */
+        $removed = array_diff(array_keys($before), array_keys($kept));
+        if ($removed) {
+            $blocking = [];
+            foreach ($data['memberships'] as $seasonId => $ms) {
+                foreach ($ms as $m) {
+                    if (in_array($m['category_id'], $removed, true)) {
+                        $label = mfc_club_season($seasonId)['label'] ?? $seasonId;
+                        $blocking[$before[$m['category_id']]['name'] . " ($label)"] = true;
+                    }
+                }
+            }
+            if ($blocking) {
+                json_die(409, 'Ces catégories contiennent encore des équipes : '
+                    . implode(', ', array_keys($blocking)) . '. Déplacez ces équipes d\'abord.');
+            }
+        }
+
+        $data['categories'] = $next;
+        if (!mfc_club_write($data)) json_die(500, 'Écriture du référentiel impossible.');
+        erp_log($session['login'], $session['name'], 'club_save_categories:' . count($next));
+        json_ok(['message' => 'Catégories enregistrées.', 'categories' => mfc_club_categories()]);
+    }
+
+    case 'club_save_teams': {
+        require_admin();
+        $seasonId = mfc_club_resolve_season($input['season_id'] ?? null);
+        if ($seasonId === null) json_die(400, 'Créez d\'abord une saison.');
+        $rows = $input['teams'] ?? null;
+        if (!is_array($rows)) json_die(400, 'Format invalide.');
+
+        $data     = mfc_club_read();
+        $knownCat = array_column($data['categories'], 'id');
+        $knownTm  = array_column($data['teams'], 'id');
+
+        $members = [];
+        $seen    = [];
+        $created = 0;
+        foreach ($rows as $i => $r) {
+            $name = trim((string)($r['name'] ?? ''));
+            if ($name === '') continue;
+            if (mb_strlen($name) > 100) json_die(400, "Nom d'équipe trop long : $name");
+
+            $catId = (string)($r['category_id'] ?? '');
+            if ($catId !== '' && !in_array($catId, $knownCat, true)) {
+                json_die(400, "Catégorie inconnue pour l'équipe \"$name\".");
+            }
+
+            /* ref_id absent ou inconnu = nouvelle identité d'équipe. On ne
+               réutilise jamais un identifiant fourni par le client s'il ne
+               correspond à rien : ça créerait une équipe fantôme référencée
+               nulle part ailleurs. */
+            $refId = (string)($r['ref_id'] ?? '');
+            if ($refId === '' || !in_array($refId, $knownTm, true)) {
+                $refId = mfc_club_uid('tm');
+                $data['teams'][] = ['id' => $refId, 'created_at' => date('c')];
+                $knownTm[] = $refId;
+                $created++;
+            }
+            if (isset($seen[$refId])) {
+                json_die(400, "L'équipe \"$name\" apparaît deux fois dans cette saison.");
+            }
+            $seen[$refId] = true;
+
+            $members[] = [
+                'team_id'     => $refId,
+                'name'        => $name,
+                'category_id' => $catId,
+                'coach_name'  => trim((string)($r['coach_name'] ?? '')),
+                'sort_order'  => (int)($r['sort_order'] ?? $i),
+                'active'      => (bool)($r['active'] ?? true),
+            ];
+        }
+
+        $data['memberships'][$seasonId] = $members;
+        if (!mfc_club_write($data)) json_die(500, 'Écriture du référentiel impossible.');
+        erp_log($session['login'], $session['name'], "club_save_teams:$seasonId:" . count($members));
+        json_ok([
+            'message'  => count($members) . ' équipe(s) enregistrée(s)' . ($created ? ", dont $created nouvelle(s)" : '') . '.',
+            'teams'    => mfc_club_teams($seasonId, false),
+        ]);
+    }
+
+    case 'club_save_season': {
+        require_admin();
+        $id    = trim((string)($input['id'] ?? ''));
+        $label = trim((string)($input['label'] ?? ''));
+        $start = trim((string)($input['start_date'] ?? ''));
+        $end   = trim((string)($input['end_date'] ?? ''));
+
+        if ($label === '') json_die(400, 'Nom de saison requis.');
+        foreach ([$start, $end] as $d) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) json_die(400, 'Dates de saison invalides (AAAA-MM-JJ).');
+        }
+        if ($start >= $end) json_die(400, 'La date de fin doit suivre la date de début.');
+
+        $data  = mfc_club_read();
+        $idx   = -1;
+        foreach ($data['seasons'] as $i => $s) { if ($s['id'] === $id) { $idx = $i; break; } }
+
+        if ($idx >= 0) {
+            $data['seasons'][$idx] = ['id' => $id, 'label' => $label, 'start_date' => $start, 'end_date' => $end];
+            $msg = "Saison \"$label\" mise à jour.";
+        } else {
+            foreach ($data['seasons'] as $s) {
+                if (mb_strtolower($s['label']) === mb_strtolower($label)) json_die(409, 'Une saison porte déjà ce nom.');
+            }
+            $id = mfc_club_uid('sea');
+            $data['seasons'][] = ['id' => $id, 'label' => $label, 'start_date' => $start, 'end_date' => $end];
+
+            /* Duplication de la saison précédente comme point de départ : c'est
+               le comportement déjà en place côté RH pour les affectations, et
+               ça évite de ressaisir tout l'organigramme chaque été. Les équipes
+               gardent leur identité, seuls les rattachements sont recopiés. */
+            $copyFrom = trim((string)($input['copy_from'] ?? ''));
+            if ($copyFrom !== '' && isset($data['memberships'][$copyFrom])) {
+                $data['memberships'][$id] = $data['memberships'][$copyFrom];
+                $msg = "Saison \"$label\" créée à partir de la précédente ("
+                     . count($data['memberships'][$id]) . ' équipe(s) reprise(s)).';
+            } else {
+                $data['memberships'][$id] = [];
+                $msg = "Saison \"$label\" créée.";
+            }
+        }
+
+        if (!mfc_club_write($data)) json_die(500, 'Écriture du référentiel impossible.');
+        erp_log($session['login'], $session['name'], "club_save_season:$id");
+        json_ok(['message' => $msg, 'season_id' => $id, 'seasons' => mfc_club_seasons()]);
+    }
+
+    case 'club_delete_season': {
+        require_admin();
+        $id = trim((string)($input['id'] ?? ''));
+        $data = mfc_club_read();
+        if (!mfc_club_season($id)) json_die(404, 'Saison introuvable.');
+
+        /* Les modules gardent leurs propres données rattachées à cette saison
+           (matchs d'Arbitrage, affectations RH) et l'ERP n'a aucun moyen fiable
+           de les compter d'ici. On refuse donc par défaut dès qu'il reste des
+           équipes, plutôt que de laisser ces données orphelines en silence. */
+        $count = count($data['memberships'][$id] ?? []);
+        if ($count > 0 && empty($input['force'])) {
+            json_die(409, "Cette saison contient encore $count équipe(s). Les modules qui s'y réfèrent "
+                . '(matchs, affectations) conserveront leurs données, qui deviendront orphelines. '
+                . 'Confirmez pour continuer.', ['needs_force' => true, 'team_count' => $count]);
+        }
+
+        $data['seasons'] = array_values(array_filter($data['seasons'], fn($s) => $s['id'] !== $id));
+        unset($data['memberships'][$id]);
+        if (!mfc_club_write($data)) json_die(500, 'Écriture du référentiel impossible.');
+        erp_log($session['login'], $session['name'], "club_delete_season:$id");
+        json_ok(['message' => 'Saison supprimée.', 'seasons' => mfc_club_seasons()]);
+    }
 
     // ── JOURNAL ─────────────────────────────────────────────────────────────
     case 'logs':

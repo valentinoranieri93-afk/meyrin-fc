@@ -84,7 +84,7 @@ function erp_issue_token(array $user): void {
     /* Permissions détaillées par application. Un rôle qui n'a pas encore de
        bloc "perms" reçoit toutes les permissions de ses apps : le jeton reste
        donc équivalent à l'ancien tant que rien n'a été restreint. */
-    $perms = mfc_role_permissions($rd);
+    $perms = mfc_role_permissions($rd, $user['role'] ?? null);
     $jwt   = jwt_encode([
         'sub'      => $user['id'],
         'name'     => $user['name'],
@@ -366,6 +366,35 @@ input,select{font-family:inherit;font-size:14px;outline:none}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:22px}
 .modal-error{background:var(--rouge-bg);color:var(--rouge);border-radius:8px;padding:9px 13px;font-size:12.5px;margin-bottom:14px;display:none}
 
+/* ── Référentiel club (Catégories & Équipes) ── */
+.btn-sm{padding:5px 11px;font-size:12px}
+.club-season-select{padding:8px 12px;border:1px solid var(--ligne);border-radius:9px;background:#fff;color:var(--encre);font-size:13px;font-weight:600;min-width:170px}
+.club-empty{background:var(--carte);border:1px dashed var(--ligne);border-radius:var(--r);padding:28px;font-size:13.5px;color:var(--noir-3);line-height:1.65}
+.club-empty strong{display:block;font-size:15px;color:var(--noir);margin-bottom:6px}
+.club-empty code{background:var(--bg);border:1px solid var(--ligne);border-radius:5px;padding:1px 5px;font-size:12.5px}
+.club-grid{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start}
+@media(max-width:1100px){.club-grid{grid-template-columns:1fr}}
+.club-panel{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r);overflow:hidden}
+.club-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--ligne-2)}
+.club-panel-title{font-family:"Sora";font-size:14.5px;font-weight:700;color:var(--noir)}
+.club-panel-sub{font-size:12px;color:var(--gris-2);margin-top:3px;line-height:1.5}
+.club-panel-foot{padding:14px 20px;border-top:1px solid var(--ligne-2);display:flex;justify-content:flex-end}
+.club-tag{font-family:"Inter",sans-serif;font-size:11px;font-weight:600;color:var(--gris-2);background:var(--bg);border:1px solid var(--ligne);border-radius:20px;padding:2px 9px;margin-left:6px;vertical-align:middle}
+.club-cat-row{display:flex;align-items:center;gap:7px;padding:8px 20px;border-bottom:1px solid var(--ligne-2)}
+.club-cat-row:last-of-type{border-bottom:none}
+.club-inp{flex:1;min-width:0;padding:7px 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--encre);font-size:13.5px}
+.club-inp:hover{border-color:var(--ligne)}
+.club-inp:focus{border-color:var(--noir);background:#fff;outline:none}
+.club-teams td{padding:6px 10px}
+.club-teams td:first-child{padding-left:16px;color:var(--gris-2)}
+.club-teams select.club-inp{background:transparent;-webkit-appearance:none;appearance:none}
+.club-x{background:none;border:none;color:var(--gris-2);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;border-radius:6px}
+.club-x:hover{background:var(--rouge-bg);color:var(--rouge)}
+.club-move{display:flex;flex-direction:column;gap:1px}
+.club-move button{background:none;border:none;color:#BFBBAC;cursor:pointer;font-size:9px;line-height:1;padding:1px}
+.club-move button:hover{color:var(--noir)}
+.club-none{padding:22px 20px;font-size:13px;color:var(--gris-2);text-align:center}
+
 /* ── Toast ── */
 .toast{position:fixed;bottom:24px;right:24px;background:var(--noir);color:#E8E6DD;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:500;box-shadow:var(--ombre-l);z-index:300;transform:translateY(80px);opacity:0;transition:transform .25s ease,opacity .25s ease;max-width:320px}
 .toast.show{transform:translateY(0);opacity:1}
@@ -530,6 +559,7 @@ $role_info  = $roles_data[$session['role']] ?? ['label' => $session['role'], 'co
       ['id'=>'users',    'label'=>'Utilisateurs',    'icon'=>'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>'],
       ['id'=>'roles',    'label'=>'Rôles & Accès',   'icon'=>'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'],
       ['id'=>'apps',     'label'=>'Applications',    'icon'=>'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'],
+      ['id'=>'club',     'label'=>'Catégories & Équipes', 'icon'=>'<path d="M12 2l7 4v6c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>'],
       ['id'=>'logs',     'label'=>"Journal d'activité", 'icon'=>'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>'],
       ['id'=>'sessions', 'label'=>'Sessions actives', 'icon'=>'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'],
       ['id'=>'general',  'label'=>'Général',         'icon'=>'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>'],
@@ -598,6 +628,71 @@ $role_info  = $roles_data[$session['role']] ?? ['label' => $session['role'], 'co
           <thead><tr><th>Application</th><th>URL</th><th>Statut</th><th>Actif</th></tr></thead>
           <tbody id="apps-tbody"><tr><td colspan="4" style="text-align:center;color:var(--gris-2);padding:24px">Chargement...</td></tr></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- CATÉGORIES & ÉQUIPES -->
+    <!--
+      Référentiel club : source de vérité unique des catégories, des équipes et
+      de leur entraîneur, consommée par le module RH et par Arbitrage. Une équipe
+      garde son identité d'une saison à l'autre ; son nom, sa catégorie, son
+      entraîneur et sa présence sont propres à la saison affichée ici.
+    -->
+    <div class="s-page" id="page-club">
+      <div class="s-header-row">
+        <div>
+          <div class="s-title">Catégories &amp; Équipes</div>
+          <div class="s-desc">Structure sportive du club. Les modules RH et Arbitrage affichent cette liste ; chacun y ajoute ensuite ses propres données (indemnités, cotisations, matchs).</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="club-season" class="club-season-select" onchange="loadClub(this.value)"></select>
+          <button class="btn btn-ghost" onclick="openClubSeason(false)">Modifier</button>
+          <button class="btn btn-primary" onclick="openClubSeason(true)">Nouvelle saison</button>
+        </div>
+      </div>
+
+      <div id="club-empty" class="club-empty" style="display:none">
+        <strong>Aucune saison définie.</strong>
+        Créez une première saison, puis ajoutez vos catégories et vos équipes. Si vos équipes existent déjà dans le module RH, lancez d'abord l'outil de reprise <code>tools/mfc_seed_club.php</code> pour les importer sans les ressaisir.
+      </div>
+
+      <div id="club-body" style="display:none">
+        <div class="club-grid">
+          <!-- Catégories -->
+          <div class="club-panel">
+            <div class="club-panel-head">
+              <div>
+                <div class="club-panel-title">Catégories</div>
+                <div class="club-panel-sub">Liste commune à toutes les saisons.</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="addClubCat()">+ Ajouter</button>
+            </div>
+            <div id="club-cats"></div>
+            <div class="club-panel-foot">
+              <button class="btn btn-primary" onclick="saveClubCats()">Enregistrer les catégories</button>
+            </div>
+          </div>
+
+          <!-- Équipes -->
+          <div class="club-panel">
+            <div class="club-panel-head">
+              <div>
+                <div class="club-panel-title">Équipes <span id="club-season-tag" class="club-tag"></span></div>
+                <div class="club-panel-sub">Nom, catégorie et entraîneur de la saison affichée. Une équipe désactivée disparaît des modules sans perdre son historique.</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="addClubTeam()">+ Ajouter</button>
+            </div>
+            <div class="s-table-wrap">
+              <table class="s-table club-teams">
+                <thead><tr><th style="width:34px"></th><th>Équipe</th><th style="width:150px">Catégorie</th><th style="width:180px">Entraîneur</th><th style="width:70px">Active</th><th style="width:40px"></th></tr></thead>
+                <tbody id="club-teams-tbody"></tbody>
+              </table>
+            </div>
+            <div class="club-panel-foot">
+              <button class="btn btn-primary" onclick="saveClubTeams()">Enregistrer les équipes</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -758,6 +853,36 @@ $role_info  = $roles_data[$session['role']] ?? ['label' => $session['role'], 'co
   </div>
 </div>
 
+<!-- ── Modale saison (référentiel club) ── -->
+<div class="modal-overlay" id="modal-club-season">
+  <div class="modal">
+    <h3 id="club-season-title">Nouvelle saison</h3>
+    <div class="modal-error" id="club-season-error"></div>
+    <div class="m-field">
+      <label>Nom de la saison</label>
+      <input type="text" id="club-season-label" placeholder="2026-2027">
+    </div>
+    <div class="m-field">
+      <label>Début</label>
+      <input type="date" id="club-season-start">
+    </div>
+    <div class="m-field">
+      <label>Fin</label>
+      <input type="date" id="club-season-end">
+    </div>
+    <div class="m-field" id="club-season-copy-field">
+      <label>Reprendre les équipes de</label>
+      <select id="club-season-copy"></select>
+      <small>Les équipes gardent leur identité : renommer une équipe dans la nouvelle saison ne touche pas aux saisons précédentes ni à l'historique des modules.</small>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="club-season-delete" onclick="deleteClubSeason()" style="margin-right:auto">Supprimer</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-club-season')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveClubSeason()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ── -->
 <div class="toast" id="toast"></div>
 
@@ -770,7 +895,7 @@ function showPage(id) {
   document.querySelectorAll('.s-nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + id)?.classList.add('active');
   document.querySelector(`[data-page="${id}"]`)?.classList.add('active');
-  const loaders = { users:'loadUsers', roles:'loadRoles', apps:'loadApps', logs:'loadLogs', sessions:'loadSessions', general:'loadGeneral' };
+  const loaders = { users:'loadUsers', roles:'loadRoles', apps:'loadApps', club:'loadClub', logs:'loadLogs', sessions:'loadSessions', general:'loadGeneral' };
   if (loaders[id]) window[loaders[id]]?.();
 }
 
@@ -793,7 +918,16 @@ document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('cli
 
 // ── API helper ───────────────────────────────────────────────────────────────
 async function api(action, data={}, method='GET') {
-  const url = '/api.php?action=' + action;
+  let url = '/api.php?action=' + action;
+  /* En GET, les données passent en paramètres d'URL. Sans ça un appel du type
+     api('club_structure', {season_id}) perdait silencieusement son filtre et
+     renvoyait toujours la saison courante. */
+  if (method === 'GET') {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined && v !== null && v !== ''))
+    ).toString();
+    if (qs) url += '&' + qs;
+  }
   const opts = method === 'GET'
     ? { method: 'GET' }
     : { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action, ...data}) };
@@ -965,7 +1099,13 @@ async function loadRoles() {
   tbody.innerHTML = Object.entries(rr.roles).map(([key, role]) => `
     <tr data-role="${key}">
       <td>${roleBadge(key)}</td>
-      ${_apps.map(a => `<td><label class="switch"><input type="checkbox" data-app="${a.slug}" ${role.apps.includes(a.slug)?'checked':''}${key==='admin'?'disabled':''}><span class="switch-slider"></span></label></td>`).join('')}
+      ${_apps.map(a => {
+        /* Le rôle système a toutes les applications, y compris celles ajoutées
+           après sa création : ses interrupteurs sont donc affichés cochés, et
+           non d'après sa liste enregistrée qui, elle, n'est plus consultée. */
+        const on = key === 'admin' ? true : role.apps.includes(a.slug);
+        return `<td><label class="switch"><input type="checkbox" data-app="${a.slug}" ${on?'checked':''}${key==='admin'?'disabled':''}><span class="switch-slider"></span></label></td>`;
+      }).join('')}
       <td style="text-align:right;white-space:nowrap">
         ${key !== 'admin'
           ? `<button class="btn btn-ghost btn-sm" onclick="openPerms('${key}')" style="margin-right:6px">${permsLabel(role)}</button><button class="btn btn-ghost btn-sm" onclick='openEditRole(${JSON.stringify({key,label:role.label,color:role.color,color_bg:role.color_bg})})' style="margin-right:6px">Modifier</button><button class="btn btn-danger btn-sm" onclick="deleteRole('${key}','${esc(role.label)}')">Supprimer</button>`
@@ -1177,6 +1317,186 @@ async function saveGeneral() {
 // ── Escape ───────────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── RÉFÉRENTIEL CLUB (Catégories & Équipes) ─────────────────────────────────
+/*
+ * L'édition se fait entièrement en mémoire (_club.cats / _club.teams) puis part
+ * en un seul enregistrement. Raison : le tri, l'ajout et la suppression de
+ * lignes se répercutent les uns sur les autres ; enregistrer champ par champ
+ * multiplierait les états intermédiaires incohérents côté serveur.
+ *
+ * `ref_id` est l'identité stable d'une équipe. Une ligne ajoutée ici n'en a pas
+ * encore : le serveur lui en attribue une, et c'est ce même identifiant que RH
+ * et Arbitrage utiliseront pour rattacher leurs propres données.
+ */
+let _club = { seasonId: null, seasons: [], cats: [], teams: [] };
+
+async function loadClub(seasonId) {
+  const r = await api('club_structure', { season_id: seasonId || '' });
+  if (!r.ok) { toast(r.error || 'Chargement impossible', 'error'); return; }
+
+  _club.seasons  = r.seasons || [];
+  _club.seasonId = r.season_id;
+  _club.cats     = (r.categories || []).map(c => ({ ...c }));
+  _club.teams    = (r.teams || []).map(t => ({
+    ref_id: t.ref_id, name: t.name, category_id: t.category_ref_id,
+    coach_name: t.coach_name, active: t.active,
+  }));
+
+  const sel = document.getElementById('club-season');
+  sel.innerHTML = _club.seasons.map(s =>
+    `<option value="${esc(s.id)}"${s.id === _club.seasonId ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+
+  const hasSeason = _club.seasons.length > 0;
+  document.getElementById('club-empty').style.display = hasSeason ? 'none' : 'block';
+  document.getElementById('club-body').style.display  = hasSeason ? 'block' : 'none';
+  sel.style.display = hasSeason ? '' : 'none';
+
+  const season = _club.seasons.find(s => s.id === _club.seasonId);
+  document.getElementById('club-season-tag').textContent = season ? season.label : '';
+
+  renderClubCats();
+  renderClubTeams();
+}
+
+function renderClubCats() {
+  const box = document.getElementById('club-cats');
+  if (!_club.cats.length) { box.innerHTML = '<div class="club-none">Aucune catégorie.</div>'; return; }
+  box.innerHTML = _club.cats.map((c, i) => `
+    <div class="club-cat-row">
+      <div class="club-move">
+        <button onclick="moveClubCat(${i},-1)" title="Monter">&#9650;</button>
+        <button onclick="moveClubCat(${i},1)" title="Descendre">&#9660;</button>
+      </div>
+      <input class="club-inp" value="${esc(c.name)}" oninput="_club.cats[${i}].name=this.value" placeholder="Nom de la catégorie">
+      <button class="club-x" onclick="removeClubCat(${i})" title="Supprimer">&times;</button>
+    </div>`).join('');
+}
+
+function renderClubTeams() {
+  const tb = document.getElementById('club-teams-tbody');
+  if (!_club.teams.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="club-none">Aucune équipe pour cette saison.</td></tr>';
+    return;
+  }
+  const opts = sel => '<option value="">— sans catégorie —</option>' + _club.cats
+    .map(c => `<option value="${esc(c.id)}"${c.id === sel ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+
+  tb.innerHTML = _club.teams.map((t, i) => `
+    <tr>
+      <td><div class="club-move">
+        <button onclick="moveClubTeam(${i},-1)" title="Monter">&#9650;</button>
+        <button onclick="moveClubTeam(${i},1)" title="Descendre">&#9660;</button>
+      </div></td>
+      <td><input class="club-inp" value="${esc(t.name)}" oninput="_club.teams[${i}].name=this.value" placeholder="Nom de l'équipe"></td>
+      <td><select class="club-inp" onchange="_club.teams[${i}].category_id=this.value">${opts(t.category_id)}</select></td>
+      <td><input class="club-inp" value="${esc(t.coach_name)}" oninput="_club.teams[${i}].coach_name=this.value" placeholder="—"></td>
+      <td><label class="switch"><input type="checkbox"${t.active ? ' checked' : ''} onchange="_club.teams[${i}].active=this.checked"><span class="switch-slider"></span></label></td>
+      <td><button class="club-x" onclick="removeClubTeam(${i})" title="Retirer de cette saison">&times;</button></td>
+    </tr>`).join('');
+}
+
+function addClubCat()  { _club.cats.push({ id: '', name: '', sort_order: _club.cats.length, active: true }); renderClubCats(); }
+function addClubTeam() { _club.teams.push({ ref_id: '', name: '', category_id: '', coach_name: '', active: true }); renderClubTeams(); }
+
+function removeClubCat(i)  { _club.cats.splice(i, 1); renderClubCats(); }
+
+/* Retirer une équipe la sort de CETTE saison uniquement : son identité et ses
+   saisons passées restent intactes, tout comme les matchs et les affectations
+   que les modules lui ont rattachés. */
+function removeClubTeam(i) {
+  const t = _club.teams[i];
+  if (t.ref_id && !confirm(`Retirer « ${t.name} » de cette saison ?\n\nSon historique et les données des modules (matchs, affectations) sont conservés. Pour la masquer sans la retirer, décochez plutôt « Active ».`)) return;
+  _club.teams.splice(i, 1);
+  renderClubTeams();
+}
+
+function moveClubCat(i, d)  { const j = i + d; if (j < 0 || j >= _club.cats.length) return;  [_club.cats[i], _club.cats[j]]   = [_club.cats[j], _club.cats[i]];   renderClubCats(); }
+function moveClubTeam(i, d) { const j = i + d; if (j < 0 || j >= _club.teams.length) return; [_club.teams[i], _club.teams[j]] = [_club.teams[j], _club.teams[i]]; renderClubTeams(); }
+
+async function saveClubCats() {
+  const rows = _club.cats
+    .map((c, i) => ({ id: c.id, name: (c.name || '').trim(), sort_order: i, active: c.active !== false }))
+    .filter(c => c.name !== '');
+  const r = await api('club_save_categories', { categories: rows }, 'POST');
+  if (!r.ok) { toast(r.error, 'error'); return; }
+  toast(r.message);
+  await loadClub(_club.seasonId);
+}
+
+async function saveClubTeams() {
+  const rows = _club.teams
+    .map((t, i) => ({
+      ref_id: t.ref_id, name: (t.name || '').trim(), category_id: t.category_id || '',
+      coach_name: (t.coach_name || '').trim(), sort_order: i, active: t.active !== false,
+    }))
+    .filter(t => t.name !== '');
+  const r = await api('club_save_teams', { season_id: _club.seasonId, teams: rows }, 'POST');
+  if (!r.ok) { toast(r.error, 'error'); return; }
+  toast(r.message);
+  await loadClub(_club.seasonId);
+}
+
+// ── Saisons du référentiel ───────────────────────────────────────────────────
+let _clubSeasonEditing = null;
+
+function openClubSeason(isNew) {
+  const season = isNew ? null : _club.seasons.find(s => s.id === _club.seasonId);
+  if (!isNew && !season) { toast('Aucune saison à modifier', 'error'); return; }
+  _clubSeasonEditing = season ? season.id : null;
+
+  document.getElementById('club-season-title').textContent = season ? 'Modifier la saison' : 'Nouvelle saison';
+  document.getElementById('club-season-error').style.display = 'none';
+  document.getElementById('club-season-delete').style.display = season ? '' : 'none';
+  document.getElementById('club-season-copy-field').style.display = season ? 'none' : '';
+
+  if (season) {
+    document.getElementById('club-season-label').value = season.label;
+    document.getElementById('club-season-start').value = season.start_date;
+    document.getElementById('club-season-end').value   = season.end_date;
+  } else {
+    /* Saison sportive suisse : 1er juillet au 30 juin. Proposée par défaut,
+       modifiable. Avant juillet, la saison qui démarre est celle de l'été à venir. */
+    const now = new Date();
+    const y = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+    document.getElementById('club-season-label').value = `${y + 1}-${y + 2}`;
+    document.getElementById('club-season-start').value = `${y + 1}-07-01`;
+    document.getElementById('club-season-end').value   = `${y + 2}-06-30`;
+    document.getElementById('club-season-copy').innerHTML =
+      '<option value="">— partir d\'une liste vide —</option>' +
+      _club.seasons.map((s, i) => `<option value="${esc(s.id)}"${i === 0 ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+  }
+  openModal('modal-club-season');
+}
+
+async function saveClubSeason() {
+  const err = document.getElementById('club-season-error');
+  const payload = {
+    id:         _clubSeasonEditing || '',
+    label:      document.getElementById('club-season-label').value.trim(),
+    start_date: document.getElementById('club-season-start').value,
+    end_date:   document.getElementById('club-season-end').value,
+    copy_from:  _clubSeasonEditing ? '' : document.getElementById('club-season-copy').value,
+  };
+  const r = await api('club_save_season', payload, 'POST');
+  if (!r.ok) { err.textContent = r.error; err.style.display = 'block'; return; }
+  closeModal('modal-club-season');
+  toast(r.message);
+  await loadClub(r.season_id);
+}
+
+async function deleteClubSeason() {
+  if (!_clubSeasonEditing) return;
+  let r = await api('club_delete_season', { id: _clubSeasonEditing }, 'POST');
+  if (!r.ok && r.needs_force) {
+    if (!confirm(r.error + '\n\nSupprimer quand même cette saison ?')) return;
+    r = await api('club_delete_season', { id: _clubSeasonEditing, force: 1 }, 'POST');
+  }
+  if (!r.ok) { toast(r.error, 'error'); return; }
+  closeModal('modal-club-season');
+  toast(r.message);
+  await loadClub(null);
 }
 
 // ── Auto-load first page ─────────────────────────────────────────────────────

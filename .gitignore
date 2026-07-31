@@ -16,6 +16,13 @@
 erp.meyrinfc.ch/data/users.json
 erp.meyrinfc.ch/data/logs.json
 erp.meyrinfc.ch/data/revocations.json
+# Référentiel club (catégories, équipes, entraîneurs par saison) : édité depuis
+# l'ERP, il porte les identifiants d'équipe auxquels RH et Arbitrage rattachent
+# leurs affectations et leurs matchs. Le redéployer détacherait ces données.
+erp.meyrinfc.ch/data/club_structure.json
+# Référentiel des contacts : données personnelles, dont celles de mineurs, et
+# état vivant du serveur. Ne doit jamais entrer dans le dépôt ni être redéployé.
+erp.meyrinfc.ch/data/contacts.sqlite*
 
 # Dossiers de sauvegarde locaux
 _Backup/
@@ -28,4 +35,9 @@ mfc_check.php
 # Fiches de paie et documents personnels — donnees financieres nominatives,
 # ne doivent jamais quitter le serveur ni entrer dans l'historique du depot
 erp.meyrinfc.ch/rh/data/
+
+# Fichiers d'import de contacts : le modele vide est versionne, jamais les
+# fichiers remplis (donnees personnelles, dont celles de mineurs)
+imports/*
+!imports/modele-import-contacts.xlsx
 erp.meyrinfc.ch/data/general.json

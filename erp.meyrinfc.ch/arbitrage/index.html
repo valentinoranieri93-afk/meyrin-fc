@@ -498,6 +498,11 @@ th.chk-col,td.chk-col{width:40px}
             </button>
           </div>
           <div class="panel-body" style="padding:14px 18px;min-height:52px">
+            <div class="club-managed-note" style="display:none;font-size:12px;color:var(--gris);margin-bottom:10px">
+              Équipes, catégories et entraîneurs sont définis dans l'ERP (Paramètres &gt; Catégories &amp; Équipes) et partagés avec le module RH.
+              Ici se règle l'indemnité d'arbitrage par match.
+              <a href="https://erp.meyrinfc.ch/?tab=settings" target="_blank" style="color:var(--noir);text-decoration:underline">Ouvrir l'ERP</a>
+            </div>
             <div id="categories-list"><span style="color:var(--gris);font-size:13px">Chargement…</span></div>
           </div>
         </div>
@@ -576,7 +581,7 @@ th.chk-col,td.chk-col{width:40px}
       <!-- ===== IMPORT ===== -->
       <div id="v-import" class="view">
         <div class="import-steps" id="import-steps">
-          <div class="import-step active" id="istep-1"><span class="step-num">1</span>Uploader le CSV</div>
+          <div class="import-step active" id="istep-1"><span class="step-num">1</span>Choisir l'équipe et le fichier</div>
           <div class="import-step" id="istep-2"><span class="step-num">2</span>Configurer le mapping</div>
           <div class="import-step" id="istep-3"><span class="step-num">3</span>Confirmer l'import</div>
         </div>
@@ -584,22 +589,31 @@ th.chk-col,td.chk-col{width:40px}
         <!-- Step 1 -->
         <div id="import-step-1">
           <div class="panel">
-            <div class="panel-head"><div class="panel-title">Informations de la saison</div></div>
+            <div class="panel-head"><div class="panel-title">Équipe concernée</div></div>
             <div class="panel-body">
+              <!-- L'equipe est choisie ici, pas devinee dans le fichier : c'est
+                   ce qui empeche la creation d'equipes parasites a chaque
+                   orthographe rencontree dans le calendrier de la faitiere. -->
               <div class="grid-2" style="margin-bottom:0">
                 <div class="form-field" style="margin-bottom:0">
-                  <label class="form-label">Nom de la saison</label>
-                  <input type="text" id="season-label" class="form-input" placeholder="ex : 2025-2026" value="">
+                  <label class="form-label">Équipe dont vous importez le calendrier <span style="color:var(--rouge)">*</span></label>
+                  <select id="import-team" class="form-input"></select>
+                  <div style="font-size:11.5px;color:var(--gris);margin-top:6px">
+                    Tous les matchs du fichier seront attribués à cette équipe. La liste vient de l'ERP, pour la saison sélectionnée.
+                  </div>
                 </div>
                 <div class="form-field" style="margin-bottom:0">
-                  <label class="form-label">Mot-clé du club dans le CSV</label>
+                  <label class="form-label">Mot-clé du club dans le fichier</label>
                   <input type="text" id="club-keyword" class="form-input" placeholder="Meyrin" value="Meyrin">
+                  <div style="font-size:11.5px;color:var(--gris);margin-top:6px">
+                    Sert uniquement à savoir si le match est à domicile ou à l'extérieur, et quel nom est celui de l'adversaire.
+                  </div>
                 </div>
               </div>
             </div>
           </div>
           <div class="panel" style="margin-top:16px">
-            <div class="panel-head"><div class="panel-title">Fichier CSV</div></div>
+            <div class="panel-head"><div class="panel-title">Fichier du calendrier</div></div>
             <div class="panel-body">
               <div class="drop-zone" id="drop-zone">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -652,18 +666,27 @@ th.chk-col,td.chk-col{width:40px}
           <div class="panel">
             <div class="panel-head"><div class="panel-title">Résumé de l'import</div></div>
             <div class="panel-body">
+              <div id="sum-team" style="font-size:13px;color:var(--gris);margin-bottom:12px"></div>
               <div class="import-summary">
                 <div class="import-stat">
-                  <span>Matchs détectés</span><span class="import-stat-val" id="sum-matches">–</span>
+                  <span>Nouveaux matchs à ajouter</span><span class="import-stat-val" id="sum-matches">–</span>
                 </div>
                 <div class="import-stat">
-                  <span>Lignes ignorées</span><span class="import-stat-val" id="sum-errors">–</span>
+                  <span>Matchs mis à jour</span><span class="import-stat-val" id="sum-updated">–</span>
+                </div>
+                <div class="import-stat">
+                  <span>Inchangés</span><span class="import-stat-val" id="sum-already">–</span>
+                </div>
+                <div class="import-stat">
+                  <span>Lignes en erreur</span><span class="import-stat-val" id="sum-errors">–</span>
                 </div>
               </div>
+              <div id="preview-updates" class="hidden"></div>
+              <div id="preview-warnings" class="hidden"></div>
               <div id="preview-errors" class="hidden"></div>
               <div class="preview-table-wrap" style="margin-top:16px">
                 <table class="preview-table" id="confirm-table">
-                  <thead><tr><th>Date</th><th>Équipe</th><th>Catégorie</th><th>Adversaire</th><th>D/E</th><th>Compétition</th></tr></thead>
+                  <thead><tr><th>Date</th><th>Heure</th><th>N°</th><th>Adversaire</th><th>D/E</th><th>Compétition</th><th>Lieu</th></tr></thead>
                   <tbody id="confirm-tbody"></tbody>
                 </table>
               </div>
@@ -1000,6 +1023,12 @@ const MFC = window.MFC || {};
 
 /* L'ecran de connexion et celui d'installation ont ete retires : arriver ici
    signifie que la session ERP est deja validee par index.php. */
+/* Le référentiel club de l'ERP porte le nom, la catégorie, l'entraîneur et la
+   composition des équipes, saison par saison. Arbitrage garde ce qui lui est
+   propre : l'indemnité d'arbitrage, les matchs et leurs paiements. */
+const CLUB_MANAGED = !!(window.MFC && MFC.clubManaged);
+const ERP_LINK     = (window.MFC && MFC.erpUrl) || 'https://erp.meyrinfc.ch';
+
 async function initAuth() {
   S.user = { name: MFC.name || '', role: MFC.roleLabel || '' };
   enterApp();
@@ -1025,9 +1054,8 @@ async function enterApp() {
   const rl = document.getElementById('sb-role');   if (rl) rl.textContent = MFC.roleLabel || '';
   applyRoleUI();
 
-  // Set default season label
-  const y = new Date().getFullYear();
-  document.getElementById('season-label').value = `${y}-${y+1}`;
+  /* Le champ "nom de la saison" a disparu de l'import : la saison découle
+     désormais de l'équipe choisie, elle-même définie dans l'ERP. */
 
   await Promise.all([loadTeams(), loadCategories(), loadStats()]);
   loadMatchFilters();
@@ -1068,7 +1096,7 @@ function showView(v) {
   if (v === 'matches')    loadMatches();
   if (v === 'coaches')    { const s = document.getElementById('coach-search'); if (s) s.value = ''; renderCoaches(); }
   if (v === 'teams')      { loadCategories(); renderTeams(); }
-  if (v === 'import')     resetImport();
+  if (v === 'import')     { resetImport(); renderImportTeams(); }
   if (v === 'seasons')    loadSeasons();
   if (v === 'users')      loadUsers();
 }
@@ -1088,10 +1116,14 @@ function buildSeasonSelector(seasons) {
     if (String(s.id) === String(S.seasonId)) opt.selected = true;
     sel.appendChild(opt);
   });
-  // Auto-select most recent
+  /* Sélection par défaut : la saison en cours si le référentiel la désigne
+     (is_current), sinon la plus récente. Sans ça, une saison préparée à
+     l'avance dans l'ERP devient la plus récente et l'application s'ouvre
+     dessus, sur des écrans vides. */
   if (!cur && seasons.length > 0) {
-    S.seasonId = seasons[0].id;
-    sel.value = seasons[0].id;
+    const def = seasons.find(s => s.is_current) || seasons[0];
+    S.seasonId = def.id;
+    sel.value = def.id;
   }
 }
 
@@ -1102,6 +1134,8 @@ document.getElementById('season-selector').addEventListener('change', async func
   if (S.currentView === 'matches')   { S.matchesPage = 1; loadMatches(); }
   if (S.currentView === 'coaches')   renderCoaches();
   if (S.currentView === 'teams')     renderTeams();
+  /* La liste des équipes proposées à l'import dépend de la saison choisie. */
+  if (S.currentView === 'import')    renderImportTeams();
 });
 
 /* ===============================================================
@@ -1942,7 +1976,9 @@ function renderTeams() {
     container.innerHTML = `<div class="empty">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       <div class="empty-title">Aucune équipe</div>
-      <div class="empty-sub">Importez un CSV pour détecter automatiquement les équipes</div>
+      <div class="empty-sub">${CLUB_MANAGED
+        ? 'Ajoutez vos équipes dans l\'ERP (Paramètres &gt; Catégories &amp; Équipes) pour cette saison.'
+        : 'Importez un CSV pour détecter automatiquement les équipes'}</div>
     </div>`;
     // Count unconfigured
     document.getElementById('teams-info').textContent = '';
@@ -1972,8 +2008,24 @@ function renderTeams() {
   container.innerHTML = sorted.map(cat => {
     const rows = catMap[cat].map(t => {
       const warn = (!t.coach_name || t.fee_amount <= 0);
+      const flag = warn ? '<span class="badge b-warn" style="font-size:10px;padding:2px 6px">!</span>'
+                        : '<span style="color:var(--vert);font-size:16px">✓</span>';
+      /* Sous référentiel, seule l'indemnité d'arbitrage reste modifiable ici :
+         nom, catégorie, entraîneur et statut viennent de l'ERP. */
+      if (CLUB_MANAGED) {
+        return `<div class="team-row" data-team-id="${t.id}">
+          <div>${flag}</div>
+          <span style="font-weight:600">${esc(t.name)}</span>
+          <span style="color:var(--gris)">${esc(t.category || '–')}</span>
+          <span style="color:var(--gris)">${esc(t.coach_name || '–')}</span>
+          <input class="inline-inp team-fee" type="number" step="0.5" min="0" data-id="${t.id}" data-field="fee_amount" value="${t.fee_amount || ''}" placeholder="Frais CHF">
+          <span>${t.active == 1 ? '<span class="badge b-ok" style="font-size:10px">Active</span>' : '<span class="badge" style="font-size:10px;background:var(--ligne-2);color:var(--gris)">Inactive</span>'}</span>
+          <button class="btn btn-ghost btn-sm" onclick="saveTeam(${t.id})" title="Enregistrer l'indemnité">✓</button>
+          <span></span>
+        </div>`;
+      }
       return `<div class="team-row" data-team-id="${t.id}">
-        <div>${warn ? '<span class="badge b-warn" style="font-size:10px;padding:2px 6px">!</span>' : '<span style="color:var(--vert);font-size:16px">✓</span>'}</div>
+        <div>${flag}</div>
         <input class="inline-inp team-name" data-id="${t.id}" data-field="name" value="${esc(t.name)}" placeholder="Nom de l'équipe">
         <select class="inline-inp team-cat" data-id="${t.id}" data-field="category">
           <option value="">– Catégorie –</option>
@@ -2027,14 +2079,18 @@ async function saveTeam(id) {
   const team = S.teams.find(t => t.id === id);
   if (!team) return;
   const el = (f) => document.querySelector(`[data-id="${id}"][data-field="${f}"]`);
-  const payload = {
-    id,
-    name:       el('name')?.value || team.name,
-    category:   el('category')?.value || team.category,
-    coach_name: el('coach_name')?.value ?? team.coach_name,
-    fee_amount: parseFloat(el('fee_amount')?.value || 0),
-    active:     parseInt(el('active')?.value ?? 1),
-  };
+  /* Sous référentiel, n'envoyer que l'indemnité : transmettre name ou category
+     ferait refuser l'appel côté serveur, à juste titre. */
+  const payload = CLUB_MANAGED
+    ? { id, fee_amount: parseFloat(el('fee_amount')?.value || 0) }
+    : {
+        id,
+        name:       el('name')?.value || team.name,
+        category:   el('category')?.value || team.category,
+        coach_name: el('coach_name')?.value ?? team.coach_name,
+        fee_amount: parseFloat(el('fee_amount')?.value || 0),
+        active:     parseInt(el('active')?.value ?? 1),
+      };
   try {
     await api('teams', 'PUT', payload);
     // Update local
@@ -2095,6 +2151,9 @@ function resetImport() {
   document.getElementById('drop-zone').style.display = '';
   document.getElementById('btn-upload-csv').disabled = true;
   document.getElementById('csv-file-input').value = '';
+  /* Sinon un import précédent sans nouveau match laisserait le bouton de
+     confirmation grisé pour l'import suivant. */
+  document.getElementById('btn-do-import').disabled = false;
 }
 
 function setImportStep(n) {
@@ -2157,18 +2216,42 @@ async function readFileForUpload(file) {
   });
 }
 
+/* Liste des équipes proposées à l'import : celles de la saison sélectionnée,
+   telles que définies dans l'ERP. Rafraîchie à chaque affichage de l'écran pour
+   refléter une modification faite entre-temps dans l'ERP. */
+function renderImportTeams() {
+  const sel = document.getElementById('import-team');
+  if (!sel) return;
+  const prev  = sel.value;
+  const teams = (S.teams || []).filter(t => t.active != 0);
+  if (!teams.length) {
+    sel.innerHTML = '<option value="">Aucune équipe pour cette saison</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  sel.innerHTML = teams.map(t =>
+    `<option value="${t.id}">${esc(t.name)}${t.category ? ' — ' + esc(t.category) : ''}</option>`).join('');
+  if (prev && teams.some(t => String(t.id) === prev)) sel.value = prev;
+}
+
+/** Champs communs à chaque étape de l'import : équipe choisie + fichier. */
+async function importFormData() {
+  const fd = new FormData();
+  fd.append('csv', await readFileForUpload(S.importFile));
+  fd.append('team_id', document.getElementById('import-team').value || '');
+  fd.append('club_keyword', document.getElementById('club-keyword').value || 'Meyrin');
+  return fd;
+}
+
 document.getElementById('btn-upload-csv').addEventListener('click', async () => {
   if (!S.importFile) return;
+  if (!document.getElementById('import-team').value) { toast('Choisissez d\'abord l\'équipe concernée', 'err'); return; }
   const btn = document.getElementById('btn-upload-csv');
   btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Analyse...';
   try {
-    const seasonLabel = document.getElementById('season-label').value || '';
-    const clubKeyword = document.getElementById('club-keyword').value || 'Meyrin';
-    const fd = new FormData();
-    fd.append('csv', await readFileForUpload(S.importFile));
-    fd.append('season_label', seasonLabel);
-    fd.append('club_keyword', clubKeyword);
-    const res = await apiFormPost('import_csv', fd);
+    const fd = await importFormData();
+    const res = await apiFormPost('import_team_csv', fd);
     S.importHeaders = res.headers || [];
     S.importRows    = res.rows    || [];
     renderPreviewTable();
@@ -2201,7 +2284,8 @@ const MAPPING_FIELDS = [
   { key: 'match_number',label: 'Numéro de match' },
   { key: 'home_team',   label: 'Équipe domicile', required: true },
   { key: 'away_team',   label: 'Équipe extérieur' },
-  { key: 'category',    label: 'Catégorie' },
+  /* Plus de champ "Catégorie" : elle vient de l'ERP via l'équipe choisie, la
+     lire dans le fichier ne pourrait que la contredire. */
   { key: 'competition', label: 'Compétition' },
   { key: 'venue',       label: 'Lieu' },
 ];
@@ -2224,7 +2308,6 @@ function renderMappingGrid() {
   tryMap('match_number', ['numéro','numero','num','matchno','no.match']);
   tryMap('home_team',    ['domicile','home','équipe a','equipe a','club a']);
   tryMap('away_team',    ['extérieur','away','visiteur','équipe b','equipe b','club b']);
-  tryMap('category',     ['catégorie','categorie','cat','groupe']);
   tryMap('competition',  ['compétition','competition','tournoi','phase']);
   tryMap('venue',        ['lieu','terrain','stade','venue']);
 
@@ -2259,35 +2342,61 @@ document.getElementById('btn-confirm-mapping').addEventListener('click', async (
   const btn = document.getElementById('btn-confirm-mapping');
   btn.disabled = true;
   try {
-    const fd = new FormData();
-    fd.append('csv', await readFileForUpload(S.importFile));
-    fd.append('season_label', document.getElementById('season-label').value);
-    fd.append('club_keyword', document.getElementById('club-keyword').value || 'Meyrin');
+    const fd = await importFormData();
     fd.append('mapping', JSON.stringify(S.importMapping));
-    const res = await apiFormPost('import_csv', fd);
+    const res = await apiFormPost('import_team_csv', fd);
     S.importParsed = res;
-    // Render step 3
-    document.getElementById('sum-matches').textContent = res.parsed_count || 0;
-    document.getElementById('sum-errors').textContent  = res.error_count  || 0;
+
+    document.getElementById('sum-team').innerHTML =
+      `Équipe : <strong>${esc(res.team.name)}</strong> · saison ${esc(res.team.season || '—')}`;
+    document.getElementById('sum-matches').textContent = res.new_count     || 0;
+    document.getElementById('sum-updated').textContent = res.updated_count || 0;
+    document.getElementById('sum-already').textContent = res.unchanged     || 0;
+    document.getElementById('sum-errors').textContent  = res.error_count   || 0;
+
+    /* Détail des mises à jour : un match reprogrammé se voit avant/après, et
+       les matchs déjà payés sont signalés — leur paiement est conservé, mais
+       autant que ce soit visible plutôt que supposé. */
+    const updEl = document.getElementById('preview-updates');
+    if (res.update_sample && res.update_sample.length) {
+      updEl.classList.remove('hidden');
+      updEl.innerHTML = `<div class="err-list" style="background:var(--bleu-bg,#EAF0FB);color:#1E3E7B">
+        <p style="font-weight:600">Matchs déjà enregistrés dont les informations changent :</p>
+        ${res.update_sample.map(u => `<p>${esc(u.label)}${u.paid ? ' <strong>(payé, paiement conservé)</strong>' : ''} — ${esc(u.changes.join(' · '))}</p>`).join('')}
+        ${res.updated_count > res.update_sample.length ? `<p>… et ${res.updated_count - res.update_sample.length} autre(s).</p>` : ''}
+      </div>`;
+    } else updEl.classList.add('hidden');
+
+    /* Les avertissements (fichier posé sur la mauvaise équipe, notamment) sont
+       affichés séparément des erreurs : ils n'empêchent pas l'import mais
+       méritent un regard avant de confirmer. */
+    const warnEl = document.getElementById('preview-warnings');
+    if (res.warnings && res.warnings.length) {
+      warnEl.classList.remove('hidden');
+      warnEl.innerHTML = `<div class="err-list" style="background:var(--jaune-bg,#FDF6E3);color:#7A6000">${res.warnings.map(w => `<p>${esc(w)}</p>`).join('')}</div>`;
+    } else warnEl.classList.add('hidden');
 
     const errEl = document.getElementById('preview-errors');
-    if (res.errors && res.errors.length > 0) {
+    if (res.errors && res.errors.length) {
       errEl.classList.remove('hidden');
       errEl.innerHTML = `<div class="err-list">${res.errors.map(e => `<p>${esc(e)}</p>`).join('')}</div>`;
-    } else {
-      errEl.classList.add('hidden');
-    }
+    } else errEl.classList.add('hidden');
 
     const tbody = document.getElementById('confirm-tbody');
-    tbody.innerHTML = (res.sample || []).map(m => `<tr>
-      <td>${fmtDate(m.match_date)}</td>
-      <td>${esc(m.team_name)}</td>
-      <td>${m.category ? `<span class="badge b-info" style="font-size:10px">${esc(m.category)}</span>` : '<span style="color:var(--gris-2);font-size:11px">–</span>'}</td>
-      <td>${esc(m.opponent)}</td>
-      <td>${m.is_home ? '<span class="badge b-home" style="font-size:10px">Dom.</span>' : '<span class="badge" style="font-size:10px;background:var(--ligne-2);color:var(--gris)">Ext.</span>'}</td>
-      <td>${esc(m.competition || '–')}</td>
-    </tr>`).join('');
+    tbody.innerHTML = (res.sample || []).length
+      ? res.sample.map(m => `<tr>
+          <td>${fmtDate(m.match_date)}</td>
+          <td>${esc(m.match_time || '–')}</td>
+          <td>${esc(m.match_number || '–')}</td>
+          <td>${esc(m.opponent)}</td>
+          <td>${m.is_home ? '<span class="badge b-home" style="font-size:10px">Dom.</span>' : '<span class="badge" style="font-size:10px;background:var(--ligne-2);color:var(--gris)">Ext.</span>'}</td>
+          <td>${esc(m.competition || '–')}</td>
+          <td>${esc(m.venue || '–')}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="7" style="text-align:center;color:var(--gris);padding:18px">Aucun nouveau match à ajouter.</td></tr>`;
 
+    /* Il y a quelque chose à faire s'il reste un ajout OU une mise à jour. */
+    document.getElementById('btn-do-import').disabled = !((res.new_count > 0) || (res.updated_count > 0));
     setImportStep(3);
   } catch(e) { toast(e.message, 'err'); }
   btn.disabled = false;
@@ -2298,23 +2407,17 @@ document.getElementById('btn-do-import').addEventListener('click', async () => {
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Import en cours...';
   try {
-    const fd = new FormData();
-    fd.append('csv', await readFileForUpload(S.importFile));
-    fd.append('season_label', document.getElementById('season-label').value);
-    fd.append('club_keyword', document.getElementById('club-keyword').value || 'Meyrin');
+    const fd = await importFormData();
     fd.append('mapping', JSON.stringify(S.importMapping));
-    const res = await apiFormPost('import_csv&confirm=1', fd);
-    toast(`${res.imported} matchs importés · ${res.new_teams} équipe${res.new_teams>1?'s':''} créée${res.new_teams>1?'s':''}`);
+    const res = await apiFormPost('import_team_csv&confirm=1', fd);
+    const parts = [];
+    if (res.imported) parts.push(`${res.imported} ajouté${res.imported > 1 ? 's' : ''}`);
+    if (res.updated)  parts.push(`${res.updated} mis à jour`);
+    if (res.unchanged) parts.push(`${res.unchanged} inchangé${res.unchanged > 1 ? 's' : ''}`);
+    toast(`« ${res.team.name} » : ${parts.length ? parts.join(' · ') : 'rien à faire'}`);
     S.seasonId = res.season_id;
     await Promise.all([loadTeams(), loadStats()]);
-    if (res.needs_config) {
-      setTimeout(() => {
-        toast('Pensez à configurer les entraîneurs et frais pour les nouvelles équipes', 'info');
-        showView('teams');
-      }, 1000);
-    } else {
-      showView('dashboard');
-    }
+    showView('dashboard');
   } catch(e) {
     toast(e.message, 'err');
     btn.disabled = false;
@@ -2437,7 +2540,17 @@ function renderCategories() {
   const el = document.getElementById('categories-list');
   if (!el) return;
   if (S.categories.length === 0) {
-    el.innerHTML = '<span style="color:var(--gris);font-size:13px">Aucune catégorie définie. Cliquez sur Ajouter.</span>';
+    el.innerHTML = CLUB_MANAGED
+      ? '<span style="color:var(--gris);font-size:13px">Aucune catégorie. Elles se définissent dans l\'ERP.</span>'
+      : '<span style="color:var(--gris);font-size:13px">Aucune catégorie définie. Cliquez sur Ajouter.</span>';
+    return;
+  }
+  /* Vue de lecture sous référentiel : renommer ou supprimer ici serait refusé
+     par le serveur, proposer le bouton reviendrait à annoncer une action qui
+     échoue au clic. */
+  if (CLUB_MANAGED) {
+    el.innerHTML = '<div class="cat-tags">' + S.categories.map(c =>
+      `<div class="cat-tag"><span>${esc(c.name)}</span></div>`).join('') + '</div>';
     return;
   }
   el.innerHTML = '<div class="cat-tags">' + S.categories.map(c => `
@@ -2652,6 +2765,16 @@ function applyRoleUI() {
   /* Le module statistiques a sa propre permission. */
   const statsNav = document.querySelector('.nav-item[data-view="stats"]');
   if (statsNav) statsNav.style.display = MFC.statsView ? '' : 'none';
+
+  /* Sous référentiel club, les boutons qui créent des équipes, des catégories
+     ou des saisons disparaissent : ces objets se créent dans l'ERP. */
+  if (CLUB_MANAGED) {
+    ['btn-add-cat', 'btn-add-team'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    document.querySelectorAll('.club-managed-note').forEach(el => el.style.display = '');
+  }
 }
 
 /* ===============================================================

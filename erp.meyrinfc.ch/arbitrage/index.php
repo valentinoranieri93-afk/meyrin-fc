@@ -22,6 +22,11 @@ $perms = [
     'statsView'     => mfc_can('arbitrage.stats.view'),
     'name'          => $user['name'] ?? '',
     'roleLabel'     => $roleLabel,
+    /* Équipes, catégories et saisons viennent-elles du référentiel de l'ERP ?
+       Si oui, l'interface ne propose plus de les modifier ici. api.php applique
+       la même règle : masquer un champ n'est pas une sécurité. */
+    'clubManaged'   => !mfc_club_is_empty(),
+    'erpUrl'        => ERP_URL,
 ];
 
 $html   = (string)file_get_contents(__DIR__ . '/index.html');

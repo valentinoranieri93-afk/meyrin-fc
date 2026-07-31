@@ -11,6 +11,18 @@
     }
   },
 
+  "contacts": {
+    "label": "Contacts",
+    "permissions": {
+      "contacts.view":   "Consulter les contacts et leurs fiches",
+      "contacts.edit":   "Creer et modifier les contacts, qualites et liens de famille",
+      "contacts.bank":   "Voir et modifier les coordonnees bancaires (IBAN)",
+      "contacts.merge":  "Fusionner ou separer les doublons",
+      "contacts.import": "Importer un fichier de contacts et annuler un lot",
+      "contacts.export": "Exporter la liste des contacts"
+    }
+  },
+
   "arbitrage": {
     "label": "Arbitrage",
     "permissions": {

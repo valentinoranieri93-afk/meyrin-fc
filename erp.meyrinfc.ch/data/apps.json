@@ -1,5 +1,15 @@
 [
   {
+    "slug": "contacts",
+    "name": "Contacts",
+    "url": "/contacts",
+    "description": "Référentiel unique des personnes et organisations, partagé par tous les modules",
+    "icon": "users",
+    "color": "#8A6D1F",
+    "color_bg": "#F6EFDC",
+    "active": true
+  },
+  {
     "slug": "events",
     "name": "Hub Événements",
     "url": "/events",

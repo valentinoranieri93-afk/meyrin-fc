@@ -131,6 +131,37 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'teams', 'cotisation_montant', 'REAL NOT NULL DEFAULT 0');
   ensure_column($pdo, 'teams', 'effectif_max', 'INTEGER NOT NULL DEFAULT 0');
 
+  /* Lien vers le référentiel club de l'ERP (voir lib/mfc_club.php). Le nom, la
+     catégorie et l'entraîneur d'une équipe s'y définissent désormais, par
+     saison. Ce module garde ses propres colonnes (cotisation, effectif) et
+     surtout ses affectations : employee_assignments.team_id est en ON DELETE
+     CASCADE, donc les lignes locales ne sont JAMAIS supprimées par la synchro,
+     seulement désactivées. */
+  ensure_column($pdo, 'teams', 'ref_id', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'team_categories', 'ref_id', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'seasons', 'ref_id', "TEXT NOT NULL DEFAULT ''");
+
+  /* Réparation puis verrou. La synchro lisait puis écrivait sans verrou, et
+     plusieurs requêtes partent en parallèle au chargement d'une page : chacune
+     pouvait insérer la même équipe. Les doublures sont fusionnées (leurs
+     affectations sont d'abord rattachées à la ligne conservée, ON DELETE CASCADE
+     oblige), puis un index unique empêche toute réapparition. L'ordre compte :
+     créer l'index avant la fusion échouerait sur les doublons existants. */
+  mfc_club_dedup($pdo, 'seasons', ['ref_id'], [
+    ['table' => 'employee_assignments', 'col' => 'season_id'],
+  ]);
+  mfc_club_dedup($pdo, 'team_categories', ['ref_id'], [
+    ['table' => 'teams',                'col' => 'category_id'],
+    ['table' => 'employee_assignments', 'col' => 'category_id'],
+  ]);
+  mfc_club_dedup($pdo, 'teams', ['ref_id'], [
+    ['table' => 'employee_assignments', 'col' => 'team_id'],
+  ], ['cotisation_montant', 'effectif_max']);
+
+  $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_rh_seasons_ref ON seasons(ref_id)         WHERE ref_id != ''");
+  $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_rh_cats_ref    ON team_categories(ref_id) WHERE ref_id != ''");
+  $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_rh_teams_ref   ON teams(ref_id)           WHERE ref_id != ''");
+
   // Saisons : seules les affectations (poste + montant d'un employé sur une équipe) sont rattachées à une
   // saison (1er juillet - 30 juin). Équipes, catégories, rôles et employés restent permanents d'une saison à l'autre.
   $pdo->exec("CREATE TABLE IF NOT EXISTS seasons (
@@ -945,6 +976,208 @@ Règles :
 - Réponds uniquement avec le JSON, sans commentaire ni balise markdown.
 PROMPT;
 
+/* ------------------------------------------------- Référentiel club (ERP)
+ *
+ * Le nom, la catégorie et l'entraîneur des équipes viennent désormais de
+ * l'ERP (Paramètres > Catégories & Équipes), et peuvent différer d'une saison
+ * à l'autre. Ce module garde ses propres données par équipe (cotisation,
+ * effectif, affectations, indemnités) et les rattache au `ref_id`, l'identité
+ * stable d'une équipe.
+ *
+ * Tant que le référentiel est vide (avant la reprise via tools/mfc_seed_club.php),
+ * tout continue de fonctionner exactement comme avant : les tables locales font
+ * foi. Le basculement n'est donc jamais brutal.
+ */
+
+/* mfc_club.php est charge par le socle (mfc_boot.php -> mfc_auth.php), qui sait
+   ou le trouver quel que soit l'emplacement de l'application. */
+
+function club_active(): bool {
+  return !mfc_club_is_empty();
+}
+
+/**
+ * Aligne les tables locales sur le référentiel.
+ *
+ * Idempotente et sans suppression : une équipe retirée du référentiel est
+ * désactivée, jamais effacée, parce que employee_assignments.team_id est en
+ * ON DELETE CASCADE — une suppression emporterait silencieusement les postes,
+ * les montants et l'historique de paie rattachés à cette équipe.
+ */
+function club_sync(PDO $pdo): void {
+  if (!club_active()) return;
+
+  static $done = false;
+  if ($done) return;
+  $done = true;
+
+  /* --- Saisons --- */
+  $localSeasons = [];
+  foreach ($pdo->query('SELECT * FROM seasons')->fetchAll() as $r) {
+    if (($r['ref_id'] ?? '') !== '') $localSeasons[$r['ref_id']] = $r;
+  }
+  $insS = $pdo->prepare('INSERT OR IGNORE INTO seasons (label, start_date, end_date, ref_id) VALUES (?,?,?,?)');
+  $updS = $pdo->prepare('UPDATE seasons SET label=?, start_date=?, end_date=? WHERE id=?');
+  foreach (mfc_club_seasons() as $s) {
+    if (isset($localSeasons[$s['id']])) {
+      $l = $localSeasons[$s['id']];
+      if ($l['label'] !== $s['label'] || $l['start_date'] !== $s['start_date'] || $l['end_date'] !== $s['end_date']) {
+        $updS->execute([$s['label'], $s['start_date'], $s['end_date'], (int)$l['id']]);
+      }
+      continue;
+    }
+    /* Saison déjà présente localement sous le même libellé mais pas encore
+       reliée (installation antérieure à la reprise) : on la relie plutôt que
+       d'en créer une seconde, ce qui dédoublerait les affectations à l'écran. */
+    $byLabel = $pdo->prepare('SELECT id FROM seasons WHERE label = ? AND ref_id = ""');
+    $byLabel->execute([$s['label']]);
+    $existing = $byLabel->fetchColumn();
+    if ($existing) {
+      $pdo->prepare('UPDATE OR IGNORE seasons SET ref_id=?, start_date=?, end_date=? WHERE id=?')
+          ->execute([$s['id'], $s['start_date'], $s['end_date'], (int)$existing]);
+    } else {
+      $insS->execute([$s['label'], $s['start_date'], $s['end_date'], $s['id']]);
+    }
+  }
+
+  /* --- Catégories --- */
+  $localCats = [];
+  foreach ($pdo->query('SELECT * FROM team_categories')->fetchAll() as $r) {
+    if (($r['ref_id'] ?? '') !== '') $localCats[$r['ref_id']] = $r;
+  }
+  $insC = $pdo->prepare('INSERT OR IGNORE INTO team_categories (name, sort_order, active, ref_id) VALUES (?,?,?,?)');
+  $updC = $pdo->prepare('UPDATE team_categories SET name=?, sort_order=?, active=? WHERE id=?');
+  foreach (mfc_club_categories() as $c) {
+    $active = $c['active'] ? 1 : 0;
+    if (isset($localCats[$c['id']])) {
+      $l = $localCats[$c['id']];
+      if ($l['name'] !== $c['name'] || (int)$l['sort_order'] !== $c['sort_order'] || (int)$l['active'] !== $active) {
+        $updC->execute([$c['name'], $c['sort_order'], $active, (int)$l['id']]);
+      }
+      continue;
+    }
+    $byName = $pdo->prepare('SELECT id FROM team_categories WHERE name = ? AND ref_id = ""');
+    $byName->execute([$c['name']]);
+    $existing = $byName->fetchColumn();
+    if ($existing) $pdo->prepare('UPDATE OR IGNORE team_categories SET ref_id=?, sort_order=?, active=? WHERE id=?')
+                       ->execute([$c['id'], $c['sort_order'], $active, (int)$existing]);
+    else           $insC->execute([$c['name'], $c['sort_order'], $active, $c['id']]);
+  }
+
+  /* --- Équipes ---
+     Une seule ligne locale par identité d'équipe, toutes saisons confondues.
+     Le nom mis en cache ici est celui de la saison la plus récente où l'équipe
+     figure : il ne sert que de repli, l'affichage réel passe par club_overlay_teams(). */
+  $catByRef = [];
+  foreach ($pdo->query('SELECT id, ref_id FROM team_categories WHERE ref_id != ""')->fetchAll() as $r) {
+    $catByRef[$r['ref_id']] = (int)$r['id'];
+  }
+
+  $latest = [];  // ref_id équipe => membership de la saison la plus récente
+  foreach (mfc_club_seasons() as $s) {          // déjà triées, plus récente en tête
+    foreach (mfc_club_teams($s['id'], false) as $t) {
+      if (!isset($latest[$t['ref_id']])) $latest[$t['ref_id']] = $t;
+    }
+  }
+
+  $localTeams = [];
+  foreach ($pdo->query('SELECT * FROM teams')->fetchAll() as $r) {
+    if (($r['ref_id'] ?? '') !== '') $localTeams[$r['ref_id']] = $r;
+  }
+  $insT = $pdo->prepare('INSERT OR IGNORE INTO teams (name, category_id, sort_order, active, ref_id) VALUES (?,?,?,1,?)');
+  $updT = $pdo->prepare('UPDATE teams SET name=?, category_id=?, sort_order=?, active=1 WHERE id=?');
+  foreach ($latest as $ref => $t) {
+    $catId = $catByRef[$t['category_ref_id']] ?? null;
+    if (isset($localTeams[$ref])) {
+      $l = $localTeams[$ref];
+      if ($l['name'] !== $t['name'] || (int)$l['category_id'] !== (int)$catId
+          || (int)$l['sort_order'] !== $t['sort_order'] || (int)$l['active'] !== 1) {
+        $updT->execute([$t['name'], $catId, $t['sort_order'], (int)$l['id']]);
+      }
+      continue;
+    }
+    $byName = $pdo->prepare('SELECT id FROM teams WHERE name = ? AND ref_id = ""');
+    $byName->execute([$t['name']]);
+    $existing = $byName->fetchColumn();
+    if ($existing) $pdo->prepare('UPDATE OR IGNORE teams SET ref_id=?, category_id=?, sort_order=? WHERE id=?')
+                       ->execute([$ref, $catId, $t['sort_order'], (int)$existing]);
+    else           $insT->execute([$t['name'], $catId, $t['sort_order'], $ref]);
+  }
+
+  /* Une équipe reliée au référentiel mais disparue de toutes les saisons est
+     désactivée. Ses affectations, ses montants et son historique restent en
+     base et réapparaissent si elle est remise dans une saison depuis l'ERP. */
+  $orphans = array_diff(array_keys($localTeams), array_keys($latest));
+  if ($orphans) {
+    $ph = implode(',', array_fill(0, count($orphans), '?'));
+    $pdo->prepare("UPDATE teams SET active = 0 WHERE ref_id IN ($ph)")->execute(array_values($orphans));
+  }
+}
+
+/** Identifiant de saison du référentiel correspondant à une saison locale. */
+function club_season_ref(PDO $pdo, int $localSeasonId): ?string {
+  if (!club_active()) return null;
+  if ($localSeasonId > 0) {
+    $st = $pdo->prepare('SELECT ref_id FROM seasons WHERE id = ?');
+    $st->execute([$localSeasonId]);
+    $ref = (string)($st->fetchColumn() ?: '');
+    if ($ref !== '' && mfc_club_season($ref)) return $ref;
+  }
+  return mfc_club_current_season_id();
+}
+
+/**
+ * Applique le référentiel sur une liste d'équipes locales, pour une saison.
+ *
+ * Chaque ligne reçoit le nom, la catégorie et l'entraîneur de la saison
+ * demandée, et les équipes absentes de cette saison sont écartées. Sans ce
+ * filtre, une équipe créée pour 2027-2028 apparaîtrait dans les écrans de
+ * 2026-2027 avec des montants qui ne la concernent pas.
+ */
+function club_overlay_teams(PDO $pdo, array $rows, ?string $seasonRef): array {
+  if (!club_active() || $seasonRef === null) return $rows;
+
+  /* L'ordre d'affichage est celui du référentiel (catégorie puis rang), pas un
+     tri recalculé ici : deux modules qui trient chacun à leur façon finiraient
+     par présenter la même liste dans deux ordres différents. */
+  $rank = 0;
+  $ref  = [];
+  foreach (mfc_club_teams($seasonRef, false) as $t) {
+    $t['_rank'] = $rank++;
+    $ref[$t['ref_id']] = $t;
+  }
+
+  $out    = [];
+  $unref  = [];
+  foreach ($rows as $r) {
+    $rid = (string)($r['ref_id'] ?? '');
+    if ($rid === '') { $unref[] = $r; continue; }  // équipe locale non reliée : conservée telle quelle
+    if (!isset($ref[$rid])) continue;              // absente de cette saison
+    $t = $ref[$rid];
+    $r['name']          = $t['name'];
+    $r['category_name'] = $t['category_name'];
+    $r['coach_name']    = $t['coach_name'];
+    $r['sort_order']    = $t['sort_order'];
+    $r['active']        = $t['active'] ? 1 : 0;
+    $r['from_club']     = 1;
+    $r['_rank']         = $t['_rank'];
+    $out[] = $r;
+  }
+
+  usort($out, fn($a, $b) => $a['_rank'] <=> $b['_rank']);
+  foreach ($out as &$o) unset($o['_rank']);
+  unset($o);
+
+  return array_merge($out, $unref);
+}
+
+/** Refus commun : ces champs ne se modifient plus ici. */
+function club_readonly(string $what = 'Les équipes et catégories'): never {
+  fail("$what : cela se gère maintenant dans l'ERP (Paramètres > Catégories & Équipes), "
+     . 'pour que RH et Arbitrage affichent la même liste. Les cotisations, effectifs, '
+     . 'postes et indemnités restent modifiables ici.', 409);
+}
+
 /* ---------------------------------------------------------------- Router */
 
 $action = $_GET['action'] ?? '';
@@ -1060,7 +1293,13 @@ switch ($action) {
   /* ============ CATÉGORIES D'ÉQUIPES (paramètres) ============ */
 
   case 'team_categories': {
-    if ($method === 'GET') out(db()->query('SELECT * FROM team_categories ORDER BY sort_order, name')->fetchAll());
+    if ($method === 'GET') {
+      club_sync(db());
+      $rows = db()->query('SELECT * FROM team_categories ORDER BY sort_order, name')->fetchAll();
+      foreach ($rows as &$r) $r['from_club'] = ($r['ref_id'] ?? '') !== '' ? 1 : 0;
+      out($rows);
+    }
+    if (club_active()) club_readonly('Les catégories');
     if ($method === 'POST') {
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
       $next = (int)db()->query('SELECT COALESCE(MAX(sort_order),-1)+1 FROM team_categories')->fetchColumn();
@@ -1086,6 +1325,7 @@ switch ($action) {
 
   case 'team_categories_reorder': {
     if ($method !== 'POST') fail('Méthode non supportée', 405);
+    if (club_active()) club_readonly("L'ordre des catégories");
     $ids = $b['ids'] ?? []; if (!$ids) fail('ids requis');
     $st = db()->prepare('UPDATE team_categories SET sort_order=? WHERE id=?');
     foreach ($ids as $idx => $id) $st->execute([$idx, (int)$id]);
@@ -1096,7 +1336,32 @@ switch ($action) {
 
   case 'teams': {
     if ($method === 'GET') {
-      out(db()->query("SELECT t.*, tc.name AS category_name FROM teams t LEFT JOIN team_categories tc ON tc.id = t.category_id ORDER BY tc.sort_order, t.sort_order")->fetchAll());
+      $pdo = db();
+      club_sync($pdo);
+      $rows = $pdo->query("SELECT t.*, tc.name AS category_name, '' AS coach_name
+                           FROM teams t LEFT JOIN team_categories tc ON tc.id = t.category_id
+                           ORDER BY tc.sort_order, t.sort_order")->fetchAll();
+      /* Le nom, la catégorie et l'entraîneur affichés sont ceux de la saison
+         demandée : la même équipe peut changer de nom d'une saison à l'autre. */
+      out(club_overlay_teams($pdo, $rows, club_season_ref($pdo, i($_GET, 'season_id'))));
+    }
+    /* Création, renommage, changement de catégorie et suppression passent par
+       l'ERP. Restent modifiables ici : cotisation et effectif, propres à RH. */
+    if (club_active()) {
+      if ($method !== 'PUT') club_readonly('Les équipes');
+      $id = i($b, 'id'); if (!$id) fail('id requis');
+      $onlyRhFields = !array_key_exists('name', $b) && !array_key_exists('category_id', $b) && !array_key_exists('active', $b);
+      if (!$onlyRhFields) club_readonly('Le nom, la catégorie et l\'activation d\'une équipe');
+      $st = db()->prepare('SELECT cotisation_montant, effectif_max FROM teams WHERE id=?');
+      $st->execute([$id]);
+      $ex = $st->fetch();
+      if (!$ex) fail('Équipe introuvable', 404);
+      db()->prepare('UPDATE teams SET cotisation_montant=?, effectif_max=? WHERE id=?')->execute([
+        array_key_exists('cotisation_montant', $b) ? f($b, 'cotisation_montant') : (float)$ex['cotisation_montant'],
+        array_key_exists('effectif_max', $b)       ? i($b, 'effectif_max')       : (int)$ex['effectif_max'],
+        $id,
+      ]);
+      out(['ok' => true]);
     }
     if ($method === 'POST') {
       $name = s($b, 'name'); $category_id = ni($b, 'category_id');
@@ -1135,6 +1400,7 @@ switch ($action) {
 
   case 'teams_reorder': {
     if ($method !== 'POST') fail('Méthode non supportée', 405);
+    if (club_active()) club_readonly("L'ordre des équipes");
     $ids = $b['ids'] ?? []; if (!$ids) fail('ids requis');
     $st = db()->prepare('UPDATE teams SET sort_order=? WHERE id=?');
     foreach ($ids as $idx => $id) $st->execute([$idx, (int)$id]);
@@ -1145,9 +1411,19 @@ switch ($action) {
 
   case 'seasons': {
     if ($method === 'GET') {
+      club_sync(db());
       $rows = db()->query('SELECT * FROM seasons ORDER BY start_date DESC')->fetchAll();
+      /* Avec le référentiel, la saison courante est celle dont la période
+         couvre aujourd'hui, telle que définie dans l'ERP — plutôt qu'un
+         libellé recalculé ici, qui divergerait dès qu'une saison ne suit pas
+         le découpage 1er juillet - 30 juin. */
+      $currentRef   = club_active() ? mfc_club_current_season_id() : null;
       $currentLabel = season_label_for_date(date('Y-m-d'));
-      foreach ($rows as &$r) $r['is_current'] = ($r['label'] === $currentLabel);
+      foreach ($rows as &$r) {
+        $r['is_current'] = $currentRef !== null
+          ? (($r['ref_id'] ?? '') === $currentRef)
+          : ($r['label'] === $currentLabel);
+      }
       out($rows);
     }
     fail('Méthode non supportée', 405);

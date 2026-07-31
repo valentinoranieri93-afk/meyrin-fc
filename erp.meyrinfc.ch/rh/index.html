@@ -145,6 +145,8 @@ tr:hover td{background:#FAFAF7}
 
 .matrix-wrap{overflow-x:auto}
 .matrix-table th, .matrix-table td{white-space:nowrap}
+.payments-table th, .payments-table td{white-space:nowrap}
+.payments-table th:nth-child(4), .payments-table td:nth-child(4){white-space:normal;min-width:160px}
 .matrix-table input.cell-amount{width:90px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;text-align:right}
 .matrix-total{font-weight:800;color:var(--noir)}
 .matrix-col-head{display:flex;flex-direction:column;gap:2px}
@@ -307,9 +309,9 @@ function modalErr(msg){ const e = document.querySelector('.modal-error'); if(e){
    valeur de repli et la page se dessine sans ce bloc. Une vraie panne (500,
    réseau) continue de remonter, pour ne pas masquer un incident derrière un
    écran vide. */
-async function apiSoft(action, fallback, allowed = true){
+async function apiSoft(action, fallback, allowed = true, params = null){
   if (!allowed) return fallback;
-  try { return await api(action); }
+  try { return await api(action, params ? { params } : undefined); }
   catch (e) {
     if (e.status === 403) { console.warn('Bloc ignoré, droit manquant :', action); return fallback; }
     throw e;
@@ -320,8 +322,10 @@ async function loadRefData(){
   /* Ces quatre jeux de données étaient chargés d'un bloc : un seul refus de
      droit (payroll_rules exige l'accès aux salaires) faisait échouer le lot
      entier et laissait les pages Équipes, Employés et Paramètres vides. */
+  /* La saison est transmise : sous référentiel club, le nom et la catégorie
+     d'une équipe dépendent de la saison consultée. */
   [STATE.teams, STATE.categories, STATE.postes, STATE.payrollRules] = await Promise.all([
-    apiSoft('teams', []),
+    apiSoft('teams', [], true, { season_id: STATE.seasonId }),
     apiSoft('team_categories', []),
     apiSoft('postes', []),
     apiSoft('payroll_rules', [], !!MFC.payrollView),
@@ -504,11 +508,16 @@ function teamNode(t){
         <span class="pill" style="background:var(--ligne-2);color:var(--noir-3)">${chf(teamTotal(t.id)*12)} CHF/an</span>
         ${teamCotisationTotal(t) > 0 ? `<span class="pill" style="background:var(--vert-bg);color:var(--vert)">${esc(t.effectif_max)} × ${chf(t.cotisation_montant)} = ${chf(teamCotisationTotal(t))} CHF</span>` : ''}
       </span>
-      <select onchange="quickChangeCategory(${t.id}, this.value)" style="font-size:11px;padding:4px 6px;border:1px solid var(--ligne);border-radius:6px">
-        ${STATE.categories.map(c=>`<option value="${c.id}" ${c.id===t.category_id?'selected':''}>${esc(c.name)}</option>`).join('')}
-      </select>
-      <button class="icon-btn" data-obj="${esc(JSON.stringify(t))}" onclick="teamModal(JSON.parse(this.dataset.obj))" title="Modifier">✎</button>
-      <button class="icon-btn" onclick="deleteTeam(${t.id})" title="Supprimer">✕</button>
+      ${CLUB_MANAGED ? `
+        ${t.coach_name ? `<span class="pill" style="background:var(--ligne-2);color:var(--noir-3)" title="Entraîneur (défini dans l'ERP)">${esc(t.coach_name)}</span>` : ''}
+        <span style="font-size:11px;color:var(--gris-2)">${esc(t.category_name || '')}</span>
+      ` : `
+        <select onchange="quickChangeCategory(${t.id}, this.value)" style="font-size:11px;padding:4px 6px;border:1px solid var(--ligne);border-radius:6px">
+          ${STATE.categories.map(c=>`<option value="${c.id}" ${c.id===t.category_id?'selected':''}>${esc(c.name)}</option>`).join('')}
+        </select>
+      `}
+      <button class="icon-btn" data-obj="${esc(JSON.stringify(t))}" onclick="teamModal(JSON.parse(this.dataset.obj))" title="${CLUB_MANAGED ? 'Cotisation et effectif' : 'Modifier'}">✎</button>
+      ${CLUB_MANAGED ? '' : `<button class="icon-btn" onclick="deleteTeam(${t.id})" title="Supprimer">✕</button>`}
     </div>
     ${open ? `<div style="padding:4px 18px 16px 60px">${teamSlotsBlock(t)}</div>` : ''}
   </div>`;
@@ -550,32 +559,63 @@ async function quickChangeCategory(teamId, categoryId){
   renderPage();
 }
 
+/* Le référentiel club (ERP) porte le nom, la catégorie et l'entraîneur des
+   équipes. Quand il est actif, RH ne les modifie plus : il garde en revanche
+   tout ce qui lui est propre (cotisation, effectif, postes, indemnités). */
+const CLUB_MANAGED = !!(window.MFC && MFC.clubManaged);
+const ERP_LINK     = (window.MFC && MFC.erpUrl) || '';
+
+function clubNotice(text){
+  return `<div style="background:var(--jaune-soft);border:1px solid #E8D9A8;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#6B5600;line-height:1.55;margin-bottom:12px">
+    ${text} <a href="${esc(ERP_LINK)}/?tab=settings" target="_blank" style="color:#6B5600;font-weight:600">Ouvrir l'ERP</a>
+  </div>`;
+}
+
 function teamModal(t){
   if (!STATE.categories.length) { alert("Crée d'abord une catégorie dans Paramètres."); return; }
+  if (CLUB_MANAGED && !t) {
+    alert("Les équipes se créent dans l'ERP (Paramètres > Catégories & Équipes), pour que RH et Arbitrage partagent la même liste.");
+    return;
+  }
+  const cat = t ? STATE.categories.find(c => c.id == t.category_id) : null;
   openModal(`
     <h3>${t ? 'Modifier' : 'Nouvelle'} équipe</h3>
     <div class="modal-error"></div>
-    <div class="field"><label>Nom</label><input id="tm-name" value="${t?esc(t.name):''}" placeholder="Ex: Première équipe"></div>
-    <div class="field"><label>Catégorie</label><select id="tm-category">
-      ${STATE.categories.map(c=>`<option value="${c.id}" ${t?(t.category_id==c.id?'selected':''):''}>${esc(c.name)}</option>`).join('')}
-    </select></div>
+    ${CLUB_MANAGED ? clubNotice("Nom, catégorie et entraîneur sont définis dans l'ERP pour la saison affichée.") : ''}
+    ${CLUB_MANAGED ? `
+      <div class="field"><label>Nom</label><input value="${t?esc(t.name):''}" disabled></div>
+      <div class="field"><label>Catégorie</label><input value="${cat?esc(cat.name):'—'}" disabled></div>
+      <div class="field"><label>Entraîneur</label><input value="${t&&t.coach_name?esc(t.coach_name):'—'}" disabled></div>
+    ` : `
+      <div class="field"><label>Nom</label><input id="tm-name" value="${t?esc(t.name):''}" placeholder="Ex: Première équipe"></div>
+      <div class="field"><label>Catégorie</label><select id="tm-category">
+        ${STATE.categories.map(c=>`<option value="${c.id}" ${t?(t.category_id==c.id?'selected':''):''}>${esc(c.name)}</option>`).join('')}
+      </select></div>
+    `}
     <div class="field-row">
       <div class="field"><label>Prix cotisation (CHF)</label><input id="tm-cotisation" type="number" step="0.05" value="${t&&t.cotisation_montant?t.cotisation_montant:''}"></div>
       <div class="field"><label>Effectif max (joueurs)</label><input id="tm-effectif" type="number" step="1" value="${t&&t.effectif_max?t.effectif_max:''}"></div>
     </div>
-    ${t ? `<div class="field check-row"><input type="checkbox" id="tm-active" ${t.active==1?'checked':''}><label style="margin:0" for="tm-active">Équipe active</label></div>` : ''}
+    ${t && !CLUB_MANAGED ? `<div class="field check-row"><input type="checkbox" id="tm-active" ${t.active==1?'checked':''}><label style="margin:0" for="tm-active">Équipe active</label></div>` : ''}
     <div class="modal-actions">
-      ${t ? `<button class="btn btn-ghost" onclick="deleteTeam(${t.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
+      ${t && !CLUB_MANAGED ? `<button class="btn btn-ghost" onclick="deleteTeam(${t.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
       <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" onclick="saveTeam(${t?t.id:'null'})">Enregistrer</button>
     </div>
   `);
 }
 async function saveTeam(id){
-  const name = document.getElementById('tm-name').value.trim();
-  const category_id = Number(document.getElementById('tm-category').value);
   const cotisation_montant = Number(document.getElementById('tm-cotisation').value) || 0;
   const effectif_max = Number(document.getElementById('tm-effectif').value) || 0;
+  /* Sous référentiel, seuls les champs propres à RH partent : envoyer name ou
+     category_id ferait refuser l'appel côté serveur, à juste titre. */
+  if (CLUB_MANAGED) {
+    try { await api('teams', { method: 'PUT', body: { id, cotisation_montant, effectif_max } }); closeModal(); renderPage(); }
+    catch (e) { modalErr(e.message); }
+    return;
+  }
+  const name = document.getElementById('tm-name').value.trim();
+  const category_id = Number(document.getElementById('tm-category').value);
   if (!name) return modalErr('Le nom est requis.');
   try {
     if (id) { const active = document.getElementById('tm-active').checked; await api('teams', { method: 'PUT', body: { id, name, category_id, active, cotisation_montant, effectif_max } }); }
@@ -1292,11 +1332,12 @@ function renderCategoriesTab(el){
         <span class="pill" style="background:var(--bleu-bg);color:var(--bleu)">${STATE.teams.length} équipe${STATE.teams.length>1?'s':''}</span>
       </div>
       <div class="card-body pad0">
-        ${STATE.categories.length ? STATE.categories.map((cat, idx) => categorySettingsRow(cat, idx, STATE.categories.length, byCategory[cat.id]||[])).join('') : `<div class="empty">Aucune catégorie. Ajoutez-en une ci-dessous (ex: Foot à 11, Juniors).</div>`}
-        <div style="display:flex;gap:8px;padding:14px 18px">
+        ${CLUB_MANAGED ? `<div style="padding:14px 18px 0">${clubNotice("Cette liste vient de l'ERP et est partagée avec Arbitrage. Le nom, la catégorie, l'entraîneur et l'ordre s'y modifient. Cotisation et effectif restent gérés ici, depuis l'onglet Équipes.")}</div>` : ''}
+        ${STATE.categories.length ? STATE.categories.map((cat, idx) => categorySettingsRow(cat, idx, STATE.categories.length, byCategory[cat.id]||[])).join('') : `<div class="empty">Aucune catégorie. ${CLUB_MANAGED ? "Ajoutez-en une dans l'ERP." : 'Ajoutez-en une ci-dessous (ex: Foot à 11, Juniors).'}</div>`}
+        ${CLUB_MANAGED ? '' : `<div style="display:flex;gap:8px;padding:14px 18px">
           <input id="new-cat-name" placeholder="Nouvelle catégorie…" style="flex:1;padding:8px 10px;border:1.5px solid var(--ligne);border-radius:8px" onkeydown="if(event.key==='Enter')addCategoryInline()">
           <button class="btn btn-primary btn-sm" onclick="addCategoryInline()">+ Ajouter une catégorie</button>
-        </div>
+        </div>`}
       </div>
     </div>
   `;
@@ -1306,7 +1347,20 @@ let EDITING_CAT_ID = null;
 
 function categorySettingsRow(cat, idx, total, teams){
   const open = SETTINGS_EXPANDED_CATS.has(cat.id);
-  const editing = EDITING_CAT_ID === cat.id;
+  const editing = EDITING_CAT_ID === cat.id && !CLUB_MANAGED;
+  if (CLUB_MANAGED) {
+    /* Vue de lecture : ni glisser-déposer, ni renommage, ni suppression. Ces
+       actions sont refusées par le serveur sous référentiel, les proposer
+       reviendrait à annoncer une possibilité qui échoue au clic. */
+    return `<div style="border-bottom:1px solid var(--ligne-2)">
+      <div style="display:flex;align-items:center;gap:8px;padding:11px 18px;background:#FAFAF7">
+        <span onclick="toggleSettingsCat(${cat.id})" style="cursor:pointer;display:inline-block;width:12px;font-size:12px;transition:transform .15s;transform:rotate(${open?90:0}deg)">▸</span>
+        <span onclick="toggleSettingsCat(${cat.id})" style="flex:1;font-weight:700;font-size:13.5px;color:var(--noir);cursor:pointer">${esc(cat.name)}</span>
+        <span class="pill" style="background:var(--jaune-soft);color:#7A6000;white-space:nowrap">${teams.length} équipe${teams.length>1?'s':''}</span>
+      </div>
+      ${open ? `<div>${teams.map((t, ti) => teamSettingsRow(t, ti, teams.length)).join('')}</div>` : ''}
+    </div>`;
+  }
   const nameHtml = editing
     ? `<input id="cat-edit-${cat.id}" value="${esc(cat.name)}" style="flex:1;font-weight:700;font-size:13.5px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:6px" onblur="finishCategoryEdit(${cat.id},this.value)" onkeydown="if(event.key==='Enter')this.blur()">`
     : `<span onclick="toggleSettingsCat(${cat.id})" style="flex:1;font-weight:700;font-size:13.5px;color:var(--noir);cursor:pointer">${esc(cat.name)}</span>`;
@@ -1390,6 +1444,13 @@ async function onCatDrop(e, targetId){
 function onCatDragEnd(e){ e.currentTarget.style.opacity = ''; DRAG_CAT = null; }
 
 function teamSettingsRow(t, idx, total){
+  if (CLUB_MANAGED) {
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 18px 9px 40px;background:#fff;border-top:1px solid var(--ligne-2)">
+      <span style="flex:1;font-size:13px;color:var(--noir)">${esc(t.name)}</span>
+      <span style="font-size:12px;color:var(--gris-2)">${t.coach_name ? esc(t.coach_name) : '—'}</span>
+      ${t.active == 1 ? '' : '<span class="pill" style="background:var(--ligne-2);color:var(--gris-2)">inactive</span>'}
+    </div>`;
+  }
   return `<div draggable="true" data-team-id="${t.id}" data-category-id="${t.category_id}"
     ondragstart="onTeamDragStart(event,${t.id},${t.category_id})"
     ondragover="onTeamDragOver(event,${t.category_id})"
@@ -1652,9 +1713,9 @@ function renderPaymentsRows(){
   else if (PAYMENTS_STATUS_FILTER === 'unpaid') rows = rows.filter(r => !r.paid);
   el.innerHTML = `
     <div class="card"><div class="card-body pad0">
-      ${rows.length ? `<table><thead><tr><th>Personne</th><th>Détail</th><th>Montant</th><th>Payé</th><th>Note</th><th>Fiche de paie</th><th>Espace perso</th></tr></thead><tbody>
+      ${rows.length ? `<div class="matrix-wrap"><table class="payments-table"><thead><tr><th>Personne</th><th>Montant</th><th>Payé</th><th>Note</th><th>Fiche de paie</th><th>Espace perso</th></tr></thead><tbody>
         ${rows.map(r => paymentRow(r)).join('')}
-      </tbody></table>` : `<div class="empty">${q || PAYMENTS_STATUS_FILTER ? 'Aucun résultat pour ce filtre.' : 'Aucun paiement dû ce mois-ci.'}</div>`}
+      </tbody></table></div>` : `<div class="empty">${q || PAYMENTS_STATUS_FILTER ? 'Aucun résultat pour ce filtre.' : 'Aucun paiement dû ce mois-ci.'}</div>`}
     </div></div>
   `;
 }
@@ -1662,8 +1723,7 @@ function renderPaymentsRows(){
 function paymentRow(r){
   return `<tr style="${r.paid?'background:var(--vert-bg)':''}">
     <td style="font-weight:600">${esc(r.name)}${r.person_type==='player'?' <span class="pill" style="background:var(--bleu-bg);color:var(--bleu);margin-left:6px">Joueur</span>':''}</td>
-    <td style="font-size:12.5px;color:var(--gris)">${esc(r.detail)}</td>
-    <td><strong>${chf(r.montant)} CHF</strong></td>
+    <td style="white-space:nowrap"><strong>${chf(r.montant)} CHF</strong></td>
     <td><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${r.paid?'checked':''} onchange="togglePaymentPaid('${r.person_type}',${r.person_id},this.checked)">Payé</label></td>
     <td><input value="${esc(r.note||'')}" placeholder="Note (facultatif)…" style="width:100%;min-width:160px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:7px;font-size:12.5px" onchange="updatePaymentNote('${r.person_type}',${r.person_id},this.value)"></td>
     <td>${paymentSlipCell(r)}</td>

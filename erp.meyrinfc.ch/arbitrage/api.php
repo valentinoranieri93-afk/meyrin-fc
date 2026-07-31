@@ -111,6 +111,40 @@ function init_schema(PDO $pdo): void {
             $pdo->prepare('UPDATE teams SET season_id = ? WHERE season_id IS NULL')->execute([(int) $latestSeason['id']]);
         }
     }
+    /* Lien vers le referentiel club de l'ERP (lib/mfc_club.php). Le nom, la
+       categorie et l'entraineur d'une equipe y sont definis, par saison. Cette
+       base garde ce qui lui est propre : l'indemnite d'arbitrage (fee_amount),
+       les matchs et leur statut de paiement. */
+    $seasonCols = array_column($pdo->query('PRAGMA table_info(seasons)')->fetchAll(), 'name');
+    if (!in_array('ref_id', $seasonCols)) {
+        $pdo->exec("ALTER TABLE seasons ADD COLUMN ref_id TEXT NOT NULL DEFAULT ''");
+    }
+    /* Colonnes relues : $teamCols date d'avant l'ajout eventuel de season_id. */
+    if (!in_array('ref_id', array_column($pdo->query('PRAGMA table_info(teams)')->fetchAll(), 'name'))) {
+        $pdo->exec("ALTER TABLE teams ADD COLUMN ref_id TEXT NOT NULL DEFAULT ''");
+    }
+    $catCols = array_column($pdo->query('PRAGMA table_info(categories)')->fetchAll(), 'name');
+    if (!in_array('ref_id', $catCols)) {
+        $pdo->exec("ALTER TABLE categories ADD COLUMN ref_id TEXT NOT NULL DEFAULT ''");
+    }
+
+    /* Reparation puis verrou : les doublons nes de la synchro concurrente sont
+       fusionnes, et l'index unique rend leur reapparition impossible, quel que
+       soit l'ordre d'arrivee des requetes. L'index doit etre cree APRES la
+       fusion, sinon sa creation echoue sur les doublons existants. */
+    mfc_club_dedup($pdo, 'seasons', ['ref_id'], [
+        ['table' => 'matches', 'col' => 'season_id'],
+        ['table' => 'teams',   'col' => 'season_id'],
+    ]);
+    mfc_club_dedup($pdo, 'categories', ['ref_id'], []);
+    mfc_club_dedup($pdo, 'teams', ['season_id', 'ref_id'], [
+        ['table' => 'matches', 'col' => 'team_id'],
+    ], ['fee_amount']);
+
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_seasons_ref    ON seasons(ref_id)               WHERE ref_id != ''");
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_categories_ref ON categories(ref_id)            WHERE ref_id != ''");
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_teams_ref      ON teams(season_id, ref_id)      WHERE ref_id != ''");
+
     // Seed default categories on first run
     $count = (int) $pdo->query('SELECT COUNT(*) FROM categories')->fetchColumn();
     if ($count === 0) {
@@ -118,6 +152,165 @@ function init_schema(PDO $pdo): void {
         $ins = $pdo->prepare('INSERT OR IGNORE INTO categories (name, sort_order) VALUES (?,?)');
         foreach ($defaults as [$name, $ord]) $ins->execute([$name, $ord]);
     }
+}
+
+/* ------------------------------------------------- Referentiel club (ERP)
+ *
+ * Les equipes ne sont plus creees par l'import : elles viennent de l'ERP
+ * (Parametres > Categories & Equipes) et peuvent differer d'une saison a
+ * l'autre. C'est ce qui corrige la cause d'origine du probleme : le calendrier
+ * de la faitiere ecrit les noms d'equipes a sa facon, et l'ancien import creait
+ * une equipe pour chaque orthographe rencontree.
+ */
+
+/* mfc_club.php est charge par le socle (mfc_boot.php -> mfc_auth.php), qui sait
+   ou le trouver quel que soit l'emplacement de l'application. */
+
+function club_active(): bool {
+    return !mfc_club_is_empty();
+}
+
+/**
+ * Aligne saisons, categories et equipes locales sur le referentiel.
+ *
+ * Sans suppression : une equipe retiree d'une saison est desactivee, jamais
+ * effacee, parce que matches.team_id la reference — y compris pour des matchs
+ * deja payes, dont l'historique comptable doit rester lisible.
+ */
+function club_sync(PDO $pdo): void {
+    if (!club_active()) return;
+
+    static $done = false;
+    if ($done) return;
+    $done = true;
+
+    /* --- Saisons --- */
+    $localByRef   = [];
+    $localByLabel = [];
+    foreach ($pdo->query('SELECT * FROM seasons')->fetchAll() as $r) {
+        if (($r['ref_id'] ?? '') !== '') $localByRef[$r['ref_id']] = $r;
+        else                             $localByLabel[mb_strtolower($r['label'])] = $r;
+    }
+    foreach (mfc_club_seasons() as $s) {
+        if (isset($localByRef[$s['id']])) {
+            if ($localByRef[$s['id']]['label'] !== $s['label']) {
+                $pdo->prepare('UPDATE seasons SET label=? WHERE id=?')
+                    ->execute([$s['label'], (int)$localByRef[$s['id']]['id']]);
+            }
+            continue;
+        }
+        $key = mb_strtolower($s['label']);
+        if (isset($localByLabel[$key])) {
+            /* Saison importee avant la mise en place du referentiel : on la
+               relie plutot que d'en creer une seconde du meme nom, ce qui
+               scinderait les matchs deja saisis en deux saisons jumelles. */
+            $pdo->prepare('UPDATE OR IGNORE seasons SET ref_id=? WHERE id=?')
+                ->execute([$s['id'], (int)$localByLabel[$key]['id']]);
+        } else {
+            $pdo->prepare('INSERT OR IGNORE INTO seasons (label, match_count, ref_id) VALUES (?,0,?)')
+                ->execute([$s['label'], $s['id']]);
+        }
+    }
+
+    /* --- Categories --- */
+    $catByRef = [];
+    foreach ($pdo->query('SELECT * FROM categories')->fetchAll() as $r) {
+        if (($r['ref_id'] ?? '') !== '') $catByRef[$r['ref_id']] = $r;
+    }
+    foreach (mfc_club_categories() as $c) {
+        if (isset($catByRef[$c['id']])) {
+            if ($catByRef[$c['id']]['name'] !== $c['name'] || (int)$catByRef[$c['id']]['sort_order'] !== $c['sort_order']) {
+                $pdo->prepare('UPDATE categories SET name=?, sort_order=? WHERE id=?')
+                    ->execute([$c['name'], $c['sort_order'], (int)$catByRef[$c['id']]['id']]);
+            }
+            continue;
+        }
+        $st = $pdo->prepare('SELECT id FROM categories WHERE name=? AND ref_id=""');
+        $st->execute([$c['name']]);
+        $exist = $st->fetchColumn();
+        if ($exist) $pdo->prepare('UPDATE OR IGNORE categories SET ref_id=?, sort_order=? WHERE id=?')
+                        ->execute([$c['id'], $c['sort_order'], (int)$exist]);
+        else        $pdo->prepare('INSERT OR IGNORE INTO categories (name, sort_order, ref_id) VALUES (?,?,?)')
+                        ->execute([$c['name'], $c['sort_order'], $c['id']]);
+    }
+
+    /* --- Equipes, saison par saison ---
+       Cette base garde une ligne equipe par saison (l'indemnite d'arbitrage
+       peut changer d'une annee a l'autre) : le referentiel y est donc projete
+       une fois par saison. */
+    $seasons = $pdo->query('SELECT id, ref_id FROM seasons WHERE ref_id != ""')->fetchAll();
+    foreach ($seasons as $s) {
+        $localSeasonId = (int)$s['id'];
+        $refTeams = mfc_club_teams($s['ref_id'], false);
+
+        $existing = [];
+        $stmt = $pdo->prepare('SELECT * FROM teams WHERE season_id = ?');
+        $stmt->execute([$localSeasonId]);
+        foreach ($stmt->fetchAll() as $r) {
+            if (($r['ref_id'] ?? '') !== '') $existing[$r['ref_id']] = $r;
+        }
+
+        $ins = $pdo->prepare('INSERT OR IGNORE INTO teams (season_id, name, category, coach_name, fee_amount, active, ref_id) VALUES (?,?,?,?,0,?,?)');
+        $upd = $pdo->prepare('UPDATE teams SET name=?, category=?, coach_name=?, active=? WHERE id=?');
+        foreach ($refTeams as $t) {
+            $active = $t['active'] ? 1 : 0;
+            if (isset($existing[$t['ref_id']])) {
+                $l = $existing[$t['ref_id']];
+                if ($l['name'] !== $t['name'] || $l['category'] !== $t['category_name']
+                    || $l['coach_name'] !== $t['coach_name'] || (int)$l['active'] !== $active) {
+                    $upd->execute([$t['name'], $t['category_name'], $t['coach_name'], $active, (int)$l['id']]);
+                }
+                continue;
+            }
+            /* Equipe importee autrefois sous le meme nom : on la relie pour ne
+               pas dupliquer la ligne et pour que ses matchs suivent. */
+            $byName = $pdo->prepare('SELECT id FROM teams WHERE season_id=? AND ref_id="" AND LOWER(name)=LOWER(?)');
+            $byName->execute([$localSeasonId, $t['name']]);
+            $exist = $byName->fetchColumn();
+            if ($exist) $pdo->prepare('UPDATE OR IGNORE teams SET ref_id=?, category=?, coach_name=?, active=? WHERE id=?')
+                            ->execute([$t['ref_id'], $t['category_name'], $t['coach_name'], $active, (int)$exist]);
+            else        $ins->execute([$localSeasonId, $t['name'], $t['category_name'], $t['coach_name'], $active, $t['ref_id']]);
+        }
+
+        /* Reliee mais absente de cette saison : desactivee, jamais supprimee. */
+        $refIds  = array_column($refTeams, 'ref_id');
+        $orphans = array_diff(array_keys($existing), $refIds);
+        if ($orphans) {
+            $ph = implode(',', array_fill(0, count($orphans), '?'));
+            $pdo->prepare("UPDATE teams SET active=0 WHERE season_id=? AND ref_id IN ($ph)")
+                ->execute(array_merge([$localSeasonId], array_values($orphans)));
+        }
+    }
+}
+
+/** Ordre d'affichage du referentiel pour une saison locale donnee. */
+function club_team_rank(PDO $pdo, int $localSeasonId): array {
+    if (!club_active()) return [];
+    $st = $pdo->prepare('SELECT ref_id FROM seasons WHERE id=?');
+    $st->execute([$localSeasonId]);
+    $ref = (string)($st->fetchColumn() ?: '');
+    if ($ref === '') return [];
+    $rank = [];
+    foreach (mfc_club_teams($ref, false) as $i => $t) $rank[$t['ref_id']] = $i;
+    return $rank;
+}
+
+/** Trie des lignes d'equipes selon l'ordre du referentiel. */
+function club_sort_teams(array $rows, array $rank): array {
+    if (!$rank) return $rows;
+    usort($rows, function ($a, $b) use ($rank) {
+        $ra = $rank[$a['ref_id'] ?? ''] ?? PHP_INT_MAX;
+        $rb = $rank[$b['ref_id'] ?? ''] ?? PHP_INT_MAX;
+        return $ra <=> $rb ?: strcmp((string)$a['name'], (string)$b['name']);
+    });
+    return $rows;
+}
+
+/** Refus commun : ces champs ne se modifient plus ici. */
+function club_readonly(string $what): never {
+    fail("$what : cela se gère maintenant dans l'ERP (Paramètres > Catégories & Équipes), "
+       . "pour que RH et Arbitrage affichent la même liste. L'indemnité d'arbitrage et les "
+       . 'matchs restent gérés ici.', 409);
 }
 
 /* ---------------------------------------------------------------- Helpers */
@@ -153,6 +346,21 @@ function i(array $b, string $k, int $def = 0): int {
 
 function resolve_season_id(PDO $pdo, int $season_id): int {
     if ($season_id > 0) return $season_id;
+
+    /* Saison en cours d'apres le referentiel (celle dont la periode couvre
+       aujourd'hui). Le repli historique prenait la derniere saison creee : dès
+       qu'une saison future est preparee a l'avance dans l'ERP, elle devient la
+       plus recente et l'application s'ouvrait dessus, sur des ecrans vides. */
+    if (club_active()) {
+        $ref = mfc_club_current_season_id();
+        if ($ref !== null) {
+            $st = $pdo->prepare('SELECT id FROM seasons WHERE ref_id = ?');
+            $st->execute([$ref]);
+            $id = $st->fetchColumn();
+            if ($id) return (int) $id;
+        }
+    }
+
     $row = $pdo->query('SELECT id FROM seasons ORDER BY id DESC LIMIT 1')->fetch();
     return $row ? (int) $row['id'] : 0;
 }
@@ -238,6 +446,18 @@ function normalize_date(string $raw): ?string {
     return null;
 }
 
+/**
+ * Normalise une valeur servant de cle de comparaison a l'import.
+ *
+ * Casse, espaces multiples et espaces de bord sont neutralises : le meme match
+ * exporte deux fois par la faitiere peut differer sur ces details sans etre un
+ * match different.
+ */
+function import_norm(string $v): string {
+    $v = trim(preg_replace('/\s+/u', ' ', $v) ?? $v);
+    return mb_strtolower($v, 'UTF-8');
+}
+
 function detect_category(string $teamName, array $knownCategories = []): string {
     // Match against known DB categories first (longest match wins to avoid "U1" matching before "U10")
     usort($knownCategories, fn($a, $b) => strlen($b) - strlen($a));
@@ -280,6 +500,7 @@ const ARB_PERMS = [
     'matches'         => ['GET' => 'matches.view', 'write' => 'matches.edit'],
     'matches_bulk_pay'=> 'matches.pay',
     'import_csv'      => 'import.run',
+    'import_team_csv' => 'import.run',
     'stats'           => 'stats.view',
 ];
 
@@ -316,10 +537,24 @@ switch ($action) {
     case 'teams': {
         require_auth();
         if ($method === 'GET') {
+            club_sync(db());
             $season_id = resolve_season_id(db(), (int)($_GET['season_id'] ?? 0));
             $st = db()->prepare('SELECT * FROM teams WHERE season_id = ? ORDER BY category, name');
             $st->execute([$season_id]);
-            out($st->fetchAll());
+            out(club_sort_teams($st->fetchAll(), club_team_rank(db(), $season_id)));
+        }
+        /* Nom, categorie, entraineur et presence viennent de l'ERP. Reste
+           modifiable ici : fee_amount, l'indemnite d'arbitrage par match. */
+        if (club_active()) {
+            if ($method !== 'PUT') club_readonly('Les équipes');
+            $id = i($b, 'id');
+            if (!$id) fail('ID requis');
+            foreach (['name', 'category', 'coach_name', 'active'] as $f) {
+                if (array_key_exists($f, $b)) club_readonly("Le nom, la catégorie, l'entraîneur et l'activation d'une équipe");
+            }
+            if (!array_key_exists('fee_amount', $b)) fail('Rien à modifier');
+            db()->prepare('UPDATE teams SET fee_amount = ? WHERE id = ?')->execute([n($b, 'fee_amount'), $id]);
+            out(['ok' => true]);
         }
         if ($method === 'POST') {
             $name = s($b, 'name');
@@ -362,8 +597,31 @@ switch ($action) {
         fail('Méthode non supportée', 405);
     }
 
+    /* Enregistrement groupé de l'écran Équipes. Sous référentiel, seul le
+       montant de l'indemnité y est encore modifiable. */
     case 'teams_bulk_save': {
         require_auth();
+        if (club_active()) {
+            $rows = $b['teams'] ?? [];
+            if (!is_array($rows)) fail('Format invalide');
+            $pdo = db();
+            $pdo->beginTransaction();
+            try {
+                $st = $pdo->prepare('UPDATE teams SET fee_amount = ? WHERE id = ?');
+                foreach ($rows as $t) {
+                    $id = i($t, 'id');
+                    if ($id > 0 && array_key_exists('fee_amount', $t)) $st->execute([n($t, 'fee_amount'), $id]);
+                }
+                $pdo->commit();
+            } catch (\Exception $e) {
+                $pdo->rollBack();
+                fail('Erreur lors de la sauvegarde : ' . $e->getMessage(), 500);
+            }
+            $season_id = resolve_season_id($pdo, i($b, 'season_id'));
+            $q = $pdo->prepare('SELECT * FROM teams WHERE season_id = ?');
+            $q->execute([$season_id]);
+            out(['ok' => true, 'teams' => club_sort_teams($q->fetchAll(), club_team_rank($pdo, $season_id))]);
+        }
         $teams = $b['teams'] ?? [];
         if (!is_array($teams)) fail('Format invalide');
         $pdo = db();
@@ -393,9 +651,16 @@ switch ($action) {
     case 'seasons': {
         require_auth();
         if ($method === 'GET') {
+            club_sync(db());
             $rows = db()->query('SELECT * FROM seasons ORDER BY id DESC')->fetchAll();
+            $current = club_active() ? mfc_club_current_season_id() : null;
+            foreach ($rows as &$r) $r['is_current'] = ($current !== null && ($r['ref_id'] ?? '') === $current);
             out($rows);
         }
+        /* Les saisons se créent et se renomment dans l'ERP : elles y définissent
+           aussi quelles équipes en font partie, ce que cette base ne peut pas
+           deviner seule. */
+        if (club_active()) club_readonly('Les saisons');
         if ($method === 'PUT') {
             $id    = i($b, 'id');
             $label = s($b, 'label');
@@ -426,10 +691,342 @@ switch ($action) {
         fail('Méthode non supportée', 405);
     }
 
-    /* ============ IMPORT CSV ============ */
+    /* ============ IMPORT DU CALENDRIER D'UNE EQUIPE ============
+     *
+     * Remplace l'ancien import global, qui lisait le nom d'equipe dans le
+     * fichier et creait une equipe des qu'il ne le reconnaissait pas. Le
+     * calendrier de la faitiere ecrit les noms a sa facon ("FC Meyrin Ib"...),
+     * ce qui produisait des equipes parasites a chaque import.
+     *
+     * Ici, l'equipe est CHOISIE avant l'import : toutes les lignes du fichier
+     * lui sont attribuees, sans aucune reconnaissance de nom. Le fichier ne
+     * sert plus qu'a dire quand, contre qui, et ou.
+     *
+     * Le mot-cle du club ("Meyrin") reste utilise, mais pour une seule chose :
+     * savoir de quel cote de la ligne on se trouve, donc si le match est a
+     * domicile ou a l'exterieur, et quel nom est celui de l'adversaire.
+     */
+
+    case 'import_team_csv': {
+        require_auth();
+
+        $confirm = (int)($_GET['confirm'] ?? 0);
+        $team_id = (int)($_POST['team_id'] ?? 0);
+        $club_keyword = s($_POST, 'club_keyword', 'Meyrin');
+
+        if (!$team_id) fail('Choisissez l\'équipe dont vous importez le calendrier');
+
+        $pdo = db();
+        club_sync($pdo);
+
+        $tSt = $pdo->prepare('SELECT t.*, s.label AS season_label FROM teams t
+                              LEFT JOIN seasons s ON s.id = t.season_id WHERE t.id = ?');
+        $tSt->execute([$team_id]);
+        $team = $tSt->fetch();
+        if (!$team) fail('Équipe introuvable', 404);
+        $season_id = (int)$team['season_id'];
+        if (!$season_id) fail('Cette équipe n\'est rattachée à aucune saison');
+
+        if (empty($_FILES['csv'])) fail('Fichier CSV requis');
+        $f = $_FILES['csv'];
+        if ($f['error'] !== UPLOAD_ERR_OK) fail('Erreur de téléversement (code ' . $f['error'] . ')');
+        if ($f['size'] > 10 * 1024 * 1024) fail('Fichier trop volumineux (10 Mo max)');
+
+        $content = file_get_contents($f['tmp_name']);
+        if ($content === false) fail('Impossible de lire le fichier');
+        $encoding = mb_detect_encoding($content, ['UTF-8', 'ISO-8859-1', 'Windows-1252'], true);
+        if ($encoding && $encoding !== 'UTF-8') $content = mb_convert_encoding($content, 'UTF-8', $encoding);
+
+        $parsed  = parse_csv_content($content);
+        $headers = $parsed['headers'];
+        $rows    = $parsed['rows'];
+        if (empty($headers)) fail('CSV vide ou illisible');
+
+        $mapping = [];
+        if (!empty($_POST['mapping'])) $mapping = json_decode($_POST['mapping'], true) ?? [];
+
+        /* Etape 1 : pas de correspondance de colonnes fournie, on renvoie un apercu. */
+        if (empty($mapping)) {
+            out([
+                'step'       => 'preview',
+                'headers'    => $headers,
+                'rows'       => array_slice($rows, 0, 10),
+                'separator'  => $parsed['sep'],
+                'total_rows' => count($rows),
+                'team'       => ['id' => $team_id, 'name' => $team['name'], 'season' => $team['season_label']],
+            ]);
+        }
+
+        $col = function (string $key) use ($mapping, $headers): int {
+            $name = $mapping[$key] ?? '';
+            if ($name === '') return -1;
+            $idx = array_search($name, $headers, true);
+            return $idx !== false ? (int)$idx : -1;
+        };
+        $dateCol  = $col('date');
+        $timeCol  = $col('time');
+        $numCol   = $col('match_number');
+        $homeCol  = $col('home_team');
+        $awayCol  = $col('away_team');
+        $compCol  = $col('competition');
+        $venueCol = $col('venue');
+
+        if ($dateCol < 0)                 fail('Colonne "date" obligatoire dans le mapping');
+        if ($homeCol < 0 && $awayCol < 0) fail('Au moins une colonne équipe est requise, pour distinguer domicile et extérieur');
+
+        /* Matchs deja enregistres pour CETTE equipe et CETTE saison.
+         *
+         * Un re-import RAPPROCHE chaque ligne du fichier d'un match existant :
+         *  - reconnu  -> ses informations sportives sont mises a jour (date,
+         *    heure, lieu, competition, adversaire), c'est le cas du match
+         *    reprogramme ;
+         *  - inconnu  -> il est ajoute.
+         *
+         * Le statut de paiement, la date de paiement, le moyen de paiement et
+         * les notes ne sont JAMAIS touches : ce sont des saisies humaines, que
+         * le calendrier de la faitiere ne connait pas et n'a pas a ecraser.
+         */
+        $existing = [];   // id => ligne complete
+        $byNum    = [];   // numero de match  => id
+        $byDay    = [];   // date + adversaire => id
+        $exSt = $pdo->prepare('SELECT id, match_number, match_date, match_time, opponent, is_home,
+                                      competition, venue, status
+                               FROM matches WHERE season_id = ? AND team_id = ?');
+        $exSt->execute([$season_id, $team_id]);
+        foreach ($exSt->fetchAll() as $m) {
+            $id = (int)$m['id'];
+            $existing[$id] = $m;
+            $n = import_norm((string)$m['match_number']);
+            if ($n !== '' && !isset($byNum[$n])) $byNum[$n] = $id;
+            $dk = $m['match_date'] . '|' . import_norm((string)$m['opponent']);
+            if (!isset($byDay[$dk])) $byDay[$dk] = $id;
+        }
+        /* Un match deja rapproche ne peut pas l'etre une seconde fois : sans ce
+           garde-fou, deux lignes identiques dans le fichier se disputeraient le
+           meme enregistrement. */
+        $consumed = [];
+
+        /* Numeros de match deja utilises par une AUTRE equipe de la saison :
+           signe classique d'un fichier depose sur la mauvaise equipe. Signale,
+           jamais bloquant : un club peut legitimement renumeroter. */
+        $otherNum = [];
+        $oSt = $pdo->prepare('SELECT m.match_number, t.name FROM matches m JOIN teams t ON t.id = m.team_id
+                              WHERE m.season_id = ? AND m.team_id != ? AND m.match_number != ""');
+        $oSt->execute([$season_id, $team_id]);
+        foreach ($oSt->fetchAll() as $m) $otherNum[import_norm((string)$m['match_number'])] = $m['name'];
+
+        $errors    = [];
+        $warnings  = [];
+        $newOnes   = [];
+        $updates   = [];   // matchs reconnus dont une information a change
+        $unchanged = 0;
+
+        foreach ($rows as $idx => $row) {
+            $lineNum = $idx + 2;
+            if (count(array_filter($row, fn($c) => $c !== '')) === 0) continue;
+
+            $dateRaw = $row[$dateCol] ?? '';
+            $date    = normalize_date($dateRaw);
+            if ($date === null) {
+                $errors[] = "Ligne $lineNum : date non reconnue ($dateRaw)";
+                continue;
+            }
+
+            $home = $homeCol >= 0 ? trim((string)($row[$homeCol] ?? '')) : '';
+            $away = $awayCol >= 0 ? trim((string)($row[$awayCol] ?? '')) : '';
+
+            /* Le mot-cle ne sert qu'a situer le club, jamais a identifier
+               l'equipe : c'est le choix fait a l'ecran qui fait foi. */
+            $isHome = $home !== '' && stripos($home, $club_keyword) !== false;
+            $isAway = $away !== '' && stripos($away, $club_keyword) !== false;
+
+            if (!$isHome && !$isAway) {
+                $errors[] = "Ligne $lineNum : aucune des deux équipes ne contient « $club_keyword » "
+                          . '(' . ($home ?: '?') . ' / ' . ($away ?: '?') . ')';
+                continue;
+            }
+            if ($isHome && $isAway) {
+                $warnings[] = "Ligne $lineNum : les deux équipes contiennent « $club_keyword », match compté à domicile";
+                $isAway = false;
+            }
+
+            $opponent = $isHome ? $away : $home;
+            $num      = $numCol >= 0 ? trim((string)($row[$numCol] ?? '')) : '';
+            $time     = $timeCol >= 0 ? trim((string)($row[$timeCol] ?? '')) : '';
+
+            $incoming = [
+                'match_date'   => $date,
+                'match_time'   => $time,
+                'match_number' => $num,
+                'opponent'     => $opponent,
+                'is_home'      => $isHome ? 1 : 0,
+                'competition'  => $compCol >= 0  ? trim((string)($row[$compCol] ?? ''))  : '',
+                'venue'        => $venueCol >= 0 ? trim((string)($row[$venueCol] ?? '')) : '',
+            ];
+
+            /* Rapprochement avec un match existant. Le numero de match fait foi
+               quand il existe : c'est la seule cle qui survit a un report de
+               date. Sans numero, on retombe sur date + adversaire, et un match
+               deplace a un autre jour ne peut alors pas etre reconnu — il
+               arrivera comme un nouveau match, limite inherente a un fichier
+               sans numero. */
+            $nk = import_norm($num);
+            $dk = $date . '|' . import_norm($opponent);
+            $matchId = null;
+            if ($nk !== '' && isset($byNum[$nk]))      $matchId = $byNum[$nk];
+            elseif (isset($byDay[$dk]))                $matchId = $byDay[$dk];
+
+            if ($matchId !== null && isset($consumed[$matchId])) {
+                /* Deux lignes du fichier pointent le meme match : la seconde est
+                   un doublon interne, on ne la traite pas. */
+                continue;
+            }
+
+            if ($matchId !== null) {
+                $consumed[$matchId] = true;
+                $before  = $existing[$matchId];
+                $changed = [];
+                foreach ($incoming as $f => $v) {
+                    /* Une colonne absente du mapping renvoie une chaine vide :
+                       elle ne doit pas effacer une valeur deja en base. */
+                    if ($v === '' && (string)$before[$f] !== '') continue;
+                    if ((string)$before[$f] !== (string)$v) $changed[$f] = $v;
+                }
+                if (!$changed) { $unchanged++; continue; }
+
+                if (($before['status'] ?? '') === 'paid') {
+                    $warnings[] = 'Le match ' . ($num !== '' ? "n° $num" : 'du ' . $before['match_date'])
+                                . ' est déjà payé : ses informations sont mises à jour, le paiement est conservé.';
+                }
+                $updates[] = [
+                    'id'      => $matchId,
+                    'before'  => $before,
+                    'changed' => $changed,
+                    'label'   => ($num !== '' ? "n° $num · " : '') . $before['match_date'] . ' vs ' . $before['opponent'],
+                ];
+                continue;
+            }
+
+            /* Nouveau match : on l'indexe tout de suite pour que deux lignes
+               identiques du fichier ne l'inserent pas deux fois. */
+            if ($nk !== '') {
+                if (isset($otherNum[$nk])) {
+                    $warnings[] = "Le match n° $num est déjà enregistré pour l'équipe « "
+                                . $otherNum[$nk] . " ». Vérifiez l'équipe choisie.";
+                }
+                $byNum[$nk] = -count($newOnes) - 1;
+            }
+            $byDay[$dk] = -count($newOnes) - 1;
+            $consumed[-count($newOnes) - 1] = true;
+            $newOnes[] = $incoming;
+        }
+
+        $warnings = array_values(array_unique($warnings));
+
+        /* Libelles lisibles des champs, pour montrer a l'ecran ce qui change. */
+        $fieldLabels = [
+            'match_date' => 'Date', 'match_time' => 'Heure', 'match_number' => 'N° de match',
+            'opponent' => 'Adversaire', 'is_home' => 'Domicile/extérieur',
+            'competition' => 'Compétition', 'venue' => 'Lieu',
+        ];
+        $describe = function (array $u) use ($fieldLabels): array {
+            $diff = [];
+            foreach ($u['changed'] as $f => $v) {
+                $old = (string)$u['before'][$f];
+                $new = (string)$v;
+                if ($f === 'is_home') { $old = $old ? 'domicile' : 'extérieur'; $new = $new ? 'domicile' : 'extérieur'; }
+                $diff[] = ($fieldLabels[$f] ?? $f) . ' : ' . ($old === '' ? '—' : $old) . ' → ' . ($new === '' ? '—' : $new);
+            }
+            return ['label' => $u['label'], 'paid' => ($u['before']['status'] ?? '') === 'paid', 'changes' => $diff];
+        };
+
+        /* Etape 2 : recapitulatif avant ecriture. */
+        if ($confirm === 0) {
+            out([
+                'step'           => 'confirm',
+                'team'           => ['id' => $team_id, 'name' => $team['name'], 'season' => $team['season_label']],
+                'new_count'      => count($newOnes),
+                'updated_count'  => count($updates),
+                'unchanged'      => $unchanged,
+                'error_count'    => count($errors),
+                'errors'         => array_slice($errors, 0, 30),
+                'warnings'       => $warnings,
+                'sample'         => array_slice($newOnes, 0, 10),
+                'update_sample'  => array_map($describe, array_slice($updates, 0, 15)),
+            ]);
+        }
+
+        /* Etape 3 : ecriture. Aucune equipe creee, aucune saison creee, et
+           surtout aucun champ de paiement touche. */
+        $imported = 0;
+        $updated  = 0;
+        $pdo->beginTransaction();
+        try {
+            $ins = $pdo->prepare('INSERT INTO matches (season_id, match_number, match_date, match_time, team_id, opponent, is_home, competition, venue) VALUES (?,?,?,?,?,?,?,?,?)');
+            foreach ($newOnes as $m) {
+                $ins->execute([$season_id, $m['match_number'], $m['match_date'], $m['match_time'],
+                               $team_id, $m['opponent'], $m['is_home'], $m['competition'], $m['venue']]);
+                $imported++;
+            }
+
+            /* Seules les colonnes reellement differentes sont ecrites, et la
+               liste blanche interdit d'atteindre status, paid_at, notes ou
+               payment_method depuis le contenu d'un fichier. */
+            $allowed = ['match_date', 'match_time', 'match_number', 'opponent', 'is_home', 'competition', 'venue'];
+            foreach ($updates as $u) {
+                $set = [];
+                $val = [];
+                foreach ($u['changed'] as $f => $v) {
+                    if (!in_array($f, $allowed, true)) continue;
+                    $set[] = "$f = ?";
+                    $val[] = $v;
+                }
+                if (!$set) continue;
+                $val[] = $u['id'];
+                $val[] = $season_id;
+                $val[] = $team_id;
+                $pdo->prepare('UPDATE matches SET ' . implode(', ', $set)
+                            . ' WHERE id = ? AND season_id = ? AND team_id = ?')->execute($val);
+                $updated++;
+            }
+
+            $cnt = $pdo->prepare('SELECT COUNT(*) FROM matches WHERE season_id = ?');
+            $cnt->execute([$season_id]);
+            $pdo->prepare('UPDATE seasons SET match_count = ? WHERE id = ?')
+                ->execute([(int)$cnt->fetchColumn(), $season_id]);
+            $pdo->commit();
+        } catch (\Exception $e) {
+            $pdo->rollBack();
+            fail('Erreur lors de l\'import : ' . $e->getMessage(), 500);
+        }
+
+        out([
+            'ok'          => true,
+            'team'        => ['id' => $team_id, 'name' => $team['name'], 'season' => $team['season_label']],
+            'season_id'   => $season_id,
+            'imported'    => $imported,
+            'updated'     => $updated,
+            'unchanged'   => $unchanged,
+            'error_count' => count($errors),
+            'errors'      => array_slice($errors, 0, 30),
+            'warnings'    => $warnings,
+        ]);
+    }
+
+    /* ============ IMPORT CSV (ancien, global) ============ */
 
     case 'import_csv': {
         require_auth();
+
+        /* Cet import identifiait les equipes par leur nom dans le fichier et en
+           creait une des qu'il ne reconnaissait pas l'orthographe : c'est
+           precisement ce que le referentiel corrige. On le ferme des que le
+           referentiel existe, plutot que de laisser deux chemins d'import dont
+           l'un repeuple la base d'equipes parasites. */
+        if (club_active()) {
+            fail("L'import global est remplacé par l'import du calendrier équipe par équipe, "
+               . "qui n'a plus besoin de reconnaître les noms d'équipes du fichier.", 410);
+        }
 
         $confirm      = (int)($_GET['confirm'] ?? 0);
         $season_label = s($_POST, 'season_label', 'Saison ' . date('Y') . '-' . (date('Y') + 1));
@@ -716,6 +1313,7 @@ switch ($action) {
     case 'stats': {
         require_auth();
         $pdo = db();
+        club_sync($pdo);
 
         $season_id = resolve_season_id($pdo, (int)($_GET['season_id'] ?? 0));
 
@@ -794,9 +1392,11 @@ switch ($action) {
     case 'categories': {
         require_auth();
         if ($method === 'GET') {
+            club_sync(db());
             $rows = db()->query('SELECT * FROM categories ORDER BY sort_order, name')->fetchAll();
             out($rows);
         }
+        if (club_active()) club_readonly('Les catégories');
         if ($method === 'POST') {
             $name  = s($b, 'name');
             $order = i($b, 'sort_order', 100);

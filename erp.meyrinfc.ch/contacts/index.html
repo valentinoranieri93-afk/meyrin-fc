@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contacts · Meyrin FC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<!-- Conversion Excel -> CSV dans le navigateur, comme l'import de calendrier
+     d'Arbitrage : aucune extension serveur n'est nécessaire pour lire un .xlsx. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --jaune:#ffdd00;--jaune-soft:#FFF3C4;
+  --noir:#15140F;--noir-3:#2C2A21;--encre:#1A1915;
+  --gris:#6E6C61;--gris-2:#9A988C;--ligne:#E9E6DC;--ligne-2:#F0EDE4;
+  --bg:#F6F4ED;--carte:#FFFFFF;
+  --vert:#1F9D5B;--vert-bg:#E4F4EA;
+  --rouge:#D8463A;--rouge-bg:#FBE7E4;
+  --orange:#E8902A;--orange-bg:#FCEEDB;
+  --bleu:#3B6FE0;--bleu-bg:#E6EDFB;
+  --or:#8A6D1F;--or-bg:#F6EFDC;
+  --ombre:0 1px 2px rgba(20,18,10,.04),0 6px 20px rgba(20,18,10,.06);
+  --r:14px;--r-s:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Inter",system-ui,sans-serif;background:var(--bg);color:var(--encre);font-size:14px;line-height:1.5}
+a{color:inherit}
+.hidden{display:none!important}
+
+/* ── Structure ── */
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 24px;background:var(--carte);border-bottom:1px solid var(--ligne)}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand-t{font-family:"Sora";font-weight:800;font-size:16px;color:var(--noir)}
+.brand-s{font-size:12px;color:var(--gris-2)}
+.top-r{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--gris)}
+.wrap{display:grid;grid-template-columns:210px 1fr;min-height:calc(100vh - 60px)}
+@media(max-width:860px){.wrap{grid-template-columns:1fr}.side{display:flex;overflow-x:auto;border-right:none;border-bottom:1px solid var(--ligne)}}
+.side{background:var(--carte);border-right:1px solid var(--ligne);padding:16px 12px}
+.nav{display:flex;align-items:center;gap:9px;width:100%;padding:9px 12px;border:none;background:none;border-radius:var(--r-s);
+     font:inherit;font-size:13.5px;font-weight:500;color:var(--noir-3);cursor:pointer;text-align:left;white-space:nowrap}
+.nav:hover{background:var(--bg)}
+.nav.active{background:var(--noir);color:#F6F4ED;font-weight:600}
+.nav-b{margin-left:auto;background:var(--rouge);color:#fff;font-size:11px;font-weight:700;border-radius:20px;padding:1px 7px}
+.nav.active .nav-b{background:var(--jaune);color:var(--noir)}
+.main{padding:22px 24px;min-width:0}
+.page{display:none}.page.active{display:block}
+.h1{font-family:"Sora";font-size:20px;font-weight:800;color:var(--noir);margin-bottom:4px}
+.sub{font-size:13px;color:var(--gris);margin-bottom:18px;max-width:70ch;line-height:1.6}
+
+/* ── Éléments ── */
+.card{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r);box-shadow:var(--ombre);overflow:hidden;margin-bottom:16px}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--ligne-2)}
+.card-t{font-family:"Sora";font-size:14px;font-weight:700;color:var(--noir)}
+.card-b{padding:16px 18px}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border:1px solid transparent;border-radius:var(--r-s);
+     font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--noir);color:#F6F4ED;white-space:nowrap}
+.btn:hover{opacity:.9}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-g{background:var(--carte);color:var(--noir);border-color:var(--ligne)}
+.btn-g:hover{background:var(--bg)}
+.btn-d{background:var(--rouge-bg);color:var(--rouge)}
+.btn-s{padding:5px 10px;font-size:12px}
+.inp,.sel{width:100%;padding:8px 11px;border:1px solid var(--ligne);border-radius:var(--r-s);background:var(--carte);
+     color:var(--encre);font:inherit;font-size:13.5px}
+.inp:focus,.sel:focus{outline:none;border-color:var(--noir)}
+.inp:disabled{background:var(--bg);color:var(--gris)}
+.f{margin-bottom:12px}
+.f label{display:block;font-size:12px;font-weight:600;color:var(--noir-3);margin-bottom:4px}
+.f small{display:block;font-size:11.5px;color:var(--gris-2);margin-top:3px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.grid2{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);
+   padding:10px 14px;background:var(--bg);border-bottom:1px solid var(--ligne);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--ligne-2);font-size:13.5px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#FCFBF7;cursor:pointer}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;
+      background:var(--ligne-2);color:var(--noir-3);white-space:nowrap}
+.pill-or{background:var(--or-bg);color:var(--or)}
+.pill-v{background:var(--vert-bg);color:var(--vert)}
+.pill-b{background:var(--bleu-bg);color:var(--bleu)}
+.pill-o{background:var(--orange-bg);color:var(--orange)}
+.pill-r{background:var(--rouge-bg);color:var(--rouge)}
+.muted{color:var(--gris-2)}
+.empty{padding:36px 18px;text-align:center;color:var(--gris-2);font-size:13.5px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.bar .inp,.bar .sel{width:auto;min-width:150px}
+.grow{flex:1;min-width:180px}
+.note{background:var(--or-bg);border:1px solid #E8DBB4;border-radius:var(--r-s);padding:11px 14px;
+      font-size:12.5px;color:#6B5600;line-height:1.6;margin-bottom:14px}
+.note-r{background:var(--rouge-bg);border-color:#F0C4BD;color:#A3281A}
+.note-b{background:var(--bleu-bg);border-color:#C6D6F5;color:#1E3E7B}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.stat{flex:1;min-width:130px;background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r-s);padding:12px 14px}
+.stat-l{font-size:11.5px;color:var(--gris-2);margin-bottom:3px}
+.stat-v{font-family:"Sora";font-size:20px;font-weight:800;color:var(--noir)}
+
+/* ── Modale ── */
+.ov{display:none;position:fixed;inset:0;background:rgba(20,18,10,.42);z-index:100;padding:20px;overflow:auto}
+.ov.open{display:flex;align-items:flex-start;justify-content:center}
+.mod{background:var(--carte);border-radius:16px;width:100%;max-width:640px;margin:auto;box-shadow:0 20px 60px rgba(20,18,10,.24)}
+.mod-h{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--ligne-2)}
+.mod-t{font-family:"Sora";font-size:16px;font-weight:800}
+.mod-b{padding:20px 22px;max-height:70vh;overflow:auto}
+.mod-f{display:flex;gap:8px;justify-content:flex-end;padding:14px 22px;border-top:1px solid var(--ligne-2)}
+.x{background:none;border:none;font-size:22px;line-height:1;color:var(--gris-2);cursor:pointer;padding:0 4px}
+.err{background:var(--rouge-bg);color:var(--rouge);border-radius:8px;padding:9px 12px;font-size:12.5px;margin-bottom:12px;display:none}
+
+/* ── Doublons ── */
+.dup{border:1px solid var(--ligne);border-radius:var(--r);margin-bottom:12px;overflow:hidden;background:var(--carte)}
+.dup-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--ligne-2);font-size:12.5px}
+.dup-b{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media(max-width:700px){.dup-b{grid-template-columns:1fr}}
+.dup-c{padding:14px 16px}
+.dup-c:first-child{border-right:1px solid var(--ligne-2)}
+.dup-n{font-weight:700;font-size:14px;margin-bottom:6px}
+.dup-l{font-size:12.5px;color:var(--gris);margin-bottom:2px}
+.dup-f{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px;border-top:1px solid var(--ligne-2);background:#FCFBF7}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;
+      background:var(--bg);border:1px solid var(--ligne);cursor:pointer;user-select:none}
+.chip.on{background:var(--noir);color:#F6F4ED;border-color:var(--noir)}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--noir);color:#F1EFE6;padding:12px 18px;border-radius:10px;
+       font-size:13px;font-weight:500;z-index:300;opacity:0;transform:translateY(70px);transition:.25s;max-width:340px}
+.toast.show{opacity:1;transform:none}
+.toast.err{background:var(--rouge)}
+.drop{border:2px dashed var(--ligne);border-radius:var(--r);padding:30px;text-align:center;color:var(--gris);cursor:pointer}
+.drop:hover,.drop.over{border-color:var(--noir);background:#FCFBF7}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand">
+    <div>
+      <div class="brand-t">Contacts</div>
+      <div class="brand-s">Référentiel partagé · Meyrin FC</div>
+    </div>
+  </div>
+  <div class="top-r">
+    <span id="who"></span>
+    <a href="/" class="btn btn-g btn-s">Retour à l'ERP</a>
+  </div>
+</div>
+
+<div class="wrap">
+  <aside class="side">
+    <button class="nav active" data-p="liste" onclick="go('liste')">Contacts</button>
+    <button class="nav" data-p="doublons" onclick="go('doublons')" id="nav-dup">
+      Doublons <span class="nav-b hidden" id="dup-count">0</span>
+    </button>
+    <button class="nav" data-p="import" onclick="go('import')" id="nav-imp">Import</button>
+    <button class="nav" data-p="lots" onclick="go('lots')" id="nav-lots">Lots</button>
+  </aside>
+
+  <main class="main">
+
+    <!-- ══════════ LISTE ══════════ -->
+    <section class="page active" id="p-liste">
+      <div class="h1">Contacts</div>
+      <div class="sub">Chaque personne n'existe qu'une fois ici, quel que soit le nombre de modules où elle intervient. Les modules y rattachent leurs propres données.</div>
+
+      <div class="bar">
+        <input class="inp grow" id="q" placeholder="Rechercher un nom, un e-mail, une ville…" oninput="debounce(loadList)">
+        <select class="sel" id="f-type" onchange="loadList()">
+          <option value="">Tous les types</option>
+          <option value="personne">Personnes</option>
+          <option value="organisation">Organisations</option>
+        </select>
+        <select class="sel" id="f-qual" onchange="loadList()"><option value="">Toutes les qualités</option></select>
+        <select class="sel" id="f-act" onchange="loadList()">
+          <option value="1">Actifs</option>
+          <option value="0">Archivés</option>
+          <option value="all">Tous</option>
+        </select>
+        <button class="btn" id="b-new" onclick="openContact(null)">+ Nouveau</button>
+        <button class="btn btn-g" id="b-exp" onclick="location.href='api.php?action=export'">Exporter</button>
+      </div>
+
+      <div class="card">
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Nom</th><th>Qualités</th><th>Contact</th><th>Présent dans</th><th>Ville</th></tr></thead>
+            <tbody id="tb"><tr><td colspan="5" class="empty">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bar" id="pager"></div>
+    </section>
+
+    <!-- ══════════ DOUBLONS ══════════ -->
+    <section class="page" id="p-doublons">
+      <div class="h1">Doublons à vérifier</div>
+      <div class="sub">Le système ne fusionne jamais deux fiches sur la seule ressemblance des noms. Ces paires attendent votre arbitrage.</div>
+      <div id="dup-list"><div class="empty">Chargement…</div></div>
+    </section>
+
+    <!-- ══════════ IMPORT ══════════ -->
+    <section class="page" id="p-import">
+      <div class="h1">Import</div>
+      <div class="sub">Deux sources : les modules déjà en service, et un fichier au format du modèle fourni. Dans les deux cas, rien n'est écrit sans un aperçu préalable.</div>
+
+      <div class="card">
+        <div class="card-h">
+          <div>
+            <div class="card-t">Reprendre les personnes déjà présentes dans les modules</div>
+            <div class="muted" style="font-size:12.5px;margin-top:3px">Employés RH, bénévoles Events, contacts Sponsors, comptes ERP.</div>
+          </div>
+          <button class="btn" onclick="syncModules()" id="b-sync">Lancer la reprise</button>
+        </div>
+        <div class="card-b">
+          <div class="note">Sans effet de bord : chaque fiche reprise est marquée de sa provenance. Relancer la reprise ne crée aucun doublon, elle rattache seulement ce qui est apparu depuis.</div>
+          <div id="sync-res"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><div class="card-t">Importer un fichier</div></div>
+        <div class="card-b">
+          <div class="note">Utilisez le modèle <strong>modele-import-contacts.xlsx</strong>. La colonne <strong>ref_odoo</strong> est ce qui rend l'import relançable : sans elle, chaque essai recréerait tout.</div>
+          <div class="drop" id="drop">
+            <div style="font-weight:600;color:var(--noir);margin-bottom:4px">Déposer le fichier ici</div>
+            <div style="font-size:12.5px">ou cliquer pour parcourir — .xlsx, .xls ou .csv</div>
+          </div>
+          <input type="file" id="file" accept=".xlsx,.xls,.csv" class="hidden">
+          <div id="file-info" class="hidden" style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--vert-bg);border-radius:var(--r-s)">
+            <span style="flex:1;font-weight:600;color:var(--vert)" id="file-name"></span>
+            <button class="btn btn-g btn-s" onclick="clearFile()">Retirer</button>
+            <button class="btn btn-s" onclick="importPreview()" id="b-prev">Analyser</button>
+          </div>
+          <div id="imp-res" style="margin-top:16px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ LOTS ══════════ -->
+    <section class="page" id="p-lots">
+      <div class="h1">Lots d'import</div>
+      <div class="sub">Chaque import forme un lot. L'annuler supprime les fiches qu'il a créées, sans toucher à celles qu'il s'est contenté de compléter.</div>
+      <div class="card">
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Date</th><th>Source</th><th>Fichier</th><th>Résultat</th><th>État</th><th></th></tr></thead>
+            <tbody id="tb-lots"><tr><td colspan="6" class="empty">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ══════════ MODALE FICHE ══════════ -->
+<div class="ov" id="ov-c">
+  <div class="mod">
+    <div class="mod-h">
+      <div class="mod-t" id="c-title">Contact</div>
+      <button class="x" onclick="closeOv('ov-c')">&times;</button>
+    </div>
+    <div class="mod-b">
+      <div class="err" id="c-err"></div>
+      <div class="f">
+        <label>Type</label>
+        <select class="sel" id="c-type" onchange="typeChanged()">
+          <option value="personne">Personne</option>
+          <option value="organisation">Organisation</option>
+        </select>
+      </div>
+      <div class="grid2">
+        <div class="f" id="c-first-f"><label>Prénom</label><input class="inp" id="c-first"></div>
+        <div class="f"><label>Nom <span style="color:var(--rouge)">*</span></label><input class="inp" id="c-last"></div>
+      </div>
+      <div class="grid2">
+        <div class="f"><label>E-mail</label><input class="inp" id="c-email" type="email"></div>
+        <div class="f"><label>Mobile</label><input class="inp" id="c-mobile" placeholder="079 …"></div>
+      </div>
+      <div class="grid2">
+        <div class="f"><label>Téléphone fixe</label><input class="inp" id="c-phone"><small>Numéro du foyer ou du secrétariat : jamais utilisé seul pour identifier quelqu'un.</small></div>
+        <div class="f"><label>Date de naissance</label><input class="inp" id="c-dob" placeholder="AAAA-MM-JJ"></div>
+      </div>
+      <div class="f"><label>Qualités</label><div class="chips" id="c-qual"></div></div>
+      <div class="f"><label>Rue</label><input class="inp" id="c-street"></div>
+      <div class="grid2">
+        <div class="f"><label>NPA</label><input class="inp" id="c-zip"></div>
+        <div class="f"><label>Ville</label><input class="inp" id="c-city"></div>
+      </div>
+      <div class="f" id="c-bank-f"><label>IBAN</label><input class="inp" id="c-iban"></div>
+      <div class="f"><label>Notes</label><input class="inp" id="c-notes"></div>
+      <div class="f"><label><input type="checkbox" id="c-active" checked style="width:auto;margin-right:6px">Fiche active</label></div>
+      <div id="c-meta"></div>
+    </div>
+    <div class="mod-f">
+      <button class="btn btn-g" onclick="closeOv('ov-c')">Annuler</button>
+      <button class="btn" onclick="saveContact()" id="b-save">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const P = window.MFC || {};
+let ST = { page:1, file:null, isExcel:false, contact:null, qualities:[], preview:null };
+
+const QUALITES = ['salarie','entraineur','benevole','joueur','membre','parent','dirigeant','arbitre','contact_sponsor','fournisseur','autre'];
+const QLABEL = {salarie:'Salarié',entraineur:'Entraîneur',benevole:'Bénévole',joueur:'Joueur',membre:'Membre',
+  parent:'Parent',dirigeant:'Dirigeant',arbitre:'Arbitre',contact_sponsor:'Contact sponsor',fournisseur:'Fournisseur',autre:'Autre'};
+
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function toast(m,t){const e=document.getElementById('toast');e.textContent=m;e.className='toast show'+(t==='err'?' err':'');setTimeout(()=>e.className='toast',3400);}
+function openOv(id){document.getElementById(id).classList.add('open');}
+function closeOv(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.ov').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
+
+let _t;function debounce(f){clearTimeout(_t);_t=setTimeout(f,280);}
+
+async function api(action, opts={}){
+  const p = opts.params ? '&'+new URLSearchParams(opts.params) : '';
+  const o = {method: opts.method||'GET'};
+  if(opts.form) o.body = opts.form;
+  else if(opts.body){o.headers={'Content-Type':'application/json'};o.body=JSON.stringify(opts.body);}
+  const r = await fetch(`api.php?action=${action}${p}`, o);
+  const d = await r.json().catch(()=>({error:'Réponse illisible'}));
+  if(!r.ok){ if(r.status===401) location.href='/?redirect='+encodeURIComponent(location.href); throw new Error(d.error||'Erreur '+r.status); }
+  return d;
+}
+
+/* ── Navigation ── */
+function go(p){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));
+  document.getElementById('p-'+p).classList.add('active');
+  document.querySelector(`.nav[data-p="${p}"]`).classList.add('active');
+  if(p==='liste') loadList();
+  if(p==='doublons') loadDuplicates();
+  if(p==='lots') loadBatches();
+}
+
+/* ── Permissions : masquer ce qui est interdit ── */
+function applyPerms(){
+  document.getElementById('who').textContent = P.name||'';
+  if(!P.edit)   document.getElementById('b-new').classList.add('hidden');
+  if(!P.export) document.getElementById('b-exp').classList.add('hidden');
+  if(!P.import){document.getElementById('nav-imp').classList.add('hidden');document.getElementById('nav-lots').classList.add('hidden');}
+  if(!P.merge)  document.getElementById('nav-dup').classList.add('hidden');
+  if(!P.bank)   document.getElementById('c-bank-f').classList.add('hidden');
+}
+
+/* ══════════ LISTE ══════════ */
+async function loadList(){
+  const tb = document.getElementById('tb');
+  const params = {q:document.getElementById('q').value, type:document.getElementById('f-type').value,
+                  quality:document.getElementById('f-qual').value, active:document.getElementById('f-act').value,
+                  page:ST.page, per_page:50};
+  let d;
+  try{ d = await api('list',{params}); }catch(e){ tb.innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`; return; }
+
+  setDupCount(d.pending_duplicates);
+  if(!d.contacts.length){ tb.innerHTML='<tr><td colspan="5" class="empty">Aucun contact.</td></tr>'; document.getElementById('pager').innerHTML=''; return; }
+
+  tb.innerHTML = d.contacts.map(c=>`<tr onclick="openContact(${c.id})">
+    <td><strong>${esc(c.last_name)}</strong>${c.first_name?' '+esc(c.first_name):''}
+        ${c.type==='organisation'?'<span class="pill" style="margin-left:6px">org.</span>':''}
+        ${c.active==0?'<span class="pill pill-r" style="margin-left:6px">archivé</span>':''}</td>
+    <td>${(c.qualities||[]).map(q=>`<span class="pill pill-or">${esc(QLABEL[q]||q)}</span>`).join(' ')||'<span class="muted">—</span>'}</td>
+    <td>${c.email?esc(c.email):'<span class="muted">—</span>'}${c.mobile?'<br><span class="muted" style="font-size:12px">'+esc(c.mobile)+'</span>':''}</td>
+    <td>${(c.modules||[]).map(m=>`<span class="pill pill-b">${esc(m)}</span>`).join(' ')||'<span class="muted">—</span>'}</td>
+    <td class="muted">${esc(c.city||'—')}</td>
+  </tr>`).join('');
+
+  const pages = Math.ceil(d.total/d.per_page);
+  document.getElementById('pager').innerHTML = pages>1
+    ? `<button class="btn btn-g btn-s" ${d.page<=1?'disabled':''} onclick="ST.page--;loadList()">Précédent</button>
+       <span class="muted">Page ${d.page} sur ${pages} · ${d.total} contacts</span>
+       <button class="btn btn-g btn-s" ${d.page>=pages?'disabled':''} onclick="ST.page++;loadList()">Suivant</button>`
+    : `<span class="muted">${d.total} contact${d.total>1?'s':''}</span>`;
+}
+
+function setDupCount(n){
+  const b=document.getElementById('dup-count');
+  b.textContent=n; b.classList.toggle('hidden', !n);
+}
+
+async function loadQualities(){
+  try{
+    const d = await api('qualities');
+    const sel = document.getElementById('f-qual');
+    sel.innerHTML = '<option value="">Toutes les qualités</option>' +
+      d.qualities.map(q=>`<option value="${esc(q.quality)}">${esc(QLABEL[q.quality]||q.quality)} (${q.n})</option>`).join('');
+  }catch(e){}
+}
+
+/* ══════════ FICHE ══════════ */
+function typeChanged(){
+  const org = document.getElementById('c-type').value==='organisation';
+  /* Une organisation n'a pas de prénom : le champ disparaît au lieu d'inviter
+     à le remplir. */
+  document.getElementById('c-first-f').style.display = org?'none':'';
+}
+
+function renderQualChips(sel){
+  document.getElementById('c-qual').innerHTML = QUALITES.map(q=>
+    `<span class="chip${sel.includes(q)?' on':''}" data-q="${q}" onclick="this.classList.toggle('on')">${esc(QLABEL[q])}</span>`).join('');
+}
+
+async function openContact(id){
+  document.getElementById('c-err').style.display='none';
+  ST.contact = null;
+  const set=(k,v)=>document.getElementById(k).value=v??'';
+  if(id){
+    let d; try{ d = await api('get',{params:{id}}); }catch(e){ toast(e.message,'err'); return; }
+    const c = d.contact; ST.contact = c;
+    document.getElementById('c-title').textContent = 'Fiche de '+[c.first_name,c.last_name].filter(Boolean).join(' ');
+    set('c-type',c.type); set('c-first',c.first_name); set('c-last',c.last_name); set('c-email',c.email);
+    set('c-mobile',c.mobile); set('c-phone',c.phone); set('c-dob',c.birth_date);
+    set('c-street',c.street); set('c-zip',c.zip); set('c-city',c.city); set('c-iban',c.iban||'');
+    set('c-notes',c.notes);
+    document.getElementById('c-active').checked = c.active==1;
+    renderQualChips(c.qualities||[]);
+    document.getElementById('c-meta').innerHTML = `
+      <div class="note note-b" style="margin-top:8px">
+        <strong>Identifiant partagé :</strong> ${esc(c.ref_id)}<br>
+        ${c.links && c.links.length
+          ? 'Rattaché à : '+c.links.map(l=>`<span class="pill pill-b">${esc(l.module)} · ${esc(l.local_id)}</span>`).join(' ')
+          : 'Aucun module ne s\'y rattache encore.'}
+        ${c.iban_hidden?'<br><span class="muted">Coordonnées bancaires masquées : permission requise.</span>':''}
+      </div>`;
+  }else{
+    document.getElementById('c-title').textContent = 'Nouveau contact';
+    ['c-first','c-last','c-email','c-mobile','c-phone','c-dob','c-street','c-zip','c-city','c-iban','c-notes']
+      .forEach(k=>set(k,''));
+    document.getElementById('c-type').value='personne';
+    document.getElementById('c-active').checked = true;
+    renderQualChips([]);
+    document.getElementById('c-meta').innerHTML =
+      `<div class="note" style="margin-top:8px">Si cette personne existe déjà, le système la reconnaîtra et complétera sa fiche au lieu d'en créer une seconde.</div>`;
+  }
+  typeChanged();
+  document.getElementById('b-save').classList.toggle('hidden', !P.edit);
+  ['c-type','c-first','c-last','c-email','c-mobile','c-phone','c-dob','c-street','c-zip','c-city','c-notes','c-active']
+    .forEach(k=>document.getElementById(k).disabled = !P.edit);
+  document.getElementById('c-iban').disabled = !P.bank;
+  openOv('ov-c');
+}
+
+async function saveContact(){
+  const g=k=>document.getElementById(k).value.trim();
+  const body = {
+    id: ST.contact ? ST.contact.id : 0,
+    type:g('c-type'), first_name:g('c-first'), last_name:g('c-last'), email:g('c-email'),
+    mobile:g('c-mobile'), phone:g('c-phone'), birth_date:g('c-dob'), street:g('c-street'),
+    zip:g('c-zip'), city:g('c-city'), notes:g('c-notes'),
+    active: document.getElementById('c-active').checked?1:0,
+    qualities: [...document.querySelectorAll('#c-qual .chip.on')].map(c=>c.dataset.q),
+  };
+  if(P.bank) body.iban = g('c-iban');
+  try{
+    const r = await api('save',{method:'POST',body});
+    closeOv('ov-c');
+    toast(r.message || 'Contact enregistré');
+    loadList(); loadQualities();
+  }catch(e){
+    const el=document.getElementById('c-err'); el.textContent=e.message; el.style.display='block';
+  }
+}
+
+/* ══════════ DOUBLONS ══════════ */
+async function loadDuplicates(){
+  const box=document.getElementById('dup-list');
+  let d; try{ d = await api('duplicates'); }catch(e){ box.innerHTML=`<div class="empty">${esc(e.message)}</div>`; return; }
+  setDupCount(d.total);
+  if(!d.total){ box.innerHTML='<div class="card"><div class="empty">Aucun doublon en attente. Rien à arbitrer.</div></div>'; return; }
+
+  box.innerHTML = d.duplicates.map(x=>{
+    const col=(p)=>`<div class="dup-c">
+        <div class="dup-n">${esc(x['f'+p]||'')} ${esc(x['l'+p]||'')}</div>
+        <div class="dup-l">${x['e'+p]?esc(x['e'+p]):'<span class="muted">pas d\'e-mail</span>'}</div>
+        <div class="dup-l">${x['d'+p]?'Né(e) le '+esc(x['d'+p]):'<span class="muted">date de naissance inconnue</span>'}</div>
+        <div class="dup-l">${x['c'+p]?esc(x['c'+p]):'<span class="muted">ville inconnue</span>'}</div>
+        <div style="margin-top:7px">${(x['modules_'+p]||[]).map(m=>`<span class="pill pill-b">${esc(m)}</span>`).join(' ')||'<span class="muted" style="font-size:12px">aucun module</span>'}</div>
+      </div>`;
+    return `<div class="dup">
+      <div class="dup-h"><span><strong>Même personne ?</strong> ${esc(x.reasons)}</span><span class="pill pill-o">confiance ${x.score}%</span></div>
+      <div class="dup-b">${col('a')}${col('b')}</div>
+      <div class="dup-f">
+        <button class="btn btn-s" onclick="merge(${x.ida},${x.idb})">Fusionner — garder « ${esc(x.fa)} ${esc(x.la)} »</button>
+        <button class="btn btn-g btn-s" onclick="merge(${x.idb},${x.ida})">Fusionner — garder « ${esc(x.fb)} ${esc(x.lb)} »</button>
+        <button class="btn btn-g btn-s" onclick="separate(${x.ida},${x.idb})">Deux personnes différentes</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function merge(keep,drop){
+  if(!confirm(`Fusionner ces deux fiches ?\n\nLa fiche absorbée disparaît, mais rien n'est perdu : ses coordonnées, ses qualités et ses rattachements aux modules passent sur la fiche conservée.`)) return;
+  try{ await api('merge',{method:'POST',body:{keep_id:keep,drop_id:drop}}); toast('Fiches fusionnées'); loadDuplicates(); }
+  catch(e){ toast(e.message,'err'); }
+}
+async function separate(a,b){
+  try{ await api('separate',{method:'POST',body:{a,b}}); toast('Marquées comme distinctes'); loadDuplicates(); }
+  catch(e){ toast(e.message,'err'); }
+}
+
+/* ══════════ REPRISE DEPUIS LES MODULES ══════════ */
+async function syncModules(){
+  const b=document.getElementById('b-sync');
+  b.disabled=true; b.innerHTML='<span class="spin"></span> Reprise…';
+  try{
+    const r = await api('sync_modules',{method:'POST',body:{}});
+    const s = r.stats;
+    const line=(k,l)=>s[k]?`<tr><td>${l}</td><td>${s[k].lus}</td><td>${s[k].crees}</td><td>${s[k].relies}</td></tr>`:'';
+    document.getElementById('sync-res').innerHTML = `
+      <table style="margin-top:6px"><thead><tr><th>Module</th><th>Lus</th><th>Créés</th><th>Reconnus</th></tr></thead>
+      <tbody>${line('rh','Ressources Humaines')}${line('events','Événements')}${line('sponsors','Sponsoring')}${line('erp','Comptes ERP')}</tbody></table>
+      <div class="note note-b" style="margin-top:12px">
+        <strong>${s.total_contacts} contacts</strong> au total.
+        ${s.a_verifier ? s.a_verifier+' rapprochement(s) à confirmer dans l\'onglet Doublons.' : 'Aucun doublon à arbitrer.'}
+      </div>`;
+    setDupCount(s.a_verifier);
+    toast('Reprise terminée');
+  }catch(e){ toast(e.message,'err'); }
+  b.disabled=false; b.textContent='Lancer la reprise';
+}
+
+/* ══════════ IMPORT FICHIER ══════════ */
+const drop=document.getElementById('drop'), fileInput=document.getElementById('file');
+drop.addEventListener('click',()=>fileInput.click());
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over');});
+drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',function(){if(this.files[0])setFile(this.files[0]);});
+
+function setFile(f){
+  ST.file=f; ST.isExcel=/\.(xlsx|xls)$/i.test(f.name);
+  document.getElementById('file-name').textContent = f.name+' ('+Math.round(f.size/1024)+' Ko)';
+  document.getElementById('file-info').classList.remove('hidden');
+  drop.classList.add('hidden');
+  document.getElementById('imp-res').innerHTML='';
+}
+function clearFile(){
+  ST.file=null; fileInput.value='';
+  document.getElementById('file-info').classList.add('hidden');
+  drop.classList.remove('hidden');
+  document.getElementById('imp-res').innerHTML='';
+}
+
+/* La feuille « Contacts » est celle qui porte les données : le classeur en
+   compte quatre, prendre la première donnerait le mode d'emploi. */
+async function fileAsCsv(){
+  if(!ST.isExcel) return ST.file;
+  return new Promise((res,rej)=>{
+    const rd=new FileReader();
+    rd.onload=e=>{
+      try{
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:false});
+        const name = wb.SheetNames.find(n=>/contact/i.test(n)) || wb.SheetNames[0];
+        const csv=XLSX.utils.sheet_to_csv(wb.Sheets[name],{FS:';'});
+        res(new File([new Blob(['﻿'+csv],{type:'text/csv'})], ST.file.name.replace(/\.(xlsx|xls)$/i,'.csv')));
+      }catch(err){ rej(new Error('Lecture Excel impossible : '+err.message)); }
+    };
+    rd.onerror=()=>rej(new Error('Erreur de lecture du fichier'));
+    rd.readAsArrayBuffer(ST.file);
+  });
+}
+
+async function importPreview(){
+  const b=document.getElementById('b-prev'); b.disabled=true; b.innerHTML='<span class="spin"></span>';
+  try{
+    const fd=new FormData(); fd.append('csv', await fileAsCsv());
+    const r = await api('import_preview',{method:'POST',form:fd});
+    ST.preview=r;
+    document.getElementById('imp-res').innerHTML = `
+      <div class="stats">
+        <div class="stat"><div class="stat-l">Nouveaux contacts</div><div class="stat-v">${r.nouveaux}</div></div>
+        <div class="stat"><div class="stat-l">Déjà connus</div><div class="stat-v">${r.reconnus}</div></div>
+        <div class="stat"><div class="stat-l">À vérifier</div><div class="stat-v">${r.a_verifier}</div></div>
+        <div class="stat"><div class="stat-l">Lignes en erreur</div><div class="stat-v">${r.erreurs}</div></div>
+      </div>
+      ${r.erreurs?`<div class="note note-r">${r.liste_erreurs.map(esc).join('<br>')}</div>`:''}
+      ${r.a_verifier?`<div class="note">${r.a_verifier} ligne(s) ressemblent à un contact existant sans certitude. Elles seront créées puis proposées à l'arbitrage dans l'onglet Doublons.</div>`:''}
+      <div class="card"><div style="overflow-x:auto"><table>
+        <thead><tr><th>Ligne</th><th>Nom</th><th>E-mail</th><th>Résultat</th></tr></thead>
+        <tbody>${r.apercu.map(a=>`<tr><td class="muted">${a.ligne}</td><td>${esc(a.nom)}</td><td>${esc(a.email||'—')}</td>
+          <td>${a.verdict==='certain'?'<span class="pill pill-v">déjà connu</span>':a.verdict==='probable'?'<span class="pill pill-o">à vérifier</span>':'<span class="pill pill-b">nouveau</span>'}
+          ${a.raisons?'<span class="muted" style="font-size:12px"> '+esc(a.raisons)+'</span>':''}</td></tr>`).join('')}</tbody>
+      </table></div></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button class="btn btn-g" onclick="clearFile()">Annuler</button>
+        <button class="btn" onclick="importCommit()" ${r.lignes?'':'disabled'}>Importer ${r.lignes} ligne(s)</button>
+      </div>`;
+  }catch(e){ toast(e.message,'err'); }
+  b.disabled=false; b.textContent='Analyser';
+}
+
+async function importCommit(){
+  try{
+    const fd=new FormData(); fd.append('csv', await fileAsCsv());
+    const r = await api('import_commit',{method:'POST',form:fd});
+    document.getElementById('imp-res').innerHTML = `
+      <div class="note note-b">
+        <strong>Import terminé — lot n°${r.batch_id}.</strong><br>
+        ${r.crees} fiche(s) créée(s) · ${r.relies} reconnue(s) et complétée(s) · ${r.organisations_liees} rattachement(s) à une organisation.
+        ${r.signales?'<br>'+r.signales+' à arbitrer dans l\'onglet Doublons.':''}
+        ${r.backup?'<br><span class="muted">Sauvegarde avant écriture : '+esc(r.backup)+'</span>':''}
+        <br><br>Un résultat qui ne convient pas ? L'onglet <strong>Lots</strong> permet d'annuler cet import en entier.
+      </div>`;
+    setDupCount(r.pending_duplicates);
+    clearFile();
+    loadQualities();
+    toast('Import terminé');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+/* ══════════ LOTS ══════════ */
+async function loadBatches(){
+  const tb=document.getElementById('tb-lots');
+  let d; try{ d = await api('batches'); }catch(e){ tb.innerHTML=`<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`; return; }
+  if(!d.batches.length){ tb.innerHTML='<tr><td colspan="6" class="empty">Aucun import pour le moment.</td></tr>'; return; }
+  tb.innerHTML = d.batches.map(b=>{
+    let s={}; try{ s=JSON.parse(b.stats||'{}'); }catch(e){}
+    const done = b.status==='rolled_back';
+    return `<tr>
+      <td class="muted">${esc((b.created_at||'').slice(0,16))}</td>
+      <td>${b.source==='modules'?'Reprise des modules':'Fichier'}</td>
+      <td>${esc(b.filename||'—')}</td>
+      <td class="muted">${s.crees!==undefined?`${s.crees} créés · ${s.relies||0} reconnus`:'—'}</td>
+      <td>${done?'<span class="pill pill-r">annulé</span>':'<span class="pill pill-v">appliqué</span>'}</td>
+      <td>${done?'':`<button class="btn btn-d btn-s" onclick="rollback(${b.id})">Annuler ce lot</button>`}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function rollback(id){
+  if(!confirm(`Annuler ce lot ?\n\nLes fiches créées par cet import seront supprimées. Celles qu'il s'est contenté de compléter ne sont pas touchées.`)) return;
+  try{ const r = await api('batch_rollback',{method:'POST',body:{id}}); toast(r.message); loadBatches(); loadList(); }
+  catch(e){ toast(e.message,'err'); }
+}
+
+/* ══════════ Démarrage ══════════ */
+applyPerms();
+loadQualities();
+loadList();
+</script>
+</body>
+</html>
