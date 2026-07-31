@@ -785,6 +785,11 @@ th.chk-col,td.chk-col{width:40px}
         <input type="text" id="em-competition" class="form-input" placeholder="ex : Championnat R2">
       </div>
     </div>
+    <div class="form-field">
+      <label class="form-label">Indemnité pour ce match</label>
+      <input type="number" step="0.5" min="0" id="em-fee" class="form-input" placeholder="Tarif standard de l'équipe">
+      <div id="em-fee-hint" style="font-size:11.5px;color:var(--gris);margin-top:4px"></div>
+    </div>
     <div class="form-field" style="margin-bottom:0">
       <label class="form-label">Notes</label>
       <input type="text" id="em-notes" class="form-input" placeholder="Optionnel">
@@ -891,6 +896,7 @@ const S = {
   importParsed: null,
   pendingPayIds: null,
   pendingPayMatchId: null,
+  coachPayRefresh: null,
 };
 
 const CATEGORIES = ['U6','U8','U10','U12','U14','U16','U18','M21','Seniors','Dames','Vétérans'];
@@ -996,8 +1002,14 @@ document.getElementById('modal-confirm').addEventListener('click', async () => {
     S.selectedMatches.clear();
     updateBulkPayBtn();
     toast(`${ids.length} match${ids.length > 1 ? 's' : ''} marqué${ids.length > 1 ? 's' : ''} comme payé${ids.length > 1 ? 's' : ''}`);
-    await loadMatches();
-    await loadStats();
+    await withScrollPreserved(() => Promise.all([loadMatches(), loadStats()]));
+    // Payé depuis le panneau déplié d'une équipe dans "Par entraîneur" : on rafraîchit
+    // ce panneau précis plutôt que de le refermer en reconstruisant tout l'onglet.
+    if (S.coachPayRefresh) {
+      const { expand, teamId } = S.coachPayRefresh;
+      S.coachPayRefresh = null;
+      if (expand?.isConnected) await withScrollPreserved(() => renderTeamMatchesTable(expand, teamId));
+    }
   } catch(e) { toast(e.message, 'err'); }
 });
 
@@ -1413,13 +1425,13 @@ function renderMatches() {
         <div class="match-sub">${m.match_number ? `<span style="font-weight:600;color:var(--gris)">#${esc(m.match_number)}</span>${m.competition ? ' · ' : ''}` : ''}${m.competition ? esc(m.competition) : ''}</div>
       </td>
       <td>${esc(m.coach_name) || '<span style="color:var(--orange);font-size:12px">Non configuré</span>'}</td>
-      <td>${m.status === 'cancelled' ? '<span style="color:var(--gris)">–</span>' : `<strong>${fmtCHF(m.fee_amount)}</strong>`}</td>
+      <td>${m.status === 'cancelled' ? '<span style="color:var(--gris)">–</span>' : `<strong>${fmtCHF(m.fee_amount)}</strong>${m.fee_override !== null && m.fee_override !== undefined ? ` <span class="badge b-info" style="font-size:10px;padding:2px 6px" title="Indemnité négociée pour ce match, différente du tarif standard de l'équipe">négocié</span>` : ''}`}</td>
       <td>${badgeStatus(m.status)}${m.paid_at ? `<br><span style="font-size:11px;color:var(--gris)">${fmtDate(m.paid_at)}</span>` : ''}</td>
       <td><div class="action-btns">
-        ${S.user?.role === 'admin' && m.status === 'pending' ? `<button class="btn btn-success btn-sm" onclick="onPayMatch(${m.id})">Payer</button>` : ''}
-        ${S.user?.role === 'admin' && m.status === 'pending' ? `<button class="btn btn-danger btn-sm" onclick="onCancelMatch(${m.id})">Annuler</button>` : ''}
-        ${S.user?.role === 'admin' && m.status !== 'pending' ? `<button class="btn btn-ghost btn-sm" onclick="onResetMatch(${m.id})">Rétablir</button>` : ''}
-        ${S.user?.role === 'admin' ? `<button class="btn btn-ghost btn-sm" onclick="onEditMatch(${m.id})" title="Modifier">
+        ${MFC.matchesPay && m.status === 'pending' ? `<button class="btn btn-success btn-sm" onclick="onPayMatch(${m.id})">Payer</button>` : ''}
+        ${MFC.matchesEdit && m.status === 'pending' ? `<button class="btn btn-danger btn-sm" onclick="onCancelMatch(${m.id})">Annuler</button>` : ''}
+        ${MFC.matchesEdit && m.status !== 'pending' ? `<button class="btn btn-ghost btn-sm" onclick="onResetMatch(${m.id})">Rétablir</button>` : ''}
+        ${MFC.matchesEdit ? `<button class="btn btn-ghost btn-sm" onclick="onEditMatch(${m.id})" title="Modifier">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
         <button class="btn btn-danger btn-sm" onclick="onDeleteMatch(${m.id})" title="Supprimer">
@@ -1471,11 +1483,24 @@ document.getElementById('f-match-num').addEventListener('input', () => { S.match
 
 function onPayMatch(id) { openPayModal(id); }
 
+/**
+ * Reconstruire le tableau (loadMatches) retire puis rajoute toutes les lignes,
+ * donc le bouton qu'on vient de cliquer. Le navigateur perd alors le focus et
+ * ramène le scroll en haut du panneau de contenu. On mémorise la position ici
+ * et on la restaure juste après, pour que la page ne bouge pas sous les yeux.
+ */
+async function withScrollPreserved(fn) {
+  const el = document.querySelector('.content');
+  const y = el ? el.scrollTop : 0;
+  await fn();
+  if (el) el.scrollTop = y;
+}
+
 async function onCancelMatch(id) {
   try {
     await api('matches', 'PUT', { id, status: 'cancelled' });
     toast('Match annulé');
-    await Promise.all([loadMatches(), loadStats()]);
+    await withScrollPreserved(() => Promise.all([loadMatches(), loadStats()]));
     if (S.currentView === 'dashboard') renderDashboard();
   } catch(e) { toast(e.message, 'err'); }
 }
@@ -1486,7 +1511,7 @@ async function onResetMatch(id) {
     toast('Match remis en attente');
     S.selectedMatches.delete(id);
     updateBulkPayBtn();
-    await Promise.all([loadMatches(), loadStats()]);
+    await withScrollPreserved(() => Promise.all([loadMatches(), loadStats()]));
     if (S.currentView === 'dashboard') renderDashboard();
   } catch(e) { toast(e.message, 'err'); }
 }
@@ -1683,6 +1708,15 @@ async function toggleTeamMatches(row, teamId) {
   // Already loaded
   if (expand.dataset.loaded) return;
 
+  await renderTeamMatchesTable(expand, teamId);
+}
+
+/** Construit (ou reconstruit après une action) le tableau des matchs d'une équipe,
+ *  dans le panneau dépliable de l'onglet "Par entraîneur". Factorisé hors de
+ *  toggleTeamMatches() pour pouvoir rafraîchir ce seul tableau après un changement
+ *  de statut (Annuler/Rétablir/Payer), sans refermer le panneau ni recharger tout
+ *  l'onglet. */
+async function renderTeamMatchesTable(expand, teamId) {
   expand.innerHTML = '<div style="padding:12px;text-align:center"><div class="spinner" style="width:18px;height:18px;border-width:2px"></div></div>';
 
   try {
@@ -1695,15 +1729,19 @@ async function toggleTeamMatches(row, teamId) {
       return;
     }
 
-    const chevronSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px">';
+    const canEdit = !!MFC.matchesEdit;
+    const canPay  = !!MFC.matchesPay;
+    const showActions = canEdit || canPay;
+    const thStyle = 'padding:7px 12px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);font-weight:700';
     expand.innerHTML = `<table style="width:100%;border-collapse:collapse">
       <thead>
         <tr style="background:rgba(0,0,0,.03)">
-          <th style="padding:7px 12px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);font-weight:700;white-space:nowrap">Date</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);font-weight:700">Match</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);font-weight:700;white-space:nowrap">N°</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);font-weight:700">Statut</th>
-          <th style="padding:7px 12px;text-align:right;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);font-weight:700">Montant</th>
+          <th style="${thStyle};white-space:nowrap">Date</th>
+          <th style="${thStyle}">Match</th>
+          <th style="${thStyle};white-space:nowrap">N°</th>
+          <th style="${thStyle}">Statut</th>
+          <th style="${thStyle};text-align:right">Montant</th>
+          ${showActions ? `<th style="${thStyle};text-align:right">Actions</th>` : ''}
         </tr>
       </thead>
       <tbody>
@@ -1711,12 +1749,18 @@ async function toggleTeamMatches(row, teamId) {
           const vs = m.is_home == 1
             ? `<strong>${esc(m.team_name)}</strong> <span style="color:var(--gris)">vs</span> ${esc(m.opponent)}`
             : `${esc(m.opponent)} <span style="color:var(--gris)">vs</span> <strong>${esc(m.team_name)}</strong>`;
+          const btnStyle = 'padding:4px 8px;font-size:11px';
+          const actions = m.status === 'pending'
+            ? `${canPay ? `<button class="btn btn-success btn-sm" style="${btnStyle}" onclick="onPayMatchInCoachView(${m.id},${teamId},this)">Payer</button>` : ''}
+               ${canEdit ? `<button class="btn btn-danger btn-sm" style="${btnStyle}" onclick="onCancelMatchInCoachView(${m.id},${teamId},this)">Annuler</button>` : ''}`
+            : (canEdit ? `<button class="btn btn-ghost btn-sm" style="${btnStyle}" onclick="onResetMatchInCoachView(${m.id},${teamId},this)">Rétablir</button>` : '');
           return `<tr style="border-top:1px solid var(--ligne-2)">
             <td style="padding:8px 12px;font-size:12.5px;white-space:nowrap">${fmtDate(m.match_date)}${m.match_time ? `<br><span style="font-size:11px;color:var(--gris)">${esc(m.match_time)}</span>` : ''}</td>
             <td style="padding:8px 12px;font-size:12.5px">${vs}</td>
             <td style="padding:8px 12px;font-size:12px;color:var(--gris)">${m.match_number ? '#' + esc(m.match_number) : '–'}</td>
             <td style="padding:8px 12px">${badgeStatus(m.status)}${m.paid_at ? `<br><span style="font-size:10.5px;color:var(--gris)">${fmtDate(m.paid_at)}</span>` : ''}</td>
             <td style="padding:8px 12px;font-size:13px;font-weight:700;text-align:right">${m.status === 'cancelled' ? '<span style="color:var(--gris)">–</span>' : fmtCHF(m.fee_amount)}</td>
+            ${showActions ? `<td style="padding:8px 12px;text-align:right;white-space:nowrap">${actions}</td>` : ''}
           </tr>`;
         }).join('')}
       </tbody>
@@ -1724,6 +1768,32 @@ async function toggleTeamMatches(row, teamId) {
   } catch(e) {
     expand.innerHTML = `<p style="padding:10px 14px;color:var(--rouge);font-size:13px">${esc(e.message)}</p>`;
   }
+}
+
+/** Actions de statut depuis l'onglet "Par entraîneur" : rafraîchissent uniquement
+ *  le tableau du panneau ouvert (pas tout l'onglet, pour ne pas le refermer), et
+ *  mettent à jour les totaux en arrière-plan pour la prochaine visite de l'écran. */
+async function onCancelMatchInCoachView(id, teamId, btn) {
+  const expand = btn.closest('.team-matches-expand');
+  try {
+    await api('matches', 'PUT', { id, status: 'cancelled' });
+    toast('Match annulé');
+    await withScrollPreserved(() => renderTeamMatchesTable(expand, teamId));
+    loadStats();
+  } catch(e) { toast(e.message, 'err'); }
+}
+async function onResetMatchInCoachView(id, teamId, btn) {
+  const expand = btn.closest('.team-matches-expand');
+  try {
+    await api('matches', 'PUT', { id, status: 'pending', paid_at: null, notes: '' });
+    toast('Match remis en attente');
+    await withScrollPreserved(() => renderTeamMatchesTable(expand, teamId));
+    loadStats();
+  } catch(e) { toast(e.message, 'err'); }
+}
+function onPayMatchInCoachView(id, teamId, btn) {
+  S.coachPayRefresh = { expand: btn.closest('.team-matches-expand'), teamId };
+  openPayModal(id);
 }
 
 async function payCoachAll(coach) {
@@ -2013,15 +2083,21 @@ function renderTeams() {
       /* Sous référentiel, seule l'indemnité d'arbitrage reste modifiable ici :
          nom, catégorie, entraîneur et statut viennent de l'ERP. */
       if (CLUB_MANAGED) {
+        // Équipe jamais reliée au référentiel ERP (ancien import, corrigé le 31.07.2026) :
+        // elle n'apparaît nulle part dans Paramètres > Catégories & Équipes, donc "gérez-la
+        // dans l'ERP" serait un cul-de-sac. Seule exception au mode lecture seule ci-dessous.
+        const orphan = !t.ref_id;
         return `<div class="team-row" data-team-id="${t.id}">
           <div>${flag}</div>
-          <span style="font-weight:600">${esc(t.name)}</span>
+          <span style="font-weight:600">${esc(t.name)}${orphan ? ' <span class="badge b-warn" style="font-size:10px;padding:2px 6px" title="Absente du référentiel ERP : ancien import, aucun lien avec Paramètres > Catégories & Équipes">orpheline</span>' : ''}</span>
           <span style="color:var(--gris)">${esc(t.category || '–')}</span>
           <span style="color:var(--gris)">${esc(t.coach_name || '–')}</span>
           <input class="inline-inp team-fee" type="number" step="0.5" min="0" data-id="${t.id}" data-field="fee_amount" value="${t.fee_amount || ''}" placeholder="Frais CHF">
           <span>${t.active == 1 ? '<span class="badge b-ok" style="font-size:10px">Active</span>' : '<span class="badge" style="font-size:10px;background:var(--ligne-2);color:var(--gris)">Inactive</span>'}</span>
           <button class="btn btn-ghost btn-sm" onclick="saveTeam(${t.id})" title="Enregistrer l'indemnité">✓</button>
-          <span></span>
+          ${orphan ? `<button class="btn btn-danger btn-sm" onclick="deleteTeam(${t.id})" title="Supprimer cette équipe orpheline (et ses matchs si besoin)" style="padding:6px 8px">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>` : '<span></span>'}
         </div>`;
       }
       return `<div class="team-row" data-team-id="${t.id}">
@@ -2646,15 +2722,26 @@ document.getElementById('at-save').addEventListener('click', async () => {
 /* ===============================================================
    DELETE TEAM
 =============================================================== */
-async function deleteTeam(id) {
+async function deleteTeam(id, purge) {
   const team = S.teams.find(t => t.id === id);
   const name = team ? team.name : `#${id}`;
-  if (!confirm(`Supprimer l'équipe "${name}" ?`)) return;
+  if (!confirm(purge
+    ? `Supprimer définitivement l'équipe "${name}" ET tous ses matchs ?\nCette action est irréversible.`
+    : `Supprimer l'équipe "${name}" ?`)) return;
   try {
-    const res = await fetch(`api.php?action=teams&id=${id}`, { method: 'DELETE', credentials: 'same-origin' });
+    const url = `api.php?action=teams&id=${id}` + (purge ? '&purge=1' : '');
+    const res = await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
-    if (json.archived) {
+    if (json.purged) {
+      toast(`Équipe et ${json.matches_deleted} match${json.matches_deleted>1?'s':''} supprimés définitivement`);
+    } else if (json.archived) {
+      // Équipe archivée faute d'avoir pu être supprimée (matchs liés) : propose la suppression
+      // définitive plutôt que de laisser l'utilisateur sans suite, notamment pour les équipes
+      // orphelines (ancien import) qui n'ont sinon aucun autre moyen d'être nettoyées.
+      if (confirm(`"${name}" a ${json.match_count} match${json.match_count>1?'s':''} lié${json.match_count>1?'s':''}, elle a donc été archivée plutôt que supprimée.\n\nSupprimer aussi définitivement l'équipe et ses ${json.match_count} match${json.match_count>1?'s':''} ?`)) {
+        return deleteTeam(id, true);
+      }
       toast(`Équipe archivée (elle a ${json.match_count} match${json.match_count>1?'s':''} associés)`, 'info');
     } else {
       toast('Équipe supprimée');
@@ -2685,6 +2772,13 @@ function onEditMatch(id) {
   document.getElementById('em-competition').value = m.competition || '';
   document.getElementById('em-notes').value       = m.notes      || '';
 
+  // Vide = tarif standard de l'équipe (non négocié) ; pré-rempli seulement si ce
+  // match a déjà une indemnité négociée (fee_override non nul côté API).
+  const feeInput = document.getElementById('em-fee');
+  const standard = m.team_fee_amount ?? m.fee_amount ?? 0;
+  feeInput.value = (m.fee_override !== null && m.fee_override !== undefined) ? m.fee_override : '';
+  document.getElementById('em-fee-hint').textContent = `Tarif standard de l'équipe : ${fmtCHF(standard)}. Laisser vide pour l'appliquer.`;
+
   document.getElementById('overlay').classList.add('show');
   document.getElementById('modal-edit-match').classList.add('show');
 }
@@ -2703,20 +2797,22 @@ document.getElementById('em-save').addEventListener('click', async () => {
   const btn = document.getElementById('em-save');
   btn.disabled = true;
   try {
+    const feeRaw = document.getElementById('em-fee').value.trim();
     await api('matches', 'PUT', {
-      id:          editMatchId,
-      match_date:  date,
-      match_time:  document.getElementById('em-time').value,
-      team_id:     parseInt(document.getElementById('em-team').value),
-      opponent:    document.getElementById('em-opponent').value.trim(),
-      venue:       document.getElementById('em-venue').value.trim(),
-      is_home:     parseInt(document.getElementById('em-home').value),
-      competition: document.getElementById('em-competition').value.trim(),
-      notes:       document.getElementById('em-notes').value.trim(),
+      id:           editMatchId,
+      match_date:   date,
+      match_time:   document.getElementById('em-time').value,
+      team_id:      parseInt(document.getElementById('em-team').value),
+      opponent:     document.getElementById('em-opponent').value.trim(),
+      venue:        document.getElementById('em-venue').value.trim(),
+      is_home:      parseInt(document.getElementById('em-home').value),
+      competition:  document.getElementById('em-competition').value.trim(),
+      notes:        document.getElementById('em-notes').value.trim(),
+      fee_override: feeRaw === '' ? null : parseFloat(feeRaw),
     });
     closeEditMatchModal();
     toast('Match modifié');
-    await Promise.all([loadMatches(), loadStats()]);
+    await withScrollPreserved(() => Promise.all([loadMatches(), loadStats()]));
   } catch(e) { toast(e.message, 'err'); }
   btn.disabled = false;
 });
@@ -2733,7 +2829,7 @@ async function onDeleteMatch(id) {
     S.selectedMatches.delete(id);
     updateBulkPayBtn();
     toast('Match supprimé');
-    await Promise.all([loadMatches(), loadStats()]);
+    await withScrollPreserved(() => Promise.all([loadMatches(), loadStats()]));
   } catch(e) { toast(e.message, 'err'); }
 }
 

@@ -93,6 +93,12 @@ function init_schema(PDO $pdo): void {
     if (!in_array('payment_method', $cols)) {
         $pdo->exec("ALTER TABLE matches ADD COLUMN payment_method TEXT DEFAULT ''");
     }
+    /* Indemnité négociée pour ce match précis (NULL = tarif standard de l'équipe,
+       inchangé). Un match reste donc au tarif de son équipe par défaut ; seul un
+       montant explicitement saisi ici l'en écarte. */
+    if (!in_array('fee_override', $cols)) {
+        $pdo->exec('ALTER TABLE matches ADD COLUMN fee_override REAL DEFAULT NULL');
+    }
     // Migrate: add season_id to teams if missing (existing databases).
     // Teams used to be shared across all seasons; each season now owns its own team records
     // (coach/fee can differ from one season to the next).
@@ -311,6 +317,15 @@ function club_readonly(string $what): never {
     fail("$what : cela se gère maintenant dans l'ERP (Paramètres > Catégories & Équipes), "
        . "pour que RH et Arbitrage affichent la même liste. L'indemnité d'arbitrage et les "
        . 'matchs restent gérés ici.', 409);
+}
+
+/** Vrai si l'équipe est reliée au référentiel ERP (ref_id non vide). Une équipe non reliée
+ *  n'existe que localement (ancien import) et n'apparaît dans aucun écran de l'ERP. */
+function team_has_ref(PDO $pdo, int $id): bool {
+    $st = $pdo->prepare('SELECT ref_id FROM teams WHERE id = ?');
+    $st->execute([$id]);
+    $ref = $st->fetchColumn();
+    return $ref !== false && (string)$ref !== '';
 }
 
 /* ---------------------------------------------------------------- Helpers */
@@ -544,8 +559,14 @@ switch ($action) {
             out(club_sort_teams($st->fetchAll(), club_team_rank(db(), $season_id)));
         }
         /* Nom, categorie, entraineur et presence viennent de l'ERP. Reste
-           modifiable ici : fee_amount, l'indemnite d'arbitrage par match. */
-        if (club_active()) {
+           modifiable ici : fee_amount, l'indemnite d'arbitrage par match.
+           Exception : une équipe JAMAIS reliée au référentiel (ref_id vide) n'a rien
+           à voir avec l'ERP, elle vient d'un ancien import (bug corrigé le 31.07.2026,
+           voir club_sync) et n'apparaît nulle part dans Paramètres > Catégories &
+           Équipes. La renvoyer vers l'ERP serait un cul-de-sac : elle y est
+           introuvable. On la laisse donc passer jusqu'au DELETE générique plus bas. */
+        $deletingOrphanTeam = $method === 'DELETE' && !empty($_GET['id']) && !team_has_ref(db(), i($_GET, 'id'));
+        if (club_active() && !$deletingOrphanTeam) {
             if ($method !== 'PUT') club_readonly('Les équipes');
             $id = i($b, 'id');
             if (!$id) fail('ID requis');
@@ -587,6 +608,23 @@ switch ($action) {
             $st->execute([$id]);
             $matchCount = (int) $st->fetchColumn();
             if ($matchCount > 0) {
+                /* purge=1 : suppression définitive demandée explicitement (équipe orpheline,
+                   par ex. issue d'un ancien import et introuvable dans le référentiel ERP).
+                   Sans ce drapeau, le comportement par défaut reste l'archivage, pour ne
+                   jamais perdre un historique de matchs par un clic malheureux. */
+                if (!empty($_GET['purge'])) {
+                    $pdo = db();
+                    $pdo->beginTransaction();
+                    try {
+                        $pdo->prepare('DELETE FROM matches WHERE team_id = ?')->execute([$id]);
+                        $pdo->prepare('DELETE FROM teams WHERE id = ?')->execute([$id]);
+                        $pdo->commit();
+                    } catch (\Exception $e) {
+                        $pdo->rollBack();
+                        fail('Erreur lors de la suppression : ' . $e->getMessage(), 500);
+                    }
+                    out(['ok' => true, 'archived' => false, 'purged' => true, 'matches_deleted' => $matchCount]);
+                }
                 db()->prepare('UPDATE teams SET active = 0 WHERE id = ?')->execute([$id]);
                 out(['ok' => true, 'archived' => true, 'match_count' => $matchCount]);
             } else {
@@ -1244,7 +1282,9 @@ switch ($action) {
             $total = (int) $cntSt->fetchColumn();
 
             $st = db()->prepare("
-                SELECT m.*, t.name as team_name, t.coach_name, t.fee_amount, t.category
+                SELECT m.*, t.name as team_name, t.coach_name, t.category,
+                       t.fee_amount as team_fee_amount,
+                       COALESCE(m.fee_override, t.fee_amount) as fee_amount
                 FROM matches m
                 LEFT JOIN teams t ON m.team_id = t.id
                 WHERE $whereSQL
@@ -1277,6 +1317,13 @@ switch ($action) {
             if (array_key_exists('is_home', $b))     { $fields[] = 'is_home = ?';     $vals[] = i($b, 'is_home'); }
             if (array_key_exists('competition', $b)) { $fields[] = 'competition = ?'; $vals[] = s($b, 'competition'); }
             if (array_key_exists('venue', $b))       { $fields[] = 'venue = ?';       $vals[] = s($b, 'venue'); }
+            /* Indemnité négociée pour ce match : une valeur vide/nulle rétablit le tarif
+               standard de l'équipe, un nombre (y compris 0) l'écrase pour ce match seul. */
+            if (array_key_exists('fee_override', $b)) {
+                $raw = $b['fee_override'];
+                $fields[] = 'fee_override = ?';
+                $vals[]   = ($raw === null || $raw === '') ? null : (float) $raw;
+            }
             if (!$fields) fail('Rien à modifier');
             $vals[] = $id;
             db()->prepare('UPDATE matches SET ' . implode(', ', $fields) . ' WHERE id = ?')->execute($vals);
@@ -1320,8 +1367,8 @@ switch ($action) {
         // Totals
         $totSt = $pdo->prepare('
             SELECT
-                COALESCE(SUM(CASE WHEN m.status = "pending"   THEN t.fee_amount ELSE 0 END), 0) as total_pending,
-                COALESCE(SUM(CASE WHEN m.status = "paid"      THEN t.fee_amount ELSE 0 END), 0) as total_paid,
+                COALESCE(SUM(CASE WHEN m.status = "pending"   THEN COALESCE(m.fee_override, t.fee_amount) ELSE 0 END), 0) as total_pending,
+                COALESCE(SUM(CASE WHEN m.status = "paid"      THEN COALESCE(m.fee_override, t.fee_amount) ELSE 0 END), 0) as total_paid,
                 COALESCE(SUM(CASE WHEN m.status = "cancelled" THEN 1 ELSE 0 END), 0) as count_cancelled,
                 COALESCE(SUM(CASE WHEN m.status = "pending"   THEN 1 ELSE 0 END), 0) as count_pending,
                 COALESCE(SUM(CASE WHEN m.status = "paid"      THEN 1 ELSE 0 END), 0) as count_paid,
@@ -1337,7 +1384,9 @@ switch ($action) {
         $from    = date('Y-m-d');
         $to      = date('Y-m-d', strtotime('+7 days'));
         $upSt    = $pdo->prepare('
-            SELECT m.*, t.name as team_name, t.coach_name, t.fee_amount, t.category
+            SELECT m.*, t.name as team_name, t.coach_name, t.category,
+                   t.fee_amount as team_fee_amount,
+                   COALESCE(m.fee_override, t.fee_amount) as fee_amount
             FROM matches m
             LEFT JOIN teams t ON m.team_id = t.id
             WHERE m.match_date BETWEEN ? AND ? AND m.season_id = ? AND m.status != \'cancelled\'
@@ -1350,8 +1399,8 @@ switch ($action) {
         $tSt = $pdo->prepare('
             SELECT
                 t.id, t.name, t.category, t.coach_name, t.fee_amount, t.active,
-                COALESCE(SUM(CASE WHEN m.status = "pending"   THEN t.fee_amount ELSE 0 END), 0) as amount_pending,
-                COALESCE(SUM(CASE WHEN m.status = "paid"      THEN t.fee_amount ELSE 0 END), 0) as amount_paid,
+                COALESCE(SUM(CASE WHEN m.status = "pending"   THEN COALESCE(m.fee_override, t.fee_amount) ELSE 0 END), 0) as amount_pending,
+                COALESCE(SUM(CASE WHEN m.status = "paid"      THEN COALESCE(m.fee_override, t.fee_amount) ELSE 0 END), 0) as amount_paid,
                 COALESCE(SUM(CASE WHEN m.status = "pending"   THEN 1 ELSE 0 END), 0) as count_pending,
                 COALESCE(SUM(CASE WHEN m.status = "paid"      THEN 1 ELSE 0 END), 0) as count_paid,
                 COALESCE(SUM(CASE WHEN m.status = "cancelled" THEN 1 ELSE 0 END), 0) as count_cancelled,
