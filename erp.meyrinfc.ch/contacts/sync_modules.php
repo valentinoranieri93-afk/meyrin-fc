@@ -114,6 +114,41 @@ function contacts_sync_all(PDO $pdo, int $batchId): array
         } catch (PDOException $e) { /* table absente */ }
     }
 
+    /* ---------------------------------------------------- Commandes
+       Même schéma que Sponsors : les fournisseurs et leurs interlocuteurs. */
+    $stats['commandes'] = ['lus' => 0, 'crees' => 0, 'relies' => 0];
+    if ($db = contacts_module_db('commandes', 'commandes.sqlite')) {
+        $orgRefs = [];
+        try {
+            foreach ($db->query('SELECT * FROM suppliers') as $sup) {
+                $r = mfc_contacts_ingest($pdo, [
+                    'type'      => 'organisation',
+                    'last_name' => (string)$sup['name'],
+                    'qualities' => ['fournisseur'],
+                ], 'commandes', 'supplier:' . $sup['id'], $batchId);
+                $orgRefs[(string)$sup['id']] = $r['ref_id'];
+                $stats['commandes']['lus']++;
+                $r['verdict'] === MFC_CONTACTS_CERTAIN ? $stats['commandes']['relies']++ : $stats['commandes']['crees']++;
+            }
+        } catch (PDOException $e) { /* table absente */ }
+
+        try {
+            foreach ($db->query('SELECT * FROM supplier_contacts') as $c) {
+                [$first, $last] = mfc_contacts_split_name((string)($c['name'] ?? ''));
+                $r = mfc_contacts_ingest($pdo, [
+                    'first_name' => $first,
+                    'last_name'  => $last,
+                    'email'      => (string)($c['email'] ?? ''),
+                    'phone'      => (string)($c['phone'] ?? ''),
+                    'org_ref_id' => $orgRefs[(string)($c['supplier_id'] ?? '')] ?? '',
+                    'qualities'  => ['fournisseur'],
+                ], 'commandes', 'contact:' . $c['id'], $batchId);
+                $stats['commandes']['lus']++;
+                $r['verdict'] === MFC_CONTACTS_CERTAIN ? $stats['commandes']['relies']++ : $stats['commandes']['crees']++;
+            }
+        } catch (PDOException $e) { /* table absente */ }
+    }
+
     /* --------------------------------------------------------- ERP
        Les comptes restent la source de l'authentification : on ne les
        déplace pas, on note simplement quel contact peut se connecter. */

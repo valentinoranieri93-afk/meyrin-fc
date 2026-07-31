@@ -1164,7 +1164,7 @@ RENDER.benevoles=function(){
     <div class="panel-head"><div class="panel-title">Base de données bénévoles</div><div class="panel-act editor-only" onclick="volunteerForm()">+ Ajouter</div></div>
     <div class="tablewrap"><table>
       <thead><tr><th>Bénévole</th><th>Type</th><th>Téléphone</th><th>Email</th><th>Disponibilités</th><th>Compétences</th><th>Heures</th></tr></thead>
-      <tbody>${VOLUNTEERS.map(v=>`<tr onclick="rowMenu('volunteers',${v.id})" style="cursor:pointer"><td class="cell-strong"><span style="display:inline-flex;align-items:center;gap:8px"><span class="vol-av" style="width:26px;height:26px;font-size:10px;background:${TEAM[v.id%TEAM.length].c}">${v.p[0]}${v.n[0]}</span>${v.p} ${v.n}</span></td>
+      <tbody>${VOLUNTEERS.map(v=>`<tr onclick="rowMenu('volunteers',${v.id})" style="cursor:pointer"><td class="cell-strong"><span style="display:inline-flex;align-items:center;gap:8px"><span class="vol-av" style="width:26px;height:26px;font-size:10px;background:${TEAM[v.id%TEAM.length].c}">${v.p[0]}${v.n[0]}</span>${v.p} ${v.n}${(v.annuaire&&v.annuaire.other_qualities.length)?v.annuaire.other_qualities.map(q=>` <span class="tag" title="Aussi ${q} dans l'annuaire du club" style="background:var(--gris-bg,#f1f1f1);color:var(--gris)">${q}</span>`).join(''):''}${(v.annuaire&&v.annuaire.a_verifier)?' <span class="tag" title="Fiche annuaire à vérifier (doublon probable)" style="background:var(--jaune-soft,#fff3e0);color:#A07800">à vérifier</span>':''}</span></td>
         <td><span class="badge ${v.type==='responsable'?'st-preparation':'st-idee'}">${v.type==='responsable'?'Responsable':'Bénévole'}</span></td>
         <td>${v.tel}</td><td style="color:var(--gris)">${v.mail}</td><td>${v.dispo}</td>
         <td>${v.comp.map(c=>`<span class="tag" style="margin-right:4px">${c}</span>`).join('')}</td>
@@ -1779,6 +1779,7 @@ function volunteerForm(id){
       <div class="fld"><label>Heures cumul\u00e9es</label><input id="v_h" type="number" min="0" value="${v?v.h:0}"></div>
       <div class="fld col2"><label>Comp\u00e9tences (s\u00e9par\u00e9es par des virgules)</label><input id="v_comp" value="${v?esc((v.comp||[]).join(', ')):''}"></div>
     </div>
+    ${v&&v.annuaire?`<div class="form-sec" style="font-size:11.5px;color:var(--gris);font-weight:400">${v.annuaire.mobile?'Mobile (annuaire) : '+esc(v.annuaire.mobile):''}${v.annuaire.mobile&&v.annuaire.address?' \u00b7 ':''}${v.annuaire.address?esc(v.annuaire.address):''}${v.annuaire.other_qualities.length?'<br>Aussi dans l\'annuaire du club : '+v.annuaire.other_qualities.map(esc).join(', '):''}${v.annuaire.a_verifier?'<br><span style="color:#A07800">Fiche annuaire \u00e0 v\u00e9rifier (module Contacts)</span>':''}</div>`:''}
     <div class="form-sec">Affect\u00e9 aux \u00e9v\u00e9nements (un ou plusieurs)</div>
     <div class="ev-check-list">${evChecks}</div>`,
    `${v?`<button class="btn btn-ghost" style="color:var(--rouge);margin-right:auto" onclick="delRow('volunteers',${v.id},'b\u00e9n\u00e9vole')">Supprimer</button>`:''}

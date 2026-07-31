@@ -200,6 +200,74 @@ function require_auth(): array {
   return $u;
 }
 
+/* --------------------------------------------------- Référentiel contacts (ERP)
+ *
+ * Deux populations à faire suivre : les sponsors (organisations) et leurs
+ * interlocuteurs (personnes). Chaque création/modification alimente le
+ * référentiel partagé en continu, en plus du batch ponctuel de
+ * contacts/sync_modules.php. Jamais bloquant pour Sponsors lui-même.
+ */
+function sync_sponsor_org_to_contacts(int $sponsorId, string $name): void {
+  try {
+    mfc_contacts_ingest(mfc_contacts_db(), [
+      'type' => 'organisation', 'last_name' => $name, 'qualities' => ['contact_sponsor'],
+    ], 'sponsors', 'sponsor:' . $sponsorId);
+  } catch (Throwable $e) { /* l'annuaire n'est pas critique pour Sponsors lui-même */ }
+}
+function sync_sponsor_person_to_contacts(int $contactId, int $sponsorId, string $name, string $email, string $phone): void {
+  try {
+    $cdb = mfc_contacts_db();
+    $org = mfc_contacts_by_source($cdb, 'sponsors', 'sponsor:' . $sponsorId);
+    [$first, $last] = mfc_contacts_split_name($name);
+    mfc_contacts_ingest($cdb, [
+      'first_name' => $first, 'last_name' => $last, 'email' => $email, 'phone' => $phone,
+      'org_ref_id' => $org['ref_id'] ?? '', 'qualities' => ['contact_sponsor'],
+    ], 'sponsors', 'contact:' . $contactId);
+  } catch (Throwable $e) { /* idem */ }
+}
+
+/** Enrichit les interlocuteurs sponsors avec ce que l'annuaire sait en plus (mobile, adresse,
+ * autres qualités de la personne dans le club). */
+function attach_contacts_directory(array &$contacts): void {
+  if (!$contacts) return;
+  try {
+    $cdb = mfc_contacts_db();
+    $localIds = array_map(fn($c) => 'contact:' . $c['id'], $contacts);
+    $ph = implode(',', array_fill(0, count($localIds), '?'));
+    $st = $cdb->prepare("SELECT l.local_id, c.id AS contact_id, c.ref_id, c.mobile, c.street, c.zip, c.city
+      FROM contact_links l JOIN contacts c ON c.id = l.contact_id
+      WHERE l.module = 'sponsors' AND l.local_id IN ($ph)");
+    $st->execute($localIds);
+    $byLocal = [];
+    foreach ($st->fetchAll() as $r) $byLocal[$r['local_id']] = $r;
+    if (!$byLocal) return;
+
+    $cids = array_values(array_unique(array_column($byLocal, 'contact_id')));
+    $ph2 = implode(',', array_fill(0, count($cids), '?'));
+
+    $qualities = [];
+    $stq = $cdb->prepare("SELECT contact_id, quality FROM contact_qualities WHERE contact_id IN ($ph2) AND quality != 'contact_sponsor'");
+    $stq->execute($cids);
+    foreach ($stq->fetchAll() as $r) $qualities[(int)$r['contact_id']][] = $r['quality'];
+
+    $stp = $cdb->prepare("SELECT contact_id FROM contact_duplicates WHERE status='pending' AND (contact_id IN ($ph2) OR other_id IN ($ph2))");
+    $stp->execute([...$cids, ...$cids]);
+    $pending = array_flip($stp->fetchAll(PDO::FETCH_COLUMN));
+
+    foreach ($contacts as &$c) {
+      $ct = $byLocal['contact:' . $c['id']] ?? null;
+      if (!$ct) { $c['annuaire'] = null; continue; }
+      $cid = (int)$ct['contact_id'];
+      $addr = trim($ct['street'] . (($ct['zip'] || $ct['city']) ? ', ' . trim($ct['zip'] . ' ' . $ct['city']) : ''));
+      $c['annuaire'] = [
+        'ref_id' => $ct['ref_id'], 'mobile' => $ct['mobile'], 'address' => $addr,
+        'other_qualities' => $qualities[$cid] ?? [], 'a_verifier' => isset($pending[$cid]),
+      ];
+    }
+    unset($c);
+  } catch (Throwable $e) { /* annuaire indisponible : la liste reste utilisable sans lui */ }
+}
+
 /* require_role() a disparu : les droits ne dependent plus d'un role local
    (viewer/editor/admin) mais des permissions portees par le jeton, verifiees
    en un seul point par la table SPONSORS_PERMS du routeur. */
@@ -316,6 +384,7 @@ switch ($action) {
         $sp['contacts'] = $bySponsor[$sp['id']] ?? [];
         $sp['annual'] = (float) db()->query("SELECT COALESCE(SUM(amount),0) FROM contracts WHERE sponsor_id={$sp['id']} AND status != 'Archivé'")->fetchColumn();
         $sp['next_end'] = db()->query("SELECT MIN(end_date) FROM contracts WHERE sponsor_id={$sp['id']} AND status != 'Archivé' AND end_date >= date('now')")->fetchColumn() ?: null;
+        attach_contacts_directory($sp['contacts']);
       }
       out($sponsors);
     }
@@ -325,6 +394,7 @@ switch ($action) {
       db()->prepare('INSERT INTO sponsors (name, sector, tier, status, website, address, notes) VALUES (?,?,?,?,?,?,?)')
           ->execute([$name, s($b,'sector'), s($b,'tier','Bronze'), s($b,'status','Actif'), s($b,'website'), s($b,'address'), s($b,'notes')]);
       $id = (int) db()->lastInsertId();
+      sync_sponsor_org_to_contacts($id, $name);
       log_activity($u['id'], 'Sponsor créé', $name);
       out(['ok' => true, 'id' => $id]);
     }
@@ -332,6 +402,7 @@ switch ($action) {
       $id = i($b, 'id');
       db()->prepare('UPDATE sponsors SET name=?, sector=?, tier=?, status=?, website=?, address=?, notes=? WHERE id=?')
           ->execute([s($b,'name'), s($b,'sector'), s($b,'tier'), s($b,'status'), s($b,'website'), s($b,'address'), s($b,'notes'), $id]);
+      sync_sponsor_org_to_contacts($id, s($b,'name'));
       log_activity($u['id'], 'Sponsor modifié', s($b,'name'));
       out(['ok' => true]);
     }
@@ -353,16 +424,19 @@ switch ($action) {
       if (i($b, 'is_primary')) db()->prepare('UPDATE contacts SET is_primary=0 WHERE sponsor_id=?')->execute([$sid]);
       db()->prepare('INSERT INTO contacts (sponsor_id, name, role, email, phone, is_primary) VALUES (?,?,?,?,?,?)')
           ->execute([$sid, $name, s($b,'role'), s($b,'email'), s($b,'phone'), i($b,'is_primary')]);
-      out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
+      $newId = (int) db()->lastInsertId();
+      sync_sponsor_person_to_contacts($newId, $sid, $name, s($b,'email'), s($b,'phone'));
+      out(['ok' => true, 'id' => $newId]);
     }
     if ($method === 'PUT') {
       $id = i($b, 'id');
+      $sid = (int) db()->query("SELECT sponsor_id FROM contacts WHERE id=$id")->fetchColumn();
       if (i($b, 'is_primary')) {
-        $sid = (int) db()->query("SELECT sponsor_id FROM contacts WHERE id=$id")->fetchColumn();
         db()->prepare('UPDATE contacts SET is_primary=0 WHERE sponsor_id=?')->execute([$sid]);
       }
       db()->prepare('UPDATE contacts SET name=?, role=?, email=?, phone=?, is_primary=? WHERE id=?')
           ->execute([s($b,'name'), s($b,'role'), s($b,'email'), s($b,'phone'), i($b,'is_primary'), $id]);
+      sync_sponsor_person_to_contacts($id, $sid, s($b,'name'), s($b,'email'), s($b,'phone'));
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {

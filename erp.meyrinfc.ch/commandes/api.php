@@ -595,6 +595,73 @@ function require_auth(): array {
   return $u;
 }
 
+/* --------------------------------------------------- Référentiel contacts (ERP)
+ *
+ * Deux populations à faire suivre : les fournisseurs (organisations) et leurs
+ * interlocuteurs (personnes). Chaque création/modification alimente le
+ * référentiel partagé en continu. Jamais bloquant pour Commandes lui-même.
+ */
+function sync_supplier_org_to_contacts(int $supplierId, string $name): void {
+  try {
+    mfc_contacts_ingest(mfc_contacts_db(), [
+      'type' => 'organisation', 'last_name' => $name, 'qualities' => ['fournisseur'],
+    ], 'commandes', 'supplier:' . $supplierId);
+  } catch (Throwable $e) { /* l'annuaire n'est pas critique pour Commandes lui-même */ }
+}
+function sync_supplier_contact_to_contacts(int $contactId, int $supplierId, string $name, string $email, string $phone): void {
+  try {
+    $cdb = mfc_contacts_db();
+    $org = mfc_contacts_by_source($cdb, 'commandes', 'supplier:' . $supplierId);
+    [$first, $last] = mfc_contacts_split_name($name);
+    mfc_contacts_ingest($cdb, [
+      'first_name' => $first, 'last_name' => $last, 'email' => $email, 'phone' => $phone,
+      'org_ref_id' => $org['ref_id'] ?? '', 'qualities' => ['fournisseur'],
+    ], 'commandes', 'contact:' . $contactId);
+  } catch (Throwable $e) { /* idem */ }
+}
+
+/** Enrichit les interlocuteurs fournisseur avec ce que l'annuaire sait en plus (mobile, adresse,
+ * autres qualités de la personne dans le club). */
+function attach_contacts_directory(array &$contacts): void {
+  if (!$contacts) return;
+  try {
+    $cdb = mfc_contacts_db();
+    $localIds = array_map(fn($c) => 'contact:' . $c['id'], $contacts);
+    $ph = implode(',', array_fill(0, count($localIds), '?'));
+    $st = $cdb->prepare("SELECT l.local_id, c.id AS contact_id, c.ref_id, c.mobile, c.street, c.zip, c.city
+      FROM contact_links l JOIN contacts c ON c.id = l.contact_id
+      WHERE l.module = 'commandes' AND l.local_id IN ($ph)");
+    $st->execute($localIds);
+    $byLocal = [];
+    foreach ($st->fetchAll() as $r) $byLocal[$r['local_id']] = $r;
+    if (!$byLocal) return;
+
+    $cids = array_values(array_unique(array_column($byLocal, 'contact_id')));
+    $ph2 = implode(',', array_fill(0, count($cids), '?'));
+
+    $qualities = [];
+    $stq = $cdb->prepare("SELECT contact_id, quality FROM contact_qualities WHERE contact_id IN ($ph2) AND quality != 'fournisseur'");
+    $stq->execute($cids);
+    foreach ($stq->fetchAll() as $r) $qualities[(int)$r['contact_id']][] = $r['quality'];
+
+    $stp = $cdb->prepare("SELECT contact_id FROM contact_duplicates WHERE status='pending' AND (contact_id IN ($ph2) OR other_id IN ($ph2))");
+    $stp->execute([...$cids, ...$cids]);
+    $pending = array_flip($stp->fetchAll(PDO::FETCH_COLUMN));
+
+    foreach ($contacts as &$c) {
+      $ct = $byLocal['contact:' . $c['id']] ?? null;
+      if (!$ct) { $c['annuaire'] = null; continue; }
+      $cid = (int)$ct['contact_id'];
+      $addr = trim($ct['street'] . (($ct['zip'] || $ct['city']) ? ', ' . trim($ct['zip'] . ' ' . $ct['city']) : ''));
+      $c['annuaire'] = [
+        'ref_id' => $ct['ref_id'], 'mobile' => $ct['mobile'], 'address' => $addr,
+        'other_qualities' => $qualities[$cid] ?? [], 'a_verifier' => isset($pending[$cid]),
+      ];
+    }
+    unset($c);
+  } catch (Throwable $e) { /* annuaire indisponible : la liste reste utilisable sans lui */ }
+}
+
 /* require_role() a disparu : les droits ne dependent plus d'un role local
    (demandeur/responsable/admin) mais des permissions portees par le jeton,
    verifiees en un seul point par la table CMD_PERMS du routeur. */
@@ -1197,6 +1264,7 @@ switch ($action) {
         $r['avg_delay_days'] = $avg ? round((float)$avg, 1) : null;
         $r['addresses'] = $addrBySupplier[$r['id']] ?? [];
         $r['contacts'] = $contactsBySupplier[$r['id']] ?? [];
+        attach_contacts_directory($r['contacts']);
       }
       out($rows);
     }
@@ -1204,11 +1272,14 @@ switch ($action) {
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
       db()->prepare('INSERT INTO suppliers (name, notes) VALUES (?,?)')
           ->execute([$name, s($b,'notes')]);
-      out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
+      $newId = (int) db()->lastInsertId();
+      sync_supplier_org_to_contacts($newId, $name);
+      out(['ok' => true, 'id' => $newId]);
     }
     if ($method === 'PUT') {
       db()->prepare('UPDATE suppliers SET name=?, notes=? WHERE id=?')
           ->execute([s($b,'name'), s($b,'notes'), i($b,'id')]);
+      sync_supplier_org_to_contacts(i($b,'id'), s($b,'name'));
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
@@ -1256,12 +1327,17 @@ switch ($action) {
       if (!$name) fail('Nom requis');
       db()->prepare('INSERT INTO supplier_contacts (supplier_id, name, role, email, phone, notes) VALUES (?,?,?,?,?,?)')
           ->execute([$supplierId, $name, s($b,'role'), s($b,'email'), s($b,'phone'), s($b,'notes')]);
-      out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
+      $newId = (int) db()->lastInsertId();
+      sync_supplier_contact_to_contacts($newId, $supplierId, $name, s($b,'email'), s($b,'phone'));
+      out(['ok' => true, 'id' => $newId]);
     }
     if ($method === 'PUT') {
+      $id = i($b, 'id');
       $name = s($b, 'name'); if (!$name) fail('Nom requis');
+      $supplierId = (int) db()->query("SELECT supplier_id FROM supplier_contacts WHERE id=$id")->fetchColumn();
       db()->prepare('UPDATE supplier_contacts SET name=?, role=?, email=?, phone=?, notes=? WHERE id=?')
-          ->execute([$name, s($b,'role'), s($b,'email'), s($b,'phone'), s($b,'notes'), i($b,'id')]);
+          ->execute([$name, s($b,'role'), s($b,'email'), s($b,'phone'), s($b,'notes'), $id]);
+      sync_supplier_contact_to_contacts($id, $supplierId, $name, s($b,'email'), s($b,'phone'));
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {

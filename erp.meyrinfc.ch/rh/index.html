@@ -799,7 +799,7 @@ function renderEmployeeTable(){
   list.sort((a, b) => normalizeFr(a.last_name).localeCompare(normalizeFr(b.last_name)) || normalizeFr(a.first_name).localeCompare(normalizeFr(b.first_name)));
   el.innerHTML = list.length ? `<table><thead><tr><th>Nom</th><th>Affectation${EMP_FILTER.season?'':' (toutes saisons)'}</th><th>E-mail</th><th>Téléphone</th><th>Indemnités / mois${currentSeason?' ('+esc(currentSeason.label)+')':''}</th><th></th></tr></thead><tbody>
     ${list.map(ee => { const asg = empFilterAssignments(ee); return `<tr>
-      <td><a href="javascript:void(0)" data-obj="${esc(JSON.stringify(ee))}" onclick="employeeDetailModal(JSON.parse(this.dataset.obj))" style="font-weight:700;color:var(--noir)">${esc(ee.first_name)} ${esc(ee.last_name)}</a>${ee.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactif</span>':''}</td>
+      <td><a href="javascript:void(0)" data-obj="${esc(JSON.stringify(ee))}" onclick="employeeDetailModal(JSON.parse(this.dataset.obj))" style="font-weight:700;color:var(--noir)">${esc(ee.first_name)} ${esc(ee.last_name)}</a>${ee.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactif</span>':''}${(ee.annuaire && ee.annuaire.other_qualities.length)?ee.annuaire.other_qualities.map(q=>` <span class="pill" style="background:var(--gris-bg,#f1f1f1);color:var(--gris)" title="Aussi ${esc(q)} dans l'annuaire du club">${esc(q)}</span>`).join(''):''}${(ee.annuaire && ee.annuaire.a_verifier)?' <span class="pill" style="background:var(--orange-bg,#fff3e0);color:var(--orange,#b26a00)" title="Fiche annuaire à vérifier (doublon probable)">à vérifier</span>':''}</td>
       <td>${asg.length ? asg.map(a=>`<span class="pill" style="background:var(--bleu-bg);color:var(--bleu);margin:0 4px 4px 0;display:inline-flex;align-items:center;gap:4px">${esc(a.poste_label)}${a.team_name?' · '+esc(a.team_name):(a.category_name?' · '+esc(a.category_name)+' (catégorie)':'')}${!EMP_FILTER.season?' · '+esc(a.season_label||''):''}</span>`).join('') : '<span style="color:var(--gris-2)">—</span>'}
       </td>
       <td style="font-size:12.5px;color:var(--gris)">${esc(ee.email)}</td>
@@ -840,7 +840,12 @@ async function employeeDetailModal(ee, seasonId){
   openModal(`
     <h3>${esc(ee.first_name)} ${esc(ee.last_name)}</h3>
     <p class="hint" style="margin:0 0 2px">${esc(ee.phone) || '—'}</p>
-    <p class="hint" style="margin-bottom:14px">${esc(ee.email) || '—'}</p>
+    <p class="hint" style="margin-bottom:${ee.annuaire?'2px':'14px'}">${esc(ee.email) || '—'}</p>
+    ${ee.annuaire ? `<p class="hint" style="margin-bottom:14px;font-size:12px">
+      ${ee.annuaire.mobile ? 'Mobile (annuaire) : ' + esc(ee.annuaire.mobile) : ''}${ee.annuaire.mobile && ee.annuaire.address ? ' · ' : ''}${ee.annuaire.address ? esc(ee.annuaire.address) : ''}
+      ${ee.annuaire.other_qualities.length ? `<br>Aussi dans l'annuaire du club : ${ee.annuaire.other_qualities.map(esc).join(', ')}` : ''}
+      ${ee.annuaire.a_verifier ? '<br><span style="color:var(--orange,#b26a00)">Fiche annuaire à vérifier (rapprochement probable, pas confirmé) — module Contacts</span>' : ''}
+    </p>` : ''}
     <div class="field-row">
       <div class="field">
         <label>Paiement (échéance de versement)</label>

@@ -996,6 +996,73 @@ function club_active(): bool {
   return !mfc_club_is_empty();
 }
 
+/* --------------------------------------------------- Référentiel contacts (ERP)
+ *
+ * RH reste l'écran de saisie des employés (nom, contact, IBAN), mais chaque
+ * création/modification alimente aussi le référentiel partagé (lib/mfc_contacts.php),
+ * en continu plutôt que par le batch ponctuel de contacts/sync_modules.php.
+ * mfc_contacts_ingest() ne fait que COMPLÉTER les champs vides côté annuaire :
+ * une correction faite depuis le module Contacts n'est jamais écrasée par RH.
+ */
+
+/** Pousse un employé créé/modifié vers l'annuaire partagé. Jamais bloquant : une panne du
+ * référentiel contacts (base absente, verrou) ne doit pas empêcher d'enregistrer un employé. */
+function sync_employee_to_contacts(int $employeeId, string $first, string $last, string $email, string $phone, string $iban, bool $active): void {
+  try {
+    mfc_contacts_ingest(mfc_contacts_db(), [
+      'first_name' => $first, 'last_name' => $last, 'email' => $email,
+      'phone' => $phone, 'iban' => $iban, 'active' => $active ? 1 : 0,
+      'qualities' => ['salarie'],
+    ], 'rh', 'employee:' . $employeeId);
+  } catch (Throwable $e) { /* l'annuaire n'est pas critique pour la RH elle-même */ }
+}
+
+/** Enrichit une liste d'employés avec ce que l'annuaire partagé sait en plus des champs propres à
+ * RH : mobile, adresse, et les autres qualités de la personne (bénévole, contact sponsor...), pour
+ * que la fiche employé révèle qu'une même personne porte plusieurs casquettes dans le club. */
+function attach_contacts_directory(array &$employees): void {
+  if (!$employees) return;
+  try {
+    $cdb = mfc_contacts_db();
+    $localIds = array_map(fn($e) => 'employee:' . $e['id'], $employees);
+    $ph = implode(',', array_fill(0, count($localIds), '?'));
+    $st = $cdb->prepare("SELECT l.local_id, c.id AS contact_id, c.ref_id, c.mobile, c.street, c.zip, c.city
+      FROM contact_links l JOIN contacts c ON c.id = l.contact_id
+      WHERE l.module = 'rh' AND l.local_id IN ($ph)");
+    $st->execute($localIds);
+    $byLocal = [];
+    foreach ($st->fetchAll() as $r) $byLocal[$r['local_id']] = $r;
+    if (!$byLocal) return;
+
+    $cids = array_values(array_unique(array_column($byLocal, 'contact_id')));
+    $ph2 = implode(',', array_fill(0, count($cids), '?'));
+
+    $qualities = [];
+    $stq = $cdb->prepare("SELECT contact_id, quality FROM contact_qualities WHERE contact_id IN ($ph2) AND quality != 'salarie'");
+    $stq->execute($cids);
+    foreach ($stq->fetchAll() as $r) $qualities[(int)$r['contact_id']][] = $r['quality'];
+
+    $stp = $cdb->prepare("SELECT contact_id FROM contact_duplicates WHERE status='pending' AND (contact_id IN ($ph2) OR other_id IN ($ph2))");
+    $stp->execute([...$cids, ...$cids]);
+    $pending = array_flip($stp->fetchAll(PDO::FETCH_COLUMN));
+
+    foreach ($employees as &$e) {
+      $c = $byLocal['employee:' . $e['id']] ?? null;
+      if (!$c) { $e['annuaire'] = null; continue; }
+      $cid = (int)$c['contact_id'];
+      $addr = trim($c['street'] . (($c['zip'] || $c['city']) ? ', ' . trim($c['zip'] . ' ' . $c['city']) : ''));
+      $e['annuaire'] = [
+        'ref_id' => $c['ref_id'],
+        'mobile' => $c['mobile'],
+        'address' => $addr,
+        'other_qualities' => $qualities[$cid] ?? [],
+        'a_verifier' => isset($pending[$cid]),
+      ];
+    }
+    unset($e);
+  } catch (Throwable $e) { /* annuaire indisponible : la liste RH reste utilisable sans lui */ }
+}
+
 /**
  * Aligne les tables locales sur le référentiel.
  *
@@ -1456,15 +1523,20 @@ switch ($action) {
         $e['indemnites_custom'] = $byEmployeeCustom[(int)$e['id']] ?? [];
         $e['total_indemnites'] = round($totals[(int)$e['id']] ?? 0, 2);
       }
+      unset($e);
+      attach_contacts_directory($employees);
       out($employees);
     }
     if ($method === 'POST') {
       $ln = s($b, 'last_name'); if (!$ln) fail('Nom requis');
       $paiement = s($b, 'paiement', 'mensuel');
       if (!in_array($paiement, ['mensuel', 'semestriel'], true)) fail('paiement invalide');
+      $first = s($b, 'first_name'); $email = s($b, 'email'); $phone = s($b, 'phone'); $iban = s($b, 'iban');
       $st = db()->prepare('INSERT INTO employees (first_name,last_name,email,phone,iban,paiement) VALUES (?,?,?,?,?,?)');
-      $st->execute([s($b, 'first_name'), $ln, s($b, 'email'), s($b, 'phone'), s($b, 'iban'), $paiement]);
-      out(['id' => (int)db()->lastInsertId()]);
+      $st->execute([$first, $ln, $email, $phone, $iban, $paiement]);
+      $newId = (int)db()->lastInsertId();
+      sync_employee_to_contacts($newId, $first, $ln, $email, $phone, $iban, true);
+      out(['id' => $newId]);
     }
     if ($method === 'PUT') {
       $id = i($b, 'id'); if (!$id) fail('id requis');
@@ -1476,8 +1548,11 @@ switch ($action) {
       if (!$existingEmp) fail('Employé introuvable', 404);
       $paiement = array_key_exists('paiement', $b) ? s($b, 'paiement', 'mensuel') : $existingEmp['paiement'];
       if (!in_array($paiement, ['mensuel', 'semestriel'], true)) fail('paiement invalide');
+      $first = s($b,'first_name'); $last = s($b,'last_name'); $email = s($b,'email'); $phone = s($b,'phone'); $iban = s($b,'iban');
+      $active = bo($b,'active',true);
       $st = db()->prepare('UPDATE employees SET first_name=?,last_name=?,email=?,phone=?,iban=?,active=?,paiement=? WHERE id=?');
-      $st->execute([s($b,'first_name'), s($b,'last_name'), s($b,'email'), s($b,'phone'), s($b,'iban'), bo($b,'active',true)?1:0, $paiement, $id]);
+      $st->execute([$first, $last, $email, $phone, $iban, $active?1:0, $paiement, $id]);
+      sync_employee_to_contacts($id, $first, $last, $email, $phone, $iban, $active);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {

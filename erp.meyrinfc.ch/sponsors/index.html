@@ -1092,9 +1092,10 @@ function renderFiche() {
             <div class="flex items-start gap-3 group">
               <div class="w-9 h-9 rounded-full ${+c.is_primary ? 'bg-ink text-white' : 'bg-slate-200 text-slate-600'} grid place-items-center text-[11px] font-semibold shrink-0">${initials(c.name)}</div>
               <div class="min-w-0 flex-1">
-                <p class="font-semibold text-[13px]">${esc(c.name)} ${+c.is_primary ? '<span class="text-[10px] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded ml-1">Principal</span>' : ''}</p>
+                <p class="font-semibold text-[13px]">${esc(c.name)} ${+c.is_primary ? '<span class="text-[10px] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded ml-1">Principal</span>' : ''}${(c.annuaire && c.annuaire.other_qualities.length) ? c.annuaire.other_qualities.map(q => ` <span class="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded ml-1" title="Aussi ${esc(q)} dans l'annuaire du club">${esc(q)}</span>`).join('') : ''}${(c.annuaire && c.annuaire.a_verifier) ? ' <span class="text-[10px] font-semibold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded ml-1" title="Fiche annuaire à vérifier (doublon probable)">à vérifier</span>' : ''}</p>
                 <p class="text-[11.5px] text-mute truncate">${esc(c.role || '')}${c.role && c.email ? ' · ' : ''}${c.email ? '<a href="mailto:' + esc(c.email) + '" class="hover:underline">' + esc(c.email) + '</a>' : ''}</p>
                 ${c.phone ? '<p class="text-[11.5px] text-mute">' + esc(c.phone) + '</p>' : ''}
+                ${c.annuaire && c.annuaire.mobile ? '<p class="text-[11.5px] text-mute">Mobile (annuaire) : ' + esc(c.annuaire.mobile) + '</p>' : ''}
               </div>
               ${canEdit() ? '<button onclick="modalContact(' + c.id + ',' + sp.id + ')" class="opacity-0 group-hover:opacity-100 p-1 rounded text-mute hover:bg-canvas transition" title="Modifier">✎</button>' : ''}
             </div>`).join('') + '</div>'

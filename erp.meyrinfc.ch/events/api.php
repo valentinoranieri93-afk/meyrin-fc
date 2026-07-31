@@ -166,6 +166,70 @@ function list_users(): array {
   return db()->query('SELECT id, name, email, role, active, last_login, created_at FROM users ORDER BY id')->fetchAll();
 }
 
+/* --------------------------------------------------- Référentiel contacts (ERP)
+ *
+ * Seule la collection "volunteers" représente des personnes : events/sponsors/
+ * materiel/documents n'ont rien à faire dans l'annuaire. Chaque enregistrement/
+ * modification d'un bénévole alimente donc le référentiel partagé en continu,
+ * en plus du batch ponctuel de contacts/sync_modules.php.
+ */
+
+/** Pousse un bénévole créé/modifié vers l'annuaire partagé. Jamais bloquant. */
+function sync_volunteer_to_contacts(array $rec): void {
+  try {
+    $qualities = ['benevole'];
+    if (($rec['type'] ?? '') === 'responsable') $qualities[] = 'responsable_evenement';
+    mfc_contacts_ingest(mfc_contacts_db(), [
+      'first_name' => (string)($rec['p'] ?? ''), 'last_name' => (string)($rec['n'] ?? ''),
+      'email' => (string)($rec['mail'] ?? ''), 'phone' => (string)($rec['tel'] ?? ''),
+      'qualities' => $qualities,
+    ], 'events', 'volunteer:' . $rec['id']);
+  } catch (Throwable $e) { /* l'annuaire n'est pas critique pour Events lui-même */ }
+}
+
+/** Enrichit la collection bénévoles avec ce que l'annuaire sait en plus (mobile, adresse,
+ * autres qualités de la personne dans le club), pour révéler qu'un bénévole est peut-être
+ * aussi salarié, contact sponsor, etc. */
+function attach_contacts_directory(array &$volunteers): void {
+  if (!$volunteers) return;
+  try {
+    $cdb = mfc_contacts_db();
+    $localIds = array_map(fn($v) => 'volunteer:' . $v['id'], $volunteers);
+    $ph = implode(',', array_fill(0, count($localIds), '?'));
+    $st = $cdb->prepare("SELECT l.local_id, c.id AS contact_id, c.ref_id, c.mobile, c.street, c.zip, c.city
+      FROM contact_links l JOIN contacts c ON c.id = l.contact_id
+      WHERE l.module = 'events' AND l.local_id IN ($ph)");
+    $st->execute($localIds);
+    $byLocal = [];
+    foreach ($st->fetchAll() as $r) $byLocal[$r['local_id']] = $r;
+    if (!$byLocal) return;
+
+    $cids = array_values(array_unique(array_column($byLocal, 'contact_id')));
+    $ph2 = implode(',', array_fill(0, count($cids), '?'));
+
+    $qualities = [];
+    $stq = $cdb->prepare("SELECT contact_id, quality FROM contact_qualities WHERE contact_id IN ($ph2) AND quality NOT IN ('benevole','responsable_evenement')");
+    $stq->execute($cids);
+    foreach ($stq->fetchAll() as $r) $qualities[(int)$r['contact_id']][] = $r['quality'];
+
+    $stp = $cdb->prepare("SELECT contact_id FROM contact_duplicates WHERE status='pending' AND (contact_id IN ($ph2) OR other_id IN ($ph2))");
+    $stp->execute([...$cids, ...$cids]);
+    $pending = array_flip($stp->fetchAll(PDO::FETCH_COLUMN));
+
+    foreach ($volunteers as &$v) {
+      $c = $byLocal['volunteer:' . $v['id']] ?? null;
+      if (!$c) { $v['annuaire'] = null; continue; }
+      $cid = (int)$c['contact_id'];
+      $addr = trim($c['street'] . (($c['zip'] || $c['city']) ? ', ' . trim($c['zip'] . ' ' . $c['city']) : ''));
+      $v['annuaire'] = [
+        'ref_id' => $c['ref_id'], 'mobile' => $c['mobile'], 'address' => $addr,
+        'other_qualities' => $qualities[$cid] ?? [], 'a_verifier' => isset($pending[$cid]),
+      ];
+    }
+    unset($v);
+  } catch (Throwable $e) { /* annuaire indisponible : la liste reste utilisable sans lui */ }
+}
+
 /* ---------------------------------------------------------------- Router */
 
 $action = $_GET['action'] ?? '';
@@ -209,6 +273,7 @@ switch ($action) {
     foreach (COLLECTIONS as $c) {
       $res['collections'][$c] = mfc_can(collection_perm($c, 'view')) ? load_collection($c) : [];
     }
+    attach_contacts_directory($res['collections']['volunteers']);
     $res['users'] = list_users();   // annuaire, alimente les listes deroulantes
     out($res);
   }
@@ -223,6 +288,7 @@ switch ($action) {
     if ($id <= 0) { $id = next_id($c); }
     $rec['id'] = $id;
     upsert_record($c, $rec);
+    if ($c === 'volunteers') sync_volunteer_to_contacts($rec);
     out(['ok' => true, 'record' => $rec]);
   }
 

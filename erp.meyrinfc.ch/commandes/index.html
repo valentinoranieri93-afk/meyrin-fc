@@ -1332,8 +1332,8 @@ function modalSupplier(existing) {
         <div class="space-y-2">${contacts.length ? contacts.map(c => `
           <div class="flex items-start gap-2 bg-canvas/50 border border-line rounded-lg p-2.5">
             <div class="flex-1 min-w-0">
-              <p class="text-[12px] font-semibold">${esc(c.name)}${c.role ? ` <span class="font-normal text-mute">— ${esc(c.role)}</span>` : ''}</p>
-              <p class="text-[11.5px] text-mute">${esc(c.email || '—')} · ${esc(c.phone || '—')}</p>
+              <p class="text-[12px] font-semibold">${esc(c.name)}${c.role ? ` <span class="font-normal text-mute">— ${esc(c.role)}</span>` : ''}${(c.annuaire && c.annuaire.other_qualities.length) ? c.annuaire.other_qualities.map(q => ` <span class="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded" title="Aussi ${esc(q)} dans l'annuaire du club">${esc(q)}</span>`).join('') : ''}${(c.annuaire && c.annuaire.a_verifier) ? ' <span class="text-[10px] font-semibold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded" title="Fiche annuaire à vérifier (doublon probable)">à vérifier</span>' : ''}</p>
+              <p class="text-[11.5px] text-mute">${esc(c.email || '—')} · ${esc(c.phone || '—')}${c.annuaire && c.annuaire.mobile ? ' · mobile (annuaire) ' + esc(c.annuaire.mobile) : ''}</p>
               ${c.notes ? `<p class="text-[11px] text-mute mt-0.5">${esc(c.notes)}</p>` : ''}
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
