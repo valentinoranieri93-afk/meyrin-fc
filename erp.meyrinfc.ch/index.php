@@ -1391,10 +1391,37 @@ function renderClubTeams() {
       </div></td>
       <td><input class="club-inp" value="${esc(t.name)}" oninput="_club.teams[${i}].name=this.value" placeholder="Nom de l'équipe"></td>
       <td><select class="club-inp" onchange="_club.teams[${i}].category_id=this.value">${opts(t.category_id)}</select></td>
-      <td><input class="club-inp" value="${esc(t.coach_name)}" oninput="_club.teams[${i}].coach_name=this.value" placeholder="—"></td>
+      <td>
+        <input class="club-inp" list="dl-coach-${i}" value="${esc(t.coach_name)}"
+          oninput="_club.teams[${i}].coach_name=this.value; searchClubCoach(${i}, this.value)"
+          placeholder="—" title="Tapez pour retrouver un contact existant (module Contacts)">
+        <datalist id="dl-coach-${i}"></datalist>
+      </td>
       <td><label class="switch"><input type="checkbox"${t.active ? ' checked' : ''} onchange="_club.teams[${i}].active=this.checked"><span class="switch-slider"></span></label></td>
       <td><button class="club-x" onclick="removeClubTeam(${i})" title="Retirer de cette saison">&times;</button></td>
     </tr>`).join('');
+}
+
+/* Suggestions d'entraîneur tirées du référentiel Contacts partagé (module contacts/), pour
+   éviter de ressaisir un nom déjà connu du club (et le rapprochement raté qui s'ensuivrait,
+   voir club_sync()). Reste une saisie libre si aucun contact ne correspond ou si le module
+   Contacts n'est pas accessible : le champ ne bloque jamais, il ne fait que suggérer. */
+const _clubCoachSearchTimers = {};
+async function searchClubCoach(i, q) {
+  clearTimeout(_clubCoachSearchTimers[i]);
+  const list = document.getElementById(`dl-coach-${i}`);
+  if (!list) return;
+  if (!q || q.trim().length < 2) { list.innerHTML = ''; return; }
+  _clubCoachSearchTimers[i] = setTimeout(async () => {
+    try {
+      const r = await fetch('/contacts/api.php?action=list&q=' + encodeURIComponent(q.trim()) + '&per_page=8');
+      const data = await r.json();
+      if (!data.contacts) return;
+      list.innerHTML = data.contacts
+        .filter(c => c.type !== 'organisation')
+        .map(c => `<option value="${esc((c.first_name + ' ' + c.last_name).trim())}">`).join('');
+    } catch (e) { /* recherche best-effort, la saisie libre reste toujours possible */ }
+  }, 250);
 }
 
 function addClubCat()  { _club.cats.push({ id: '', name: '', sort_order: _club.cats.length, active: true }); renderClubCats(); }

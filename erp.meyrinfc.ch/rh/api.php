@@ -259,12 +259,19 @@ function init_schema(PDO $pdo): void {
     $pdo->prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)')->execute(['annualize_montant_2026_07']);
   }
 
-  // Chaque poste d'équipe doit être rattaché à une équipe : les anciens postes "sans équipe" (ex: staff
-  // administratif) sont regroupés dans une équipe de repli, créée avant le passage qui exige une catégorie
-  // pour chaque équipe ci-dessous (pour que cette équipe de repli en hérite aussi, sans jamais rester orpheline).
-  if ((int)$pdo->query('SELECT COUNT(*) FROM employee_assignments WHERE team_id IS NULL')->fetchColumn() > 0) {
-    $fallbackTeamId = find_or_create_team($pdo, 'Staff / Administration');
-    $pdo->prepare('UPDATE employee_assignments SET team_id = ? WHERE team_id IS NULL')->execute([$fallbackTeamId]);
+  // Repli pour les VRAIS orphelins d'avant le poste de catégorie (2026-07-15) : ni équipe ni catégorie.
+  // Un poste explicitement rattaché à une catégorie (category_id renseigné) n'est PAS orphelin — il ne
+  // doit jamais être touché ici. Bug corrigé le 2026-08-01 : cette réparation tournait à CHAQUE appel API
+  // (pas de verrou schema_migrations) et sa condition ne distinguait pas un poste de catégorie volontaire
+  // d'un vieil orphelin, donc tout poste de catégorie créé depuis le 15.07 se faisait reconvertir en poste
+  // d'équipe "Staff / Administration" dès le rechargement suivant.
+  $alreadyMigratedOrphans = (bool) $pdo->query("SELECT 1 FROM schema_migrations WHERE name = 'fallback_team_orphans_2026_08'")->fetchColumn();
+  if (!$alreadyMigratedOrphans) {
+    if ((int)$pdo->query('SELECT COUNT(*) FROM employee_assignments WHERE team_id IS NULL AND category_id IS NULL')->fetchColumn() > 0) {
+      $fallbackTeamId = find_or_create_team($pdo, 'Staff / Administration');
+      $pdo->prepare('UPDATE employee_assignments SET team_id = ? WHERE team_id IS NULL AND category_id IS NULL')->execute([$fallbackTeamId]);
+    }
+    $pdo->prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)')->execute(['fallback_team_orphans_2026_08']);
   }
   // Chaque équipe doit obligatoirement appartenir à une catégorie : les équipes orphelines (anciennes données,
   // ou l'équipe de repli créée juste au-dessus) sont rattachées à une catégorie "Non classé" créée au besoin.
