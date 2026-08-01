@@ -153,6 +153,63 @@ tr:hover td{background:#FAFAF7}
 .matrix-col-head .d{font-weight:700;font-size:12.5px}
 .matrix-col-head .a{font-size:11px;color:var(--gris);font-weight:500;text-transform:none;letter-spacing:0}
 .import-inline{border:1px solid var(--ligne);border-radius:10px;padding:14px;margin-top:10px;background:var(--bg)}
+
+/* ============================================================ DASHBOARD */
+/* Style porté tel quel du module Events (mêmes classes, mêmes valeurs), pour que le
+   dashboard RH s'intègre visuellement avec le reste des apps du club. */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+.kpi{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r);padding:16px 17px;box-shadow:var(--ombre-s);position:relative;overflow:hidden;transition:.15s}
+.kpi:hover{box-shadow:var(--ombre);transform:translateY(-2px)}
+.kpi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+.kpi-ico{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center}
+.kpi-ico svg{width:18px;height:18px}
+.kpi-trend{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:20px;display:flex;align-items:center;gap:3px}
+.kpi-trend svg{width:11px;height:11px}
+.trend-up{background:var(--vert-bg);color:var(--vert)}
+.trend-down{background:var(--rouge-bg);color:var(--rouge)}
+.trend-flat{background:var(--ligne-2);color:var(--gris)}
+.kpi-val{font-family:"Sora";font-size:24px;font-weight:800;line-height:1}
+.kpi-lbl{font-size:12.5px;color:var(--gris);margin-top:5px;font-weight:500}
+
+.mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px}
+.mini{background:var(--carte);border:1px solid var(--ligne);border-radius:12px;padding:13px 15px;display:flex;align-items:center;gap:12px;box-shadow:var(--ombre-s)}
+.mini-ico{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mini-ico svg{width:18px;height:18px}
+.mini-val{font-family:"Sora";font-size:19px;font-weight:700;letter-spacing:-.5px;line-height:1}
+.mini-lbl{font-size:11.5px;color:var(--gris);margin-top:2px}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}
+.panel{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r);box-shadow:var(--ombre-s);overflow:hidden}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--ligne-2)}
+.panel-title{font-family:"Sora";font-size:14.5px;font-weight:700;letter-spacing:-.2px}
+.panel-head h3{font-family:"Sora";font-size:14.5px;font-weight:700;letter-spacing:-.2px;color:var(--noir)}
+.panel-act{font-size:12.5px;color:var(--gris);font-weight:600;display:flex;align-items:center;gap:5px;cursor:pointer}
+.panel-act:hover{color:var(--noir)}
+.panel-body{padding:18px}
+
+.chart-legend{display:flex;flex-wrap:wrap;gap:13px;margin-top:12px}
+.lg-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gris);font-weight:500}
+.lg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+
+.row-item{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--ligne-2)}
+.row-item:last-child{border-bottom:none}
+.row-ico{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:#fff}
+.row-main{flex:1;min-width:0}
+.row-t{font-size:13.5px;font-weight:600;line-height:1.25}
+.row-s{font-size:12px;color:var(--gris);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-meta{font-size:13px;color:var(--noir);font-weight:700;text-align:right;flex-shrink:0;font-family:"Sora"}
+
+.alert-item{display:flex;gap:11px;padding:11px 13px;border-radius:10px;margin-bottom:8px;align-items:flex-start}
+.alert-item:last-child{margin-bottom:0}
+.alert-o{background:var(--orange-bg)}
+.alert-b{background:var(--bleu-bg)}
+.alert-ico{flex-shrink:0;margin-top:1px}
+.alert-ico svg{width:17px;height:17px}
+.alert-t{font-size:13px;font-weight:600;line-height:1.3}
+
+.scroll-list{max-height:400px;overflow-y:auto}
+@media (max-width:980px){.kpi-grid,.mini-grid{grid-template-columns:repeat(2,1fr)}.grid-2,.grid-3{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -202,6 +259,8 @@ const ICONS = {
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.23.5.5.8 1.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/>',
   back: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
   upload: '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  wallet: '<path d="M20 7H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 7V5a2 2 0 00-2-2H6a2 2 0 00-2 2v2"/><path d="M18 13.5h.01"/>',
+  alertTri: '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
 };
 function ic(name){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
 
@@ -334,6 +393,77 @@ async function loadRefData(){
 
 /* ============================================================ DASHBOARD */
 
+/* ===== Graphiques SVG, portés tels quels du module Events (mêmes fonctions) ===== */
+function barChart(el, data, opt = {}) {
+  const w = el.clientWidth || 520, h = opt.h || 190, pad = opt.pad || { t: 14, r: 8, b: 28, l: 38 };
+  const max = opt.max || Math.max(...data.map(x => Math.abs(x.v))) * 1.15;
+  const min = opt.min !== undefined ? opt.min : 0;
+  const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+  const bw = iw / data.length * 0.58, gap = iw / data.length;
+  const y0 = min < 0 ? pad.t + ih * (max / (max - min)) : pad.t + ih;
+  let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">`;
+  for (let i = 0; i <= 4; i++) { const gy = pad.t + ih * i / 4; svg += `<line x1="${pad.l}" y1="${gy}" x2="${w - pad.r}" y2="${gy}" stroke="#F0EDE4" stroke-width="1"/>`; }
+  data.forEach((x, i) => {
+    const px = pad.l + gap * i + (gap - bw) / 2;
+    const hh = Math.abs(x.v) / (max - min) * ih;
+    const y = x.v >= 0 ? y0 - hh : y0;
+    const col = x.c || 'var(--jaune)';
+    svg += `<rect x="${px}" y="${y}" width="${bw}" height="${Math.max(hh, 1)}" rx="4" fill="${col}"><title>${esc(x.l)}: ${x.v}</title></rect>`;
+    svg += `<text x="${px + bw / 2}" y="${h - 9}" text-anchor="middle" font-size="10.5" fill="#9A988C" font-weight="600">${esc(x.l)}</text>`;
+  });
+  svg += `</svg>`; el.innerHTML = svg;
+}
+function donutChart(el, data, opt = {}) {
+  const size = opt.size || 170, cx = size / 2, cy = size / 2, r = size / 2 - 6, ir = opt.ir || r * 0.6;
+  const tot = data.reduce((a, x) => a + x.v, 0); let a0 = -Math.PI / 2;
+  let svg = `<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap"><svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="flex-shrink:0">`;
+  data.forEach(x => {
+    const a1 = a0 + (x.v / tot) * Math.PI * 2;
+    const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0), x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+    const xi0 = cx + ir * Math.cos(a0), yi0 = cy + ir * Math.sin(a0), xi1 = cx + ir * Math.cos(a1), yi1 = cy + ir * Math.sin(a1);
+    const large = (a1 - a0) > Math.PI ? 1 : 0;
+    svg += `<path d="M${x0} ${y0} A${r} ${r} 0 ${large} 1 ${x1} ${y1} L${xi1} ${yi1} A${ir} ${ir} 0 ${large} 0 ${xi0} ${yi0} Z" fill="${x.c}"><title>${esc(x.l)}: ${Math.round(x.v / tot * 100)}%</title></path>`;
+    a0 = a1;
+  });
+  if (opt.center) svg += `<text x="${cx}" y="${cy - 2}" text-anchor="middle" font-size="16" font-weight="700" font-family="Sora" fill="#15140F">${opt.center}</text><text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="10" fill="#9A988C" font-weight="600">${opt.centerSub || ''}</text>`;
+  svg += `</svg><div class="chart-legend" style="flex-direction:column;gap:8px;margin:0">`;
+  data.forEach(x => { svg += `<div class="lg-item"><span class="lg-dot" style="background:${x.c}"></span>${esc(x.l)} <b style="color:var(--noir);margin-left:auto">${opt.fmtVal ? opt.fmtVal(x.v) : Math.round(x.v / tot * 100) + '%'}</b></div>`; });
+  svg += `</div></div>`; el.innerHTML = svg;
+}
+
+const DASH_TREND_UP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M7 17L17 7M17 7H8M17 7v9"/></svg>`;
+const DASH_TREND_DOWN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M7 7l10 10M17 17H8M17 17V8"/></svg>`;
+/** Best-effort : {txt:'', cls:''} si la comparaison n'est pas disponible (mois précédent hors
+ *  saison, panne réseau) plutôt que de bloquer le dashboard. */
+function dashTrend(curr, prev) {
+  if (prev === null || prev === undefined || prev === 0) return { txt: '', cls: '', icon: '' };
+  const pct = ((curr - prev) / prev) * 100;
+  if (Math.abs(pct) < 1) return { txt: '— stable', cls: 'trend-flat', icon: '' };
+  const isUp = pct > 0;
+  return { txt: `${isUp ? '+' : ''}${pct.toFixed(0)}%`, cls: isUp ? 'trend-up' : 'trend-down', icon: isUp ? DASH_TREND_UP : DASH_TREND_DOWN };
+}
+function dashKpi(icon, bg, col, val, lbl, curr, prev) {
+  const t = dashTrend(curr, prev);
+  return `<div class="kpi">
+    <div class="kpi-top"><div class="kpi-ico" style="background:${bg};color:${col}">${ic(icon)}</div>${t.txt ? `<div class="kpi-trend ${t.cls}">${t.icon}${t.txt}</div>` : ''}</div>
+    <div class="kpi-val">${val}</div>
+    <div class="kpi-lbl">${lbl}</div>
+  </div>`;
+}
+function dashMini(icon, bg, col, val, lbl) {
+  return `<div class="mini"><div class="mini-ico" style="background:${bg};color:${col}">${ic(icon)}</div><div><div class="mini-val">${val}</div><div class="mini-lbl">${lbl}</div></div></div>`;
+}
+/** Mois précédent au format YYYY-MM (franchit le changement d'année correctement). */
+function prevMonthOf(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const dt = new Date(y, m - 2, 1);
+  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+}
+const DASH_AVATAR_COLORS = ['#3B6FE0', '#1F9D5B', '#7B59D8', '#E8902A', '#c5a900', '#D8463A'];
+function dashInitials(name) {
+  return (name || '').trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+}
+
 async function renderDashboard(c) {
   document.getElementById('topbar-actions').innerHTML = `
     <div class="month-picker"><input type="month" id="dash-month" value="${STATE.month}"></div>
@@ -345,39 +475,98 @@ async function renderDashboard(c) {
   try { d = await api('dashboard', { params: { month: STATE.month, season_id: STATE.seasonId } }); }
   catch (e) { c.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
 
+  // Comparaison au mois précédent : best-effort, le dashboard reste utilisable sans elle
+  // (ex : juillet, premier mois d'une nouvelle saison, où juin appartient à la saison d'avant).
+  let dPrev = null;
+  try { dPrev = await api('dashboard', { params: { month: prevMonthOf(STATE.month), season_id: STATE.seasonId } }); }
+  catch (e) { /* pas de comparaison ce mois-ci, ce n'est pas bloquant */ }
+  const pt = dPrev ? dPrev.totaux : {};
+  const prevByEmpId = {};
+  (dPrev ? dPrev.employes : []).forEach(e => { prevByEmpId[e.employee_id] = e.total; });
+
+  const total = d.totaux.total_general || 0;
+  const topTeams = [...d.par_equipe].sort((a, b) => b.employes - a.employes).slice(0, 8);
+
   c.innerHTML = `
-    <div class="stats-row">
-      <div class="stat-card"><div class="stat-label">Indemnités employés</div><div class="stat-value">${chf(d.totaux.indemnites_employes)} CHF</div></div>
-      <div class="stat-card"><div class="stat-label">Salaires joueurs</div><div class="stat-value">${chf(d.totaux.salaires_joueurs)} CHF</div></div>
-      <div class="stat-card"><div class="stat-label">Primes de match</div><div class="stat-value">${chf(d.totaux.primes_joueurs)} CHF</div></div>
-      <div class="stat-card"><div class="stat-label">Total masse RH du mois</div><div class="stat-value">${chf(d.totaux.total_general)} CHF</div></div>
+    <div class="kpi-grid">
+      ${dashKpi('wallet', 'var(--bleu-bg)', 'var(--bleu)', chf(d.totaux.indemnites_employes) + ' CHF', 'Indemnités employés', d.totaux.indemnites_employes, pt.indemnites_employes)}
+      ${dashKpi('players', 'var(--vert-bg)', 'var(--vert)', chf(d.totaux.salaires_joueurs) + ' CHF', 'Salaires joueurs', d.totaux.salaires_joueurs, pt.salaires_joueurs)}
+      ${dashKpi('primes', 'var(--violet-bg)', 'var(--violet)', chf(d.totaux.primes_joueurs) + ' CHF', 'Primes de match', d.totaux.primes_joueurs, pt.primes_joueurs)}
+      ${dashKpi('dashboard', 'var(--jaune-soft)', '#A07800', chf(d.totaux.total_general) + ' CHF', 'Total masse RH du mois', d.totaux.total_general, pt.total_general)}
     </div>
-    ${d.alerts.length ? `<div class="card"><div class="card-head"><h3>Alertes</h3></div><div class="card-body"><ul class="alert-list">${d.alerts.map(a=>`<li>${esc(a)}</li>`).join('')}</ul></div></div>` : ''}
-    <div class="card">
-      <div class="card-head"><h3>Indemnités par employé</h3></div>
-      <div class="card-body pad0">
-        ${d.employes.length ? `<table><thead><tr><th>Employé</th><th>Détail</th><th>Total</th></tr></thead><tbody>
-          ${d.employes.map(ee => `<tr><td>${esc(ee.name)}</td><td style="color:var(--gris);font-size:12.5px">${ee.lignes.map(l=>esc(l.label)+' ('+chf(l.montant)+')').join(', ')}</td><td><strong>${chf(ee.total)} CHF</strong></td></tr>`).join('')}
-        </tbody></table>` : `<div class="empty">Aucune affectation d'employé.</div>`}
+
+    <div class="mini-grid">
+      ${dashMini('teams', 'var(--ligne-2)', 'var(--gris)', d.compteurs.teams, 'Équipes actives')}
+      ${dashMini('employees', 'var(--bleu-bg)', 'var(--bleu)', d.compteurs.employees, 'Employés actifs')}
+      ${dashMini('players', 'var(--violet-bg)', 'var(--violet)', d.compteurs.players, 'Joueurs (1ère équipe)')}
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-head"><h3>Composition de la masse RH</h3></div>
+        <div class="panel-body"><div id="ch-comp"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Effectif RH par équipe</h3><div class="panel-act">Top 8</div></div>
+        <div class="panel-body"><div id="ch-teams"></div></div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-head"><h3>Salaires & primes joueurs</h3></div>
-      <div class="card-body pad0">
+
+    <div class="grid-3">
+      <div class="panel">
+        <div class="panel-head"><h3>Indemnités par employé</h3><div class="panel-act" onclick="goTo('employees')">Tout voir →</div></div>
+        <div class="panel-body scroll-list" style="padding-top:6px;padding-bottom:6px">
+          ${d.employes.length ? d.employes.map((ee, i) => {
+            const detail = ee.lignes.map(l => `${esc(l.label)} (${chf(l.montant)})`).join(', ');
+            const t = dashTrend(ee.total, prevByEmpId[ee.employee_id]);
+            return `<div class="row-item">
+              <div class="row-ico" style="background:${DASH_AVATAR_COLORS[i % DASH_AVATAR_COLORS.length]}">${dashInitials(ee.name)}</div>
+              <div class="row-main"><div class="row-t">${esc(ee.name)}</div><div class="row-s" title="${esc(detail)}">${detail}</div></div>
+              <div style="text-align:right">
+                <div class="row-meta">${chf(ee.total)} CHF</div>
+                ${t.txt ? `<div class="kpi-trend ${t.cls}" style="font-size:10px;padding:1px 6px;margin-top:3px;display:inline-flex">${t.txt}</div>` : ''}
+              </div>
+            </div>`;
+          }).join('') : `<div class="empty">Aucune affectation d'employé.</div>`}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Alertes</h3></div>
+        <div class="panel-body">
+          ${d.alerts.length ? d.alerts.map(a => {
+            const isImport = /import/i.test(a);
+            return `<div class="alert-item ${isImport ? 'alert-b' : 'alert-o'}">
+              <div class="alert-ico" style="color:${isImport ? 'var(--bleu)' : 'var(--orange)'}">${ic(isImport ? 'upload' : 'alertTri')}</div>
+              <div class="alert-t">${esc(a)}</div>
+            </div>`;
+          }).join('') : `<div class="empty">Aucune alerte.</div>`}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-head"><h3>Salaires & primes joueurs</h3></div>
+      <div class="panel-body" style="padding:0">
         ${d.joueurs.length ? `<table><thead><tr><th>Joueur</th><th>Salaire</th><th>Primes</th><th>Total</th></tr></thead><tbody>
           ${d.joueurs.map(p => `<tr><td>${esc(p.name)}</td><td>${chf(p.salaire)} CHF</td><td>${chf(p.primes)} CHF</td><td><strong>${chf(p.total)} CHF</strong></td></tr>`).join('')}
         </tbody></table>` : `<div class="empty">Aucun joueur enregistré.</div>`}
       </div>
     </div>
-    <div class="card">
-      <div class="card-head"><h3>Répartition par équipe</h3></div>
-      <div class="card-body pad0">
-        <table><thead><tr><th>Équipe</th><th>Catégorie</th><th>Employés affectés</th></tr></thead><tbody>
-          ${d.par_equipe.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.category_name||'—')}</td><td>${t.employes}</td></tr>`).join('')}
-        </tbody></table>
-      </div>
-    </div>
   `;
+
+  // Graphiques dessinés après insertion dans le DOM (besoin de clientWidth pour le bar chart)
+  donutChart(document.getElementById('ch-comp'), [
+    { l: 'Indemnités employés', v: d.totaux.indemnites_employes, c: '#3B6FE0' },
+    { l: 'Salaires joueurs', v: d.totaux.salaires_joueurs, c: '#1F9D5B' },
+    { l: 'Primes de match', v: Math.max(d.totaux.primes_joueurs, 0.01), c: '#7B59D8' },
+  ], { size: 170, center: chf(total), centerSub: 'CHF total', fmtVal: v => chf(v) + ' CHF' });
+
+  if (topTeams.length) {
+    barChart(document.getElementById('ch-teams'), topTeams.map(t => ({ l: t.name.slice(0, 7), v: t.employes })),
+      { h: 170, max: Math.max(...topTeams.map(t => t.employes)) * 1.3 });
+  } else {
+    document.getElementById('ch-teams').innerHTML = `<div class="empty">Aucune équipe active.</div>`;
+  }
 }
 async function exportCompta(){
   const blob = await api('export_compta', { params: { month: STATE.month, season_id: STATE.seasonId } });
