@@ -121,7 +121,13 @@
       "bank.import":    "Importer un releve bancaire et annuler un lot",
       "bank.reconcile": "Rapprocher une transaction bancaire avec une ecriture",
       "periods.close":  "Creer et cloturer les periodes comptables",
-      "reports.view":   "Consulter les rapports (balance, journal)"
+      "reports.view":   "Consulter les rapports (balance, journal, grand livre, bilan)",
+      "reports.export": "Exporter les rapports pour la fiduciaire",
+      "invoices.view":  "Consulter les factures a payer et a encaisser",
+      "invoices.edit":  "Creer, modifier et annuler des factures",
+      "invoices.issue": "Emettre et imprimer une facture avec son bulletin QR",
+      "fiscalyear.close": "Creer un exercice, saisir l'ouverture et cloturer l'exercice",
+      "settings.manage": "Modifier les reglages : comptes par defaut, taux de TVA, centres de cout"
     }
   }
 }

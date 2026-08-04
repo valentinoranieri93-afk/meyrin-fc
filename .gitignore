@@ -41,3 +41,11 @@ erp.meyrinfc.ch/rh/data/
 imports/*
 !imports/modele-import-contacts.xlsx
 erp.meyrinfc.ch/data/general.json
+
+# Comptabilite : la base porte le journal, les factures et les coordonnees
+# bancaires des tiers ; uploads/ porte les factures fournisseurs scannees.
+# Etat vivant du serveur, jamais versionne ni redeploye. Le .htaccess qui ferme
+# le dossier, lui, doit rester dans le depot.
+erp.meyrinfc.ch/compta/data/
+erp.meyrinfc.ch/compta/uploads/*
+!erp.meyrinfc.ch/compta/uploads/.htaccess

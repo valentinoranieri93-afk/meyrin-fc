@@ -23,6 +23,12 @@ $perms = [
     'bankReconcile' => mfc_can('compta.bank.reconcile'),
     'periodsClose'  => mfc_can('compta.periods.close'),
     'reportsView'   => mfc_can('compta.reports.view'),
+    'reportsExport' => mfc_can('compta.reports.export'),
+    'invoicesView'  => mfc_can('compta.invoices.view'),
+    'invoicesEdit'  => mfc_can('compta.invoices.edit'),
+    'invoicesIssue' => mfc_can('compta.invoices.issue'),
+    'fiscalYearClose' => mfc_can('compta.fiscalyear.close'),
+    'settingsManage'  => mfc_can('compta.settings.manage'),
     'name'          => $user['name'] ?? '',
     'erpUrl'        => ERP_URL,
 ];

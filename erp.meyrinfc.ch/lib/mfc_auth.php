@@ -340,3 +340,4 @@ function mfc_local_user(PDO $pdo, array $session): array {
  */
 require_once __DIR__ . '/mfc_club.php';
 require_once __DIR__ . '/mfc_contacts.php';
+require_once __DIR__ . '/mfc_compta.php';

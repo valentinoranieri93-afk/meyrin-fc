@@ -103,6 +103,58 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
 .b-matched{background:var(--vert-bg);color:var(--vert)}
 .b-unmatched{background:var(--orange-bg);color:var(--orange)}
 .b-ignored{background:var(--ligne-2);color:var(--gris)}
+.b-late{background:var(--rouge-bg,#fdecec);color:var(--rouge,#c0392b)}
+/* Sous-onglets : pastilles détachées, défilables sur petit écran plutôt que
+   compressées jusqu'à devenir illisibles. */
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;scrollbar-width:thin}
+.tab{flex:0 0 auto;border:1.5px solid var(--ligne);background:#fff;color:var(--gris);border-radius:20px;padding:7px 15px;font-size:13px;font-weight:650;cursor:pointer;white-space:nowrap}
+.tab:hover{border-color:var(--gris-2);color:var(--noir)}
+.tab.active{background:var(--noir);border-color:var(--noir);color:#fff}
+.hint{font-size:12.5px;color:var(--gris);line-height:1.5}
+
+/* ===== FORMULAIRE DE FACTURE PLEINE PAGE =====
+   Mise en page inspirée d'Odoo : titre et statut, en-tête en deux colonnes,
+   tableau de lignes, totaux alignés à droite. */
+.doc{background:#fff;border:1.5px solid var(--ligne);border-radius:var(--r-m);overflow:hidden}
+.doc-head{padding:22px 26px 6px}
+.doc-kicker{font-size:12px;font-weight:700;color:var(--gris);text-transform:uppercase;letter-spacing:.5px}
+.doc-title{font-family:Sora,sans-serif;font-size:30px;font-weight:800;line-height:1.15;margin:2px 0 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.doc-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 40px;padding:0 26px 20px}
+.doc-field{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:center;gap:10px;min-height:34px}
+.doc-field > label{font-size:13px;color:var(--gris);font-weight:600}
+.doc-field .field{border:none;border-bottom:1.5px solid var(--ligne);border-radius:0;padding:6px 2px;background:transparent}
+.doc-field .field:focus{border-bottom-color:var(--jaune);box-shadow:none}
+.doc-lines{border-top:1.5px solid var(--ligne)}
+.doc-lines table{width:100%;border-collapse:collapse}
+.doc-lines th{font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--gris);text-align:left;padding:11px 10px;border-bottom:1.5px solid var(--ligne);font-weight:700}
+.doc-lines td{padding:5px 8px;border-bottom:1px solid var(--ligne-2);vertical-align:middle}
+.doc-lines td .field{border:1px solid transparent;background:transparent;padding:6px 7px}
+.doc-lines td .field:hover{border-color:var(--ligne)}
+.doc-lines td .field:focus{border-color:var(--jaune);background:#fff}
+.doc-add{padding:11px 16px}
+.doc-add button{background:none;border:none;color:var(--bleu);font-size:13px;font-weight:650;cursor:pointer;padding:4px 8px;font-family:inherit}
+.doc-add button:hover{text-decoration:underline}
+.doc-totals{display:flex;justify-content:flex-end;padding:16px 26px 22px;border-top:1.5px solid var(--ligne)}
+.doc-totals table{min-width:280px}
+.doc-totals td{padding:5px 0;font-size:14px}
+.doc-totals td:last-child{text-align:right;font-variant-numeric:tabular-nums;padding-left:30px}
+.doc-totals tr.grand td{font-size:19px;font-weight:800;border-top:1.5px solid var(--noir);padding-top:10px}
+.row-x{background:none;border:none;color:var(--gris-2);cursor:pointer;font-size:17px;line-height:1;padding:4px 6px}
+.row-x:hover{color:var(--rouge,#c0392b)}
+/* Auto-complétion de tiers : la liste se superpose sans pousser le formulaire. */
+.ac-wrap{position:relative}
+.ac-list{position:absolute;top:100%;left:0;right:0;z-index:40;background:#fff;border:1.5px solid var(--ligne);border-radius:var(--r-s);box-shadow:0 8px 24px rgba(0,0,0,.10);max-height:230px;overflow:auto}
+.ac-item{padding:9px 12px;font-size:13.5px;cursor:pointer;border-bottom:1px solid var(--ligne-2)}
+.ac-item:hover,.ac-item.sel{background:var(--ligne-2)}
+.ac-item .sub{font-size:11.5px;color:var(--gris)}
+.ac-new{color:var(--bleu);font-weight:650}
+/* Plan comptable : en-tête de classe repliable. */
+.grp-head{cursor:pointer;user-select:none;background:var(--ligne-2)}
+.grp-head:hover{background:var(--ligne)}
+.grp-head td{font-weight:800;padding:10px 12px}
+.grp-caret{display:inline-block;width:14px;color:var(--gris)}
+.warn-box{background:var(--orange-bg);color:var(--orange);border-radius:var(--r-s);padding:11px 14px;font-size:13px;font-weight:600;margin-bottom:14px}
+.totals-row td{font-weight:800;border-top:2px solid var(--noir)}
 .empty{text-align:center;padding:50px 20px;color:var(--gris)}
 .empty svg{width:34px;height:34px;color:var(--gris-2);margin-bottom:10px}
 .spinner{width:20px;height:20px;border:3px solid var(--ligne);border-top-color:var(--noir);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
@@ -162,6 +214,10 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6h-3z"/><path d="M13 2v6h6"/><path d="M9 13h6M9 17h4"/></svg>
         Écritures
       </button>
+      <button class="nav-item" data-view="invoices">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 2h9l5 5v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v6h6"/><path d="M9 12h6M9 16h6"/></svg>
+        Factures
+      </button>
       <div class="nav-label">Banques</div>
       <button class="nav-item" data-view="bank">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 21h18M4 21V9l8-6 8 6v12M9 21V13h6v8"/></svg>
@@ -176,9 +232,17 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
         Rapports
       </button>
+      <button class="nav-item" data-view="years">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/><path d="M8 14h8"/></svg>
+        Exercices
+      </button>
       <button class="nav-item" data-view="periods">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
         Périodes
+      </button>
+      <button class="nav-item" data-view="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6 1.65 1.65 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Réglages
       </button>
     </nav>
     <div class="sidebar-foot" id="me-foot"></div>
@@ -223,8 +287,8 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
         <div class="panel">
           <div class="table-wrap">
             <table>
-              <thead><tr><th>N°</th><th>Nom</th><th>Catégorie</th><th>Classe</th><th>Lettrage</th><th></th></tr></thead>
-              <tbody id="accounts-rows"><tr><td colspan="6" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+              <thead><tr><th>N°</th><th>Nom</th><th>Catégorie</th><th>Classe</th><th>TVA</th><th>Lettrage</th><th></th></tr></thead>
+              <tbody id="accounts-rows"><tr><td colspan="7" class="loading-row"><span class="spinner"></span></td></tr></tbody>
             </table>
           </div>
         </div>
@@ -233,12 +297,26 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
       <!-- ===== ÉCRITURES ===== -->
       <div id="v-entries" class="view">
         <div class="toolbar">
-          <input type="date" class="field" style="max-width:160px" id="ent-from" onchange="loadEntries()">
-          <input type="date" class="field" style="max-width:160px" id="ent-to" onchange="loadEntries()">
-          <select class="field" style="max-width:200px" id="ent-source" onchange="loadEntries()">
-            <option value="">Toutes origines</option>
-            <option value="manuel">Écritures manuelles</option>
-          </select>
+          <div class="toolbar-left">
+            <div id="ent-account-pick" style="max-width:300px"></div>
+            <select class="field" style="max-width:170px" id="ent-journal" onchange="loadEntries()">
+              <option value="">Tous les journaux</option>
+            </select>
+            <input type="date" class="field" style="max-width:155px" id="ent-from" onchange="loadEntries()">
+            <input type="date" class="field" style="max-width:155px" id="ent-to" onchange="loadEntries()">
+            <select class="field" style="max-width:180px" id="ent-source" onchange="loadEntries()">
+              <option value="">Toutes origines</option>
+              <option value="manuel">Écritures manuelles</option>
+              <option value="arbitrage">Arbitrage</option>
+              <option value="commandes">Commandes</option>
+              <option value="sponsors">Sponsors</option>
+              <option value="banque">Règlements bancaires</option>
+              <option value="ouverture">Ouverture</option>
+              <option value="cloture">Clôture</option>
+              <option value="extourne">Extournes</option>
+            </select>
+            <input class="field" style="max-width:220px" id="ent-q" placeholder="Rechercher…" oninput="debouncedEntries()">
+          </div>
           <div class="toolbar-right">
             <button class="btn btn-primary btn-sm" id="btn-new-entry" style="display:none" onclick="modalEntry()">+ Nouvelle écriture</button>
           </div>
@@ -306,28 +384,14 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
 
       <!-- ===== RAPPORTS ===== -->
       <div id="v-reports" class="view">
-        <div class="toolbar">
-          <input type="date" class="field" style="max-width:160px" id="rep-from" onchange="loadReports()">
-          <input type="date" class="field" style="max-width:160px" id="rep-to" onchange="loadReports()">
+        <div class="tabs" id="reports-tabs">
+          <button class="tab active" data-rtab="statements" onclick="goReport('statements')">Bilan &amp; résultat</button>
+          <button class="tab" data-rtab="ledger" onclick="goReport('ledger')">Grand livre</button>
+          <button class="tab" data-rtab="balance" onclick="goReport('balance')">Balance</button>
+          <button class="tab" data-rtab="journal" onclick="goReport('journal')">Journal</button>
+          <button class="tab" data-rtab="aged" onclick="goReport('aged')">Balance âgée</button>
         </div>
-        <div class="panel">
-          <div class="panel-head"><div class="panel-title">Balance des comptes</div></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>N°</th><th>Compte</th><th>Classe</th><th class="num">Débit</th><th class="num">Crédit</th><th class="num">Solde</th></tr></thead>
-              <tbody id="balance-rows"><tr><td colspan="6" class="loading-row"><span class="spinner"></span></td></tr></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-head"><div class="panel-title">Journal des écritures</div></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th class="num">Débit</th><th class="num">Crédit</th></tr></thead>
-              <tbody id="journal-rows"><tr><td colspan="6" class="loading-row"><span class="spinner"></span></td></tr></tbody>
-            </table>
-          </div>
-        </div>
+        <div id="reports-body"><div class="loading-row"><span class="spinner"></span></div></div>
       </div>
 
       <!-- ===== PÉRIODES ===== -->
@@ -345,6 +409,82 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
             </table>
           </div>
         </div>
+      </div>
+
+      <!-- ===== FACTURES ===== -->
+      <div id="v-invoices" class="view">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <select class="field" id="inv-filter-status" onchange="loadInvoices()">
+              <option value="">Tous les statuts</option>
+              <option value="ouverte">Ouvertes</option>
+              <option value="reglee_partielle">Partiellement réglées</option>
+              <option value="reglee">Réglées</option>
+              <option value="annulee">Annulées</option>
+            </select>
+            <select class="field" id="inv-filter-direction" onchange="loadInvoices()">
+              <option value="">Achats et ventes</option>
+              <option value="a_payer">À payer (achats)</option>
+              <option value="a_recevoir">À encaisser (ventes)</option>
+            </select>
+            <input class="field" id="inv-filter-q" placeholder="Rechercher un tiers, un libellé…" oninput="debouncedInvoices()">
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-ghost btn-sm" id="btn-invoice-from-module" style="display:none" onclick="modalGenerateInvoice()">Générer depuis un module</button>
+            <button class="btn btn-ghost btn-sm" id="btn-new-purchase" style="display:none" onclick="modalInvoice('a_payer')">+ Facture à payer</button>
+            <button class="btn btn-primary btn-sm" id="btn-new-invoice" style="display:none" onclick="modalInvoice('a_recevoir')">+ Facture à encaisser</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pièce</th><th>Date</th><th>Tiers</th><th>Libellé</th><th>Source</th><th style="text-align:right">Montant</th><th style="text-align:right">Reste dû</th><th>Statut</th><th></th></tr></thead>
+              <tbody id="invoices-rows"><tr><td colspan="9" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== FACTURE, FORMULAIRE PLEINE PAGE ===== -->
+      <div id="v-invoice-edit" class="view">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="btn btn-ghost btn-sm" onclick="goTo('invoices')">&larr; Retour aux factures</button>
+          </div>
+          <div class="toolbar-right" id="inv-form-actions"></div>
+        </div>
+        <div class="doc" id="inv-form"><div class="loading-row"><span class="spinner"></span></div></div>
+      </div>
+
+      <!-- ===== EXERCICES ===== -->
+      <div id="v-years" class="view">
+        <div class="toolbar">
+          <div class="toolbar-right">
+            <button class="btn btn-primary btn-sm" id="btn-new-year" style="display:none" onclick="modalFiscalYear()">+ Nouvel exercice</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Exercice</th><th>Début</th><th>Fin</th><th>Écritures</th><th>Ouverture</th><th>Statut</th><th></th></tr></thead>
+              <tbody id="years-rows"><tr><td colspan="7" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== RÉGLAGES ===== -->
+      <div id="v-settings" class="view">
+        <div class="tabs" id="settings-tabs">
+          <button class="tab active" data-stab="accounts" onclick="goSettings('accounts')">Comptes par défaut</button>
+          <button class="tab" data-stab="products" onclick="goSettings('products')">Produits</button>
+          <button class="tab" data-stab="terms" onclick="goSettings('terms')">Conditions de paiement</button>
+          <button class="tab" data-stab="journals" onclick="goSettings('journals')">Journaux</button>
+          <button class="tab" data-stab="vat" onclick="goSettings('vat')">TVA</button>
+          <button class="tab" data-stab="costs" onclick="goSettings('costs')">Centres de coût</button>
+          <button class="tab" data-stab="qr" onclick="goSettings('qr')">Coordonnées du club</button>
+        </div>
+        <div id="settings-body"><div class="loading-row"><span class="spinner"></span></div></div>
       </div>
 
     </div>
@@ -454,21 +594,40 @@ const VIEW_META = {
   entries:   ['Écritures', 'Journal des écritures manuelles'],
   bank:      ['Comptes & import', 'Comptes bancaires et import de relevés'],
   bank_batches: ['Comptes & import', 'Historique des imports'],
-  reconcile: ['Rapprochement', 'Associer une transaction bancaire à une écriture'],
-  reports:   ['Rapports', 'Balance des comptes et journal'],
-  periods:   ['Périodes', 'Exercices et clôtures'],
+  reconcile: ['Rapprochement', 'Solder une facture avec un mouvement bancaire'],
+  reports:   ['Rapports', 'Bilan, compte de résultat, grand livre et balances'],
+  periods:   ['Périodes', 'Découpage interne de l\'exercice'],
+  invoices:  ['Factures', 'À payer et à encaisser, générées depuis les modules ou saisies'],
+  invoice_edit: ['Facture', 'Saisie et consultation d\'une facture'],
+  years:     ['Exercices', 'Saison comptable, écriture d\'ouverture et clôture'],
+  settings:  ['Réglages', 'Comptes par défaut, produits, TVA, centres de coût'],
 };
 
+/* Vues sans entrée propre dans le menu : elles gardent en surbrillance celle
+   dont elles sont un détail, pour ne pas donner l'impression d'être ailleurs. */
+const VIEW_PARENT = { bank_batches: 'bank', invoice_edit: 'invoices' };
+
+/* Le nom de la vue et l'identifiant de son bloc ne coïncident pas toujours :
+   les vues sont nommées en snake_case, les identifiants HTML en tirets. Sans
+   cette table, `v-invoice_edit` ne correspondait à aucun bloc et TOUTES les
+   vues se retrouvaient masquées — l'écran blanc sur le formulaire de facture. */
+const VIEW_ELEMENT = { bank_batches: 'bank', invoice_edit: 'invoice-edit' };
+
 function goTo(view) {
-  const btn = document.querySelector(`.nav-item[data-view="${view === 'bank_batches' ? 'bank' : view}"]`);
+  const navView = VIEW_PARENT[view] || view;
+  const btn = document.querySelector(`.nav-item[data-view="${navView}"]`);
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n === btn));
   const meta = VIEW_META[view] || VIEW_META.dashboard;
   document.getElementById('page-title').textContent = meta[0];
   document.getElementById('page-sub').textContent = meta[1];
   document.getElementById('topbar-actions').innerHTML = '';
 
-  const targetId = 'v-' + (view === 'bank_batches' ? 'bank' : view);
-  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === targetId));
+  const targetId = 'v-' + (VIEW_ELEMENT[view] || view);
+  const target = document.getElementById(targetId);
+  /* Filet : une vue inconnue retombe sur le tableau de bord plutôt que de tout
+     masquer. Un écran blanc ne dit rien à l'utilisateur, le dashboard si. */
+  if (!target) { if (view !== 'dashboard') goTo('dashboard'); return; }
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v === target));
   S.currentView = view;
 
   if (view === 'bank_batches') {
@@ -481,6 +640,8 @@ function goTo(view) {
   const loaders = {
     dashboard: loadDashboard, accounts: loadAccounts, entries: loadEntries,
     bank: loadBankView, reconcile: loadReconcileList, reports: loadReports, periods: loadPeriods,
+    invoices: loadInvoices, years: loadYears, settings: loadSettings,
+    invoice_edit: openInvoiceForm,
   };
   (loaders[view] || loaders.dashboard)();
 }
@@ -536,24 +697,57 @@ async function loadAccounts() {
     renderAccounts();
   } catch (e) { toast(e.message, 'err'); }
 }
+/* Libellé de chaque classe du plan comptable, par premier chiffre. */
+const ACC_CLASSES = {
+  '1': 'Actifs', '2': 'Passifs', '3': "Produits d'exploitation",
+  '4': 'Charges directes', '5': 'Charges de personnel', '6': "Autres charges d'exploitation",
+  '7': 'Résultats annexes', '8': 'Résultats exceptionnels', '9': 'Clôture',
+};
+/* Groupes dépliés. Tout est replié au départ : 171 comptes d'un bloc ne se
+   lisent pas. */
+const ACC_OPEN = new Set();
+
+function toggleAccGroup(digit) {
+  ACC_OPEN.has(digit) ? ACC_OPEN.delete(digit) : ACC_OPEN.add(digit);
+  renderAccounts();
+}
+
 function renderAccounts() {
   const q = f('acc-search').toLowerCase();
   const cls = f('acc-filter-class');
   const rows = S.accounts.filter(a =>
     (!cls || a.class === cls) &&
-    (!q || a.number.includes(q) || a.name.toLowerCase().includes(q) || (a.category||'').toLowerCase().includes(q))
+    (!q || a.number.includes(q) || a.name.toLowerCase().includes(q) || (a.category || '').toLowerCase().includes(q))
   );
   const tbody = document.getElementById('accounts-rows');
-  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="6" class="empty">Aucun compte ne correspond.</td></tr>`; return; }
-  tbody.innerHTML = rows.map(a => `
-    <tr style="${a.active==0?'opacity:.5':''}">
-      <td style="font-family:Sora;font-weight:700">${esc(a.number)}</td>
-      <td>${esc(a.name)}</td>
-      <td style="color:var(--gris)">${esc(a.category||'—')}</td>
-      <td><span class="badge b-${a.class}">${classLabel(a.class)}</span></td>
-      <td>${a.allow_lettrage==1 ? '<span style="color:var(--vert)">✓</span>' : '<span style="color:var(--gris-2)">—</span>'}</td>
-      <td style="text-align:right">${MFC.accountsEdit ? `<button class="btn btn-ghost btn-sm" onclick="modalAccount(${a.id})">Modifier</button>` : ''}</td>
-    </tr>`).join('');
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="7" class="empty">Aucun compte ne correspond.</td></tr>`; return; }
+
+  /* Une recherche force l'ouverture : un résultat caché derrière un groupe
+     replié équivaudrait à un filtre qui ne trouve rien. */
+  const forceOpen = q !== '' || cls !== '';
+
+  const groups = {};
+  rows.forEach(a => { (groups[String(a.number).charAt(0)] ||= []).push(a); });
+
+  tbody.innerHTML = Object.keys(groups).sort().map(digit => {
+    const list = groups[digit];
+    const open = forceOpen || ACC_OPEN.has(digit);
+    const head = `<tr class="grp-head" onclick="toggleAccGroup('${digit}')">
+      <td colspan="7"><span class="grp-caret">${open ? '▾' : '▸'}</span>
+        ${digit} — ${esc(ACC_CLASSES[digit] || 'Autres comptes')}
+        <span style="font-weight:600;color:var(--gris)"> · ${list.length} compte(s)</span></td></tr>`;
+    if (!open) return head;
+    return head + list.map(a => `
+      <tr style="${a.active == 0 ? 'opacity:.5' : ''}">
+        <td style="font-family:Sora;font-weight:700;padding-left:26px">${esc(a.number)}</td>
+        <td>${esc(a.name)}</td>
+        <td style="color:var(--gris)">${esc(a.category || '—')}</td>
+        <td><span class="badge b-${a.class}">${classLabel(a.class)}</span></td>
+        <td style="color:var(--gris)">${a.vat_percent != null ? a.vat_percent + ' %' : '—'}</td>
+        <td>${a.allow_lettrage == 1 ? '<span style="color:var(--vert)">✓</span>' : '<span style="color:var(--gris-2)">—</span>'}</td>
+        <td style="text-align:right">${MFC.accountsEdit ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();modalAccount(${a.id})">Modifier</button>` : ''}</td>
+      </tr>`).join('');
+  }).join('');
 }
 function modalAccount(id) {
   const a = id ? S.accounts.find(x => x.id === id) : {};
@@ -567,12 +761,17 @@ function modalAccount(id) {
       <div><label class="lbl">Catégorie (libre)</label><input class="field" id="mAccCategory" value="${esc(a.category||'')}" placeholder="Banque et espèces"></div>
       <div><label class="lbl">Devise</label><input class="field" id="mAccCurrency" value="${esc(a.currency||'CHF')}"></div>
     </div>
+    <div style="margin-bottom:12px"><label class="lbl">TVA par défaut</label>
+      <select class="field" id="mAccVat"><option value="">Aucune</option>
+        ${(S.vatRates || []).map(v => `<option value="${v.id}" ${v.id == a.vat_rate_id ? 'selected' : ''}>${esc(v.label)} (${v.kind === 'vente' ? 'vente' : 'achat'})</option>`).join('')}</select>
+      <div class="hint" style="margin-top:6px">Reprise d'office sur toute ligne de facture visant ce compte, sauf si le produit ou la ligne en imposent une autre.</div></div>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="mAccLettrage" ${a.allow_lettrage==1?'checked':''}> Compte pouvant être rapproché (débiteurs, créanciers, comptes courants…)</label>
     ${id ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px"><input type="checkbox" id="mAccActive" ${a.active==1?'checked':''}> Compte actif</label>` : ''}
   `, async () => {
     const payload = {
       name: f('mAccName'), category: f('mAccCategory'), class: f('mAccClass'),
       currency: f('mAccCurrency') || 'CHF', allow_lettrage: document.getElementById('mAccLettrage').checked ? 1 : 0,
+      vat_rate_id: Number(f('mAccVat')) || null,
     };
     if (!payload.name) throw new Error('Le nom du compte est requis');
     if (id) {
@@ -594,39 +793,128 @@ function modalAccount(id) {
 /* ===============================================================
    ÉCRITURES (JOURNAL)
 =============================================================== */
+/* Liste PLATE de mouvements, et non de pièces : on cherche un montant sur un
+   compte, pas une écriture dont on connaîtrait déjà le numéro. Une ligne issue
+   d'une facture ouvre cette facture ; une ligne d'écriture manuelle n'affiche
+   aucun lien, plutôt qu'un lien mort. */
+let entTimer = null;
+function debouncedEntries() { clearTimeout(entTimer); entTimer = setTimeout(loadEntries, 300); }
+
+/* ---------------------------------------------------------------
+   SÉLECTEUR DE COMPTE AVEC RECHERCHE
+
+   Une liste déroulante de 171 comptes ne se parcourt pas : on cherche « 6510 »
+   ou « arbitre », pas la 94e ligne. Le composant garde donc un champ de saisie
+   libre et propose les comptes qui correspondent, sur le numéro comme sur le
+   nom. La valeur retenue vit dans ACC_PICK, pas dans le DOM, pour que le champ
+   affiche un libellé lisible sans qu'on ait à le réanalyser.
+--------------------------------------------------------------- */
+const ACC_PICK = {};
+
+function accountPicker(key, opts = {}) {
+  ACC_PICK[key] = ACC_PICK[key] || { id: '', onPick: null };
+  ACC_PICK[key].onPick = opts.onPick || ACC_PICK[key].onPick;
+  const cur = (S.accounts || []).find(a => a.id == ACC_PICK[key].id);
+  return `<div class="ac-wrap">
+    <input class="field" id="accpick-${key}" autocomplete="off"
+           placeholder="${esc(opts.placeholder || 'Tous les comptes')}"
+           value="${cur ? esc(cur.number + ' — ' + cur.name) : ''}"
+           oninput="accPickSearch('${key}')" onfocus="accPickSearch('${key}')"
+           onblur="setTimeout(()=>accPickClose('${key}'),150)">
+    <div id="accpick-box-${key}"></div>
+  </div>`;
+}
+function accPickValue(key) { return (ACC_PICK[key] || {}).id || ''; }
+function accPickClose(key) {
+  const box = document.getElementById('accpick-box-' + key);
+  if (box) box.innerHTML = '';
+}
+function accPickSearch(key) {
+  const inp = document.getElementById('accpick-' + key);
+  const box = document.getElementById('accpick-box-' + key);
+  if (!inp || !box) return;
+  const q = inp.value.trim().toLowerCase();
+
+  /* Champ vidé = filtre levé : c'est le geste attendu pour revenir à « tous
+     les comptes », et il doit relancer la recherche tout de suite. */
+  if (q === '' && ACC_PICK[key].id) { accPickSet(key, ''); }
+
+  const filter = ACC_PICK[key].filter;
+  let list = (S.accounts || []).filter(a => a.active != 0);
+  if (filter) list = list.filter(filter);
+  if (q) list = list.filter(a => (a.number + ' ' + a.name).toLowerCase().includes(q));
+  list = list.slice(0, 40);
+
+  box.innerHTML = `<div class="ac-list">
+    ${ACC_PICK[key].id ? `<div class="ac-item" onmousedown="accPickSet('${key}','')"><b>Tous les comptes</b></div>` : ''}
+    ${list.length ? list.map(a => `<div class="ac-item" onmousedown="accPickSet('${key}','${a.id}')">
+        <b>${esc(a.number)}</b> ${esc(a.name)}<div class="sub">${classLabel(a.class)}</div></div>`).join('')
+      : '<div class="ac-item" style="color:var(--gris)">Aucun compte ne correspond</div>'}
+  </div>`;
+}
+function accPickSet(key, id) {
+  ACC_PICK[key].id = id ? String(id) : '';
+  const a = (S.accounts || []).find(x => x.id == id);
+  const inp = document.getElementById('accpick-' + key);
+  if (inp) inp.value = a ? a.number + ' — ' + a.name : '';
+  accPickClose(key);
+  if (ACC_PICK[key].onPick) ACC_PICK[key].onPick(ACC_PICK[key].id);
+}
+
 async function loadEntries() {
   document.getElementById('btn-new-entry').style.display = MFC.journalEdit ? '' : 'none';
-  try {
-    const params = {};
-    if (f('ent-from')) params.from = f('ent-from');
-    if (f('ent-to')) params.to = f('ent-to');
-    if (f('ent-source')) params.source_module = f('ent-source');
-    S.entries = await apiGet('entries', params);
-    renderEntries();
-  } catch (e) { toast(e.message, 'err'); }
-}
-function renderEntries() {
+
+  const pick = document.getElementById('ent-account-pick');
+  if (pick && !pick.innerHTML.trim()) {
+    pick.innerHTML = accountPicker('entries', { placeholder: 'Tous les comptes', onPick: loadEntries });
+  }
+  const jsel = document.getElementById('ent-journal');
+  if (jsel && jsel.options.length <= 1) {
+    jsel.innerHTML = '<option value="">Tous les journaux</option>' +
+      (S.journals || []).map(j => `<option value="${j.id}">${esc(j.code)} — ${esc(j.label)}</option>`).join('');
+  }
+
+  const params = {};
+  if (accPickValue('entries')) params.account_id = accPickValue('entries');
+  if (f('ent-journal'))  params.journal_id = f('ent-journal');
+  if (f('ent-from'))    params.from = f('ent-from');
+  if (f('ent-to'))      params.to = f('ent-to');
+  if (f('ent-source'))  params.source_module = f('ent-source');
+  if (f('ent-q'))       params.q = f('ent-q');
+
   const el = document.getElementById('entries-list');
-  if (!S.entries.length) { el.innerHTML = `<div class="panel"><div class="empty">Aucune écriture sur cette période.</div></div>`; return; }
-  el.innerHTML = S.entries.map(e => {
-    const total = e.lines.reduce((s, l) => s + Number(l.debit), 0);
-    return `<div class="panel">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title">${esc(e.label)}</div>
-          <div style="font-size:11.5px;color:var(--gris);margin-top:2px">${e.entry_date}${e.piece_ref ? ' · ' + esc(e.piece_ref) : ''} · ${e.source_module === 'manuel' ? 'Écriture manuelle' : esc(e.source_module)}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="font-family:Sora;font-weight:700">${chf(total)}</div>
-          ${(MFC.journalEdit && e.source_module === 'manuel') ? `<button class="btn btn-ghost btn-sm" onclick="deleteEntry(${e.id})">Supprimer</button>` : ''}
-        </div>
-      </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Compte</th><th>Libellé</th><th class="num">Débit</th><th class="num">Crédit</th></tr></thead>
-        <tbody>${e.lines.map(l => `<tr><td>${esc(l.account_number)} — ${esc(l.account_name)}</td><td style="color:var(--gris)">${esc(l.label||'')}</td><td class="num">${Number(l.debit)>0?fmt(l.debit):''}</td><td class="num">${Number(l.credit)>0?fmt(l.credit):''}</td></tr>`).join('')}</tbody>
-      </table></div>
-    </div>`;
-  }).join('');
+  try {
+    const rows = await apiGet('entry_lines', params);
+    S.entryLines = rows;
+    if (!rows.length) { el.innerHTML = `<div class="panel"><div class="empty">Aucun mouvement pour ces critères.</div></div>`; return; }
+
+    let totD = 0, totC = 0;
+    rows.forEach(r => { totD += Number(r.debit); totC += Number(r.credit); });
+
+    el.innerHTML = `<div class="panel"><div class="table-wrap"><table>
+      <thead><tr><th style="width:100px">Date</th><th style="width:60px">Jrnl</th><th style="width:135px">Pièce</th><th style="width:190px">Compte</th>
+        <th>Libellé</th><th style="width:110px">Analytique</th><th class="num" style="width:110px">Débit</th>
+        <th class="num" style="width:110px">Crédit</th><th style="width:90px"></th></tr></thead>
+      <tbody>${rows.map(r => {
+        const clickable = !!r.invoice_id;
+        return `<tr ${clickable ? `style="cursor:pointer" onclick="showInvoice(${r.invoice_id})"` : ''}>
+          <td>${r.entry_date}</td>
+          <td style="color:var(--gris);font-size:12px">${esc(r.journal_code || '')}</td>
+          <td style="font-family:Sora;font-weight:700;font-size:12px">${esc(r.piece_ref || '—')}</td>
+          <td>${esc(r.account_number)} <span style="color:var(--gris)">${esc((r.account_name || '').slice(0, 18))}</span></td>
+          <td>${esc(r.line_label || r.entry_label)}${r.reversal_of_entry_id ? ' <span class="badge b-ignored">extourne</span>' : ''}</td>
+          <td style="color:var(--gris)">${esc(r.cost_center_code || '')}</td>
+          <td class="num">${Number(r.debit) > 0 ? fmt(r.debit) : ''}</td>
+          <td class="num">${Number(r.credit) > 0 ? fmt(r.credit) : ''}</td>
+          <td style="text-align:right">${clickable ? '<span class="btn btn-ghost btn-sm">Facture &rarr;</span>' : ''}</td>
+        </tr>`;
+      }).join('')}
+      <tr class="totals-row"><td colspan="6">${rows.length} mouvement(s)</td>
+        <td class="num">${fmt(totD)}</td><td class="num">${fmt(totC)}</td><td></td></tr>
+      </tbody></table></div></div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="panel"><div class="empty">${esc(e.message)}</div></div>`;
+  }
 }
 async function deleteEntry(id) {
   if (!confirm('Supprimer cette écriture ?')) return;
@@ -641,8 +929,9 @@ async function deleteEntry(id) {
 function modalEntry() {
   const accOptions = S.accounts.filter(a => a.active == 1).map(a => `<option value="${a.id}">${esc(a.number)} — ${esc(a.name)}</option>`).join('');
   openModal('Nouvelle écriture', `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
       <div><label class="lbl">Date</label><input type="date" class="field" id="mEntDate" value="${today()}"></div>
+      <div><label class="lbl">Journal</label><select class="field" id="mEntJournal">${journalOptions('od')}</select></div>
       <div><label class="lbl">Référence pièce (optionnel)</label><input class="field" id="mEntRef" placeholder="Facture n°…"></div>
     </div>
     <div style="margin-bottom:12px"><label class="lbl">Libellé</label><input class="field" id="mEntLabel" placeholder="Ex : Paiement facture fournisseur X"></div>
@@ -663,7 +952,7 @@ function modalEntry() {
       label: row.querySelector('.line-label').value || '',
     })).filter(l => l.account_id && (l.debit > 0 || l.credit > 0));
     if (lines.length < 2) throw new Error('Au moins deux lignes avec un montant sont requises');
-    await api('entries', 'POST', { entry_date: date, piece_ref: f('mEntRef'), label, lines });
+    await api('entries', 'POST', { entry_date: date, piece_ref: f('mEntRef'), label, lines, journal_id: Number(f('mEntJournal')) || null });
     toast('Écriture créée');
     closeModal();
     await loadEntries();
@@ -671,6 +960,16 @@ function modalEntry() {
   document.getElementById('mEntLines').addEventListener('input', updateEntryTotals);
   document.getElementById('mEntLines').addEventListener('change', updateEntryTotals);
 }
+/* Journaux proposés pour un type d'opération : les journaux du type demandé
+   d'abord, puis les opérations diverses en repli, toujours disponibles. */
+function journalOptions(kind, selected) {
+  const list = (S.journals || []).filter(j => j.kind === kind || j.kind === 'od');
+  const def = selected || (list.find(j => j.kind === kind && j.is_default == 1)
+                        || list.find(j => j.kind === kind)
+                        || list[0] || {}).id;
+  return list.map(j => `<option value="${j.id}" ${j.id == def ? 'selected' : ''}>${esc(j.code)} — ${esc(j.label)}</option>`).join('');
+}
+
 function entryLineRow(accOptions) {
   return `<div class="line-row">
     <select class="field line-account"><option value="">— Compte —</option>${accOptions}</select>
@@ -851,61 +1150,278 @@ async function loadReconcileList() {
     </table></div></div>`;
   } catch (e) { toast(e.message, 'err'); }
 }
+/**
+ * Rapprochement : on solde des FACTURES, pas des écritures nues.
+ *
+ * Le sens du mouvement filtre déjà les candidates côté serveur (un débit règle
+ * un achat, un crédit encaisse une vente) et celles dont le reste dû tombe pile
+ * sur le montant remontent en tête. Un virement groupé peut solder plusieurs
+ * factures d'un coup, d'où les montants saisissables ligne par ligne.
+ */
+let RECONCILE_TXN = null;
+
 async function openReconcileModal(txnId) {
-  let suggestions = [];
-  try { suggestions = await apiGet('reconcile_suggestions', { bank_transaction_id: txnId }); } catch (e) {}
-  openModal('Rapprocher la transaction', `
-    ${suggestions.length ? `
-      <label class="lbl">Suggestions (même montant, ± 45 jours)</label>
-      <div class="lines-editor">
-        ${suggestions.map(s => `<div class="line-row" style="grid-template-columns:1fr auto">
-          <div><div style="font-weight:600;font-size:13px">${esc(s.label)}</div><div style="font-size:11.5px;color:var(--gris)">${s.entry_date}${s.piece_ref?' · '+esc(s.piece_ref):''}</div></div>
-          <button class="btn btn-primary btn-sm" type="button" onclick="reconcileWith(${txnId}, ${s.id})">Choisir</button>
-        </div>`).join('')}
-      </div>
-      <div style="text-align:center;margin:12px 0;color:var(--gris);font-size:12px">— ou —</div>
-    ` : ''}
-    <label class="lbl">Rechercher une écriture par numéro (ID)</label>
-    <div style="display:flex;gap:8px">
-      <input type="number" class="field" id="mRecEntryId" placeholder="ID de l'écriture">
-    </div>
+  RECONCILE_TXN = txnId;
+  openModal('Solder une ou plusieurs factures', `
+    <input class="field" id="mRecSearch" placeholder="Rechercher un tiers, un libellé, une pièce…" oninput="searchReconcileInvoices()" style="margin-bottom:12px">
+    <div id="mRecList"><div class="loading-row"><span class="spinner"></span></div></div>
+    <div style="font-weight:800;margin-top:12px">Total affecté : <span id="mRecTotal">0.00</span> CHF</div>
   `, async () => {
-    const entryId = parseInt(f('mRecEntryId'));
-    if (!entryId) throw new Error('Choisis une suggestion ou saisis un ID d\'écriture');
-    await api('reconcile', 'POST', { bank_transaction_id: txnId, journal_entry_id: entryId });
-    toast('Transaction rapprochée');
+    const allocations = [...document.querySelectorAll('.rec-inv:checked')].map(c => ({
+      invoice_id: Number(c.value),
+      amount: Number(document.querySelector(`.rec-amt[data-inv="${c.value}"]`)?.value) || 0,
+    }));
+    if (!allocations.length) throw new Error('Sélectionnez au moins une facture');
+    const r = await api('reconcile', 'POST', { bank_transaction_id: txnId, allocations });
+    toast(r.unsynced_sources && r.unsynced_sources.length
+      ? `Rapproché, mais ${r.unsynced_sources.length} pièce(s) source n'ont pas pu être marquées payées`
+      : 'Facture(s) soldée(s) et écriture de règlement passée');
     closeModal();
     await loadReconcileList();
   }, 'Rapprocher');
+  searchReconcileInvoices();
 }
-async function reconcileWith(txnId, entryId) {
-  try {
-    await api('reconcile', 'POST', { bank_transaction_id: txnId, journal_entry_id: entryId });
-    toast('Transaction rapprochée');
-    closeModal();
-    await loadReconcileList();
-  } catch (e) { toast(e.message, 'err'); }
+
+let recTimer = null;
+function searchReconcileInvoices() {
+  clearTimeout(recTimer);
+  recTimer = setTimeout(async () => {
+    const box = document.getElementById('mRecList');
+    if (!box) return;
+    try {
+      const params = { bank_transaction_id: RECONCILE_TXN };
+      const q = document.getElementById('mRecSearch')?.value || '';
+      if (q) params.q = q;
+      const rows = await apiGet('reconcile_invoices', params);
+      box.innerHTML = rows.length ? `<div style="max-height:280px;overflow:auto;border:1.5px solid var(--ligne);border-radius:8px;padding:10px">
+        ${rows.map(i => `<label style="display:grid;grid-template-columns:auto 1fr 110px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--ligne)">
+          <input type="checkbox" class="rec-inv" value="${i.id}" data-open="${i.amount_open}" onchange="recToggle(${i.id});updateRecTotal()">
+          <span><b style="font-family:Sora">${esc(i.piece_ref)}</b> · ${esc(i.tiers_label || '—')}<br>
+            <span style="font-size:12px;color:var(--gris)">${esc(i.label)} · ${i.entry_date}${i.due_date ? ' · échéance ' + i.due_date : ''}</span></span>
+          <input type="number" step="0.05" class="field rec-amt" data-inv="${i.id}" value="${i.amount_open}" disabled oninput="updateRecTotal()" style="text-align:right">
+        </label>`).join('')}</div>`
+        : '<div class="empty">Aucune facture ouverte ne correspond à ce mouvement.<br>Créez-la d\'abord dans l\'onglet Factures.</div>';
+      updateRecTotal();
+    } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  }, 250);
+}
+/* Le montant n'est saisissable que si la facture est cochée : un champ actif
+   sur une ligne non retenue laisse croire qu'elle sera soldée. */
+function recToggle(id) {
+  const cb = document.querySelector(`.rec-inv[value="${id}"]`);
+  const amt = document.querySelector(`.rec-amt[data-inv="${id}"]`);
+  if (cb && amt) amt.disabled = !cb.checked;
+}
+function updateRecTotal() {
+  const t = [...document.querySelectorAll('.rec-inv:checked')]
+    .reduce((s, c) => s + (Number(document.querySelector(`.rec-amt[data-inv="${c.value}"]`)?.value) || 0), 0);
+  const el = document.getElementById('mRecTotal');
+  if (el) el.textContent = fmt(t);
 }
 
 /* ===============================================================
    RAPPORTS
 =============================================================== */
-async function loadReports() {
-  try {
-    const params = {};
-    if (f('rep-from')) params.from = f('rep-from');
-    if (f('rep-to')) params.to = f('rep-to');
-    const [balance, journal] = await Promise.all([apiGet('report_balance', params), apiGet('report_journal', params)]);
-    const balanceRows = balance.filter(a => a.total_debit > 0 || a.total_credit > 0);
-    document.getElementById('balance-rows').innerHTML = balanceRows.length ? balanceRows.map(a => `
-      <tr><td style="font-family:Sora;font-weight:700">${esc(a.number)}</td><td>${esc(a.name)}</td><td><span class="badge b-${a.class}">${classLabel(a.class)}</span></td>
-      <td class="num">${fmt(a.total_debit)}</td><td class="num">${fmt(a.total_credit)}</td><td class="num" style="font-weight:700">${fmt(a.balance)}</td></tr>`).join('')
-      : `<tr><td colspan="6" class="empty">Aucun mouvement sur cette période.</td></tr>`;
-    document.getElementById('journal-rows').innerHTML = journal.length ? journal.map(l => `
-      <tr><td>${l.entry_date}</td><td style="color:var(--gris)">${esc(l.piece_ref||'—')}</td><td>${esc(l.entry_label)}</td>
-      <td>${esc(l.account_number)} — ${esc(l.account_name)}</td><td class="num">${Number(l.debit)>0?fmt(l.debit):''}</td><td class="num">${Number(l.credit)>0?fmt(l.credit):''}</td></tr>`).join('')
-      : `<tr><td colspan="6" class="empty">Aucune écriture sur cette période.</td></tr>`;
-  } catch (e) { toast(e.message, 'err'); }
+let REPORT_TAB = 'statements';
+
+function goReport(tab) {
+  REPORT_TAB = tab;
+  document.querySelectorAll('#reports-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.rtab === tab));
+  loadReports();
+}
+function loadReports() {
+  const body = document.getElementById('reports-body');
+  body.innerHTML = '<div class="loading-row"><span class="spinner"></span></div>';
+  const fn = { statements: repStatements, ledger: repLedger, balance: repBalance, journal: repJournal, aged: repAged }[REPORT_TAB] || repStatements;
+  fn(body).catch(e => { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
+}
+
+/** Sélecteur d'exercice réutilisé par plusieurs rapports. */
+function yearSelect(id, onchange) {
+  const cur = S.currentYearId;
+  return `<select class="field" style="max-width:230px" id="${id}" onchange="${onchange}">
+    ${(S.years || []).map(y => `<option value="${y.id}" ${y.id == cur ? 'selected' : ''}>${esc(y.label)}${y.status === 'cloture' ? ' (clôturé)' : ''}</option>`).join('')}
+  </select>`;
+}
+
+/* Bilan et compte de résultat, présentés côte à côte avec le comparatif N-1
+   exigé par l'art. 958d al. 2 CO. */
+async function repStatements(body) {
+  const fyId = S.reportYearId || S.currentYearId || '';
+  const [bs, is] = await Promise.all([
+    apiGet('report_balance_sheet', fyId ? { fiscal_year_id: fyId } : {}),
+    apiGet('report_income_statement', fyId ? { fiscal_year_id: fyId } : {}),
+  ]);
+  const line = r => `<tr><td style="font-family:Sora;font-weight:700">${esc(r.number)}</td><td>${esc(r.name)}</td>
+      <td class="num">${fmt(r.balance)}</td><td class="num" style="color:var(--gris)">${fmt(r.balance_prev)}</td></tr>`;
+  const nz = rows => rows.filter(r => Math.abs(Number(r.balance)) > 0.005 || Math.abs(Number(r.balance_prev)) > 0.005);
+
+  body.innerHTML = `
+    <div class="toolbar"><div class="toolbar-left">${yearSelect('rep-year', 'S.reportYearId=this.value;loadReports()')}</div></div>
+    ${bs.warning ? `<div class="warn-box">${esc(bs.warning)}</div>` : ''}
+    ${!bs.balanced ? `<div class="warn-box">Le bilan ne s'équilibre pas : actif ${fmt(bs.total_actif)} contre passif ${fmt(bs.total_passif)} plus résultat ${fmt(bs.result_current)}. Vérifiez l'écriture d'ouverture.</div>` : ''}
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">Bilan au ${bs.as_of}</div><div class="hint">Comparatif : ${bs.previous_year ? esc(bs.previous_year.label) : 'aucun exercice précédent'}</div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>N°</th><th>Compte</th><th class="num">Exercice</th><th class="num">Précédent</th></tr></thead>
+        <tbody>
+          <tr><td colspan="4" style="font-weight:800;background:var(--ligne-2)">ACTIF</td></tr>
+          ${nz(bs.actif).map(line).join('') || '<tr><td colspan="4" class="empty">Aucun actif.</td></tr>'}
+          <tr class="totals-row"><td colspan="2">Total de l'actif</td><td class="num">${fmt(bs.total_actif)}</td><td></td></tr>
+          <tr><td colspan="4" style="font-weight:800;background:var(--ligne-2)">PASSIF</td></tr>
+          ${nz(bs.passif).map(line).join('') || '<tr><td colspan="4" class="empty">Aucun passif.</td></tr>'}
+          ${Math.abs(Number(bs.result_current)) > 0.005 ? `<tr><td></td><td style="font-style:italic">Résultat de l'exercice en cours</td><td class="num">${fmt(bs.result_current)}</td><td></td></tr>` : ''}
+          <tr class="totals-row"><td colspan="2">Total du passif</td><td class="num">${fmt(Number(bs.total_passif) + Number(bs.result_current))}</td><td></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">Compte de résultat</div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>N°</th><th>Compte</th><th class="num">Exercice</th><th class="num">Précédent</th></tr></thead>
+        <tbody>
+          <tr><td colspan="4" style="font-weight:800;background:var(--ligne-2)">PRODUITS</td></tr>
+          ${nz(is.produits).map(line).join('') || '<tr><td colspan="4" class="empty">Aucun produit.</td></tr>'}
+          <tr class="totals-row"><td colspan="2">Total des produits</td><td class="num">${fmt(is.total_produits)}</td><td></td></tr>
+          <tr><td colspan="4" style="font-weight:800;background:var(--ligne-2)">CHARGES</td></tr>
+          ${nz(is.charges).map(line).join('') || '<tr><td colspan="4" class="empty">Aucune charge.</td></tr>'}
+          <tr class="totals-row"><td colspan="2">Total des charges</td><td class="num">${fmt(is.total_charges)}</td><td></td></tr>
+          <tr class="totals-row"><td colspan="2">${Number(is.result) >= 0 ? "Bénéfice de l'exercice" : "Perte de l'exercice"}</td>
+              <td class="num">${fmt(is.result)}</td><td class="num" style="color:var(--gris)">${fmt(is.result_prev)}</td></tr>
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+/* Le grand livre déroule TOUS les comptes mouvementés, chacun avec son report
+   à nouveau et son solde progressif : c'est la forme sous laquelle il se remet
+   au fiduciaire. Le choix d'un compte n'est qu'une réduction de cette vue. */
+async function repLedger(body) {
+  ACC_PICK.ledger = ACC_PICK.ledger || { id: S.ledgerAccountId || '' };
+  ACC_PICK.ledger.onPick = id => { S.ledgerAccountId = id; loadReports(); };
+
+  body.innerHTML = `
+    <div class="toolbar"><div class="toolbar-left">
+      <div style="min-width:300px">${accountPicker('ledger', { placeholder: 'Tous les comptes' })}</div>
+      <select class="field" style="max-width:180px" id="led-journal" onchange="S.ledgerJournalId=this.value;loadReports()">
+        <option value="">Tous les journaux</option>
+        ${(S.journals || []).map(j => `<option value="${j.id}" ${j.id == S.ledgerJournalId ? 'selected' : ''}>${esc(j.code)} — ${esc(j.label)}</option>`).join('')}
+      </select>
+      <input type="date" class="field" style="max-width:160px" id="led-from" value="${S.ledgerFrom || ''}" onchange="S.ledgerFrom=this.value;loadReports()">
+      <input type="date" class="field" style="max-width:160px" id="led-to" value="${S.ledgerTo || ''}" onchange="S.ledgerTo=this.value;loadReports()">
+    </div></div>
+    <div id="led-panel"><div class="panel"><div class="loading-row"><span class="spinner"></span></div></div></div>`;
+
+  const p = {};
+  if (S.ledgerAccountId) p.account_id = S.ledgerAccountId;
+  if (S.ledgerJournalId) p.journal_id = S.ledgerJournalId;
+  if (S.ledgerFrom) p.from = S.ledgerFrom;
+  if (S.ledgerTo) p.to = S.ledgerTo;
+
+  const d = await apiGet('report_ledger', p);
+  const panel = document.getElementById('led-panel');
+  if (!panel) return;
+  if (!d.accounts.length) {
+    panel.innerHTML = '<div class="panel"><div class="empty">Aucun mouvement pour ces critères.</div></div>';
+    return;
+  }
+  panel.innerHTML =
+    (d.truncated ? `<div class="warn-box">Affichage limité aux 5000 premiers mouvements. Restreignez la période ou choisissez un compte pour tout voir.</div>` : '')
+    + d.accounts.map(g => `
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-head">
+        <div class="panel-title">${esc(g.account_number)} — ${esc(g.account_name)}</div>
+        <div class="hint">Report ${fmt(g.opening_balance)} · mouvements ${fmt(g.total_debit)} / ${fmt(g.total_credit)} · solde <b>${fmt(g.closing_balance)}</b></div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th style="width:100px">Date</th><th style="width:55px">Jrnl</th><th style="width:130px">Pièce</th><th>Libellé</th>
+          <th style="width:90px">Centre</th><th class="num" style="width:105px">Débit</th>
+          <th class="num" style="width:105px">Crédit</th><th class="num" style="width:110px">Solde</th></tr></thead>
+        <tbody>
+          <tr><td colspan="7" style="font-style:italic;color:var(--gris)">Report à nouveau</td>
+              <td class="num" style="font-weight:700">${fmt(g.opening_balance)}</td></tr>
+          ${g.lines.map(l => `<tr ${l.invoice_id ? `style="cursor:pointer" onclick="showInvoice(${l.invoice_id})"` : ''}>
+            <td>${l.entry_date}</td><td style="color:var(--gris);font-size:12px">${esc(l.journal_code || '')}</td>
+            <td style="color:var(--gris)">${esc(l.piece_ref || '—')}</td>
+            <td>${esc(l.line_label || l.entry_label)}</td><td style="color:var(--gris)">${esc(l.cost_center_code || '')}</td>
+            <td class="num">${Number(l.debit) > 0 ? fmt(l.debit) : ''}</td><td class="num">${Number(l.credit) > 0 ? fmt(l.credit) : ''}</td>
+            <td class="num" style="font-weight:700">${fmt(l.running_balance)}</td></tr>`).join('')}
+          <tr class="totals-row"><td colspan="5">${g.lines.length} mouvement(s)</td>
+            <td class="num">${fmt(g.total_debit)}</td><td class="num">${fmt(g.total_credit)}</td>
+            <td class="num">${fmt(g.closing_balance)}</td></tr>
+        </tbody>
+      </table></div>
+    </div>`).join('');
+}
+
+async function repBalance(body) {
+  body.innerHTML = `
+    <div class="toolbar"><div class="toolbar-left">
+      <input type="date" class="field" style="max-width:160px" id="rep-from" value="${S.repFrom || ''}" onchange="S.repFrom=this.value;loadReports()">
+      <input type="date" class="field" style="max-width:160px" id="rep-to" value="${S.repTo || ''}" onchange="S.repTo=this.value;loadReports()">
+    </div></div>
+    <div class="panel"><div class="panel-head"><div class="panel-title">Balance des comptes</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>N°</th><th>Compte</th><th>Classe</th><th class="num">Débit</th><th class="num">Crédit</th><th class="num">Solde</th></tr></thead>
+      <tbody id="balance-rows"><tr><td colspan="6" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+    </table></div></div>`;
+  const params = {};
+  if (S.repFrom) params.from = S.repFrom;
+  if (S.repTo) params.to = S.repTo;
+  const balance = await apiGet('report_balance', params);
+  const rows = balance.filter(a => Number(a.total_debit) > 0 || Number(a.total_credit) > 0);
+  document.getElementById('balance-rows').innerHTML = rows.length ? rows.map(a => `
+    <tr><td style="font-family:Sora;font-weight:700">${esc(a.number)}</td><td>${esc(a.name)}</td><td><span class="badge b-${a.class}">${classLabel(a.class)}</span></td>
+    <td class="num">${fmt(a.total_debit)}</td><td class="num">${fmt(a.total_credit)}</td><td class="num" style="font-weight:700">${fmt(a.balance)}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">Aucun mouvement sur cette période.</td></tr>';
+}
+
+async function repJournal(body) {
+  body.innerHTML = `
+    <div class="toolbar"><div class="toolbar-left">
+      <input type="date" class="field" style="max-width:160px" value="${S.repFrom || ''}" onchange="S.repFrom=this.value;loadReports()">
+      <input type="date" class="field" style="max-width:160px" value="${S.repTo || ''}" onchange="S.repTo=this.value;loadReports()">
+    </div></div>
+    <div class="panel"><div class="panel-head"><div class="panel-title">Journal des écritures</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th class="num">Débit</th><th class="num">Crédit</th></tr></thead>
+      <tbody id="journal-rows"><tr><td colspan="6" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+    </table></div></div>`;
+  const params = {};
+  if (S.repFrom) params.from = S.repFrom;
+  if (S.repTo) params.to = S.repTo;
+  const journal = await apiGet('report_journal', params);
+  document.getElementById('journal-rows').innerHTML = journal.length ? journal.map(l => `
+    <tr><td>${l.entry_date}</td><td style="color:var(--gris)">${esc(l.piece_ref || '—')}</td><td>${esc(l.entry_label)}</td>
+    <td>${esc(l.account_number)} — ${esc(l.account_name)}</td><td class="num">${Number(l.debit) > 0 ? fmt(l.debit) : ''}</td>
+    <td class="num">${Number(l.credit) > 0 ? fmt(l.credit) : ''}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">Aucune écriture sur cette période.</td></tr>';
+}
+
+async function repAged(body) {
+  const dir = S.agedDir || 'a_recevoir';
+  const d = await apiGet('report_aged_balance', { direction: dir });
+  const B = d.buckets;
+  const labels = { non_echu: 'Non échu', j0_30: '1 à 30 jours', j31_60: '31 à 60 jours', j61_90: '61 à 90 jours', j90_plus: 'Plus de 90 jours' };
+  body.innerHTML = `
+    <div class="toolbar"><div class="toolbar-left">
+      <select class="field" style="max-width:260px" onchange="S.agedDir=this.value;loadReports()">
+        <option value="a_recevoir" ${dir === 'a_recevoir' ? 'selected' : ''}>Débiteurs (ce qu'on nous doit)</option>
+        <option value="a_payer" ${dir === 'a_payer' ? 'selected' : ''}>Créanciers (ce qu'on doit)</option>
+      </select>
+    </div></div>
+    <div class="kpi-grid">
+      ${Object.keys(labels).map(k => `<div class="kpi"><div class="kpi-label">${labels[k]}</div><div class="kpi-value">${fmt(B[k])}</div></div>`).join('')}
+    </div>
+    <div class="panel"><div class="panel-head"><div class="panel-title">Détail — total ${chf(d.total)}</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Pièce</th><th>Tiers</th><th>Libellé</th><th>Échéance</th><th class="num">Reste dû</th><th>Retard</th></tr></thead>
+      <tbody>${d.invoices.map(i => `<tr>
+        <td style="font-family:Sora;font-weight:700">${esc(i.piece_ref)}</td><td>${esc(i.tiers_label || '—')}</td><td>${esc(i.label)}</td>
+        <td>${esc(i.due_date || '—')}</td><td class="num" style="font-weight:700">${fmt(i.amount_open)}</td>
+        <td>${i.days_late > 0 ? `<span class="badge b-late">${i.days_late} j</span>` : '<span class="badge b-matched">à jour</span>'}</td></tr>`).join('')
+        || '<tr><td colspan="6" class="empty">Aucune facture ouverte.</td></tr>'}</tbody>
+    </table></div></div>`;
 }
 
 /* ===============================================================
@@ -948,13 +1464,1101 @@ async function togglePeriod(id, closed) {
 }
 
 /* ===============================================================
+   FACTURES
+=============================================================== */
+const INV_STATUS = {
+  ouverte:          ['b-unmatched', 'ouverte'],
+  reglee_partielle: ['b-unmatched', 'partielle'],
+  reglee:           ['b-matched',   'réglée'],
+  annulee:          ['b-ignored',   'annulée'],
+};
+let invTimer = null;
+function debouncedInvoices() { clearTimeout(invTimer); invTimer = setTimeout(loadInvoices, 300); }
+
+async function loadInvoices() {
+  document.getElementById('btn-new-invoice').style.display = MFC.invoicesEdit ? '' : 'none';
+  document.getElementById('btn-new-purchase').style.display = MFC.invoicesEdit ? '' : 'none';
+  document.getElementById('btn-invoice-from-module').style.display = MFC.invoicesEdit ? '' : 'none';
+  const params = {};
+  if (f('inv-filter-status')) params.status = f('inv-filter-status');
+  if (f('inv-filter-direction')) params.direction = f('inv-filter-direction');
+  if (f('inv-filter-q')) params.q = f('inv-filter-q');
+  try {
+    const rows = await apiGet('invoices', params);
+    document.getElementById('invoices-rows').innerHTML = rows.length ? rows.map(i => {
+      const [cls, lbl] = INV_STATUS[i.status] || ['b-ignored', i.status];
+      return `<tr>
+        <td style="font-family:Sora;font-weight:700">${esc(i.piece_ref)}</td>
+        <td>${i.entry_date}</td>
+        <td>${esc(i.tiers_label || '—')}</td>
+        <td>${esc(i.label)}${i.is_overdue ? ' <span class="badge b-late">en retard</span>' : ''}</td>
+        <td style="color:var(--gris)">${i.source_module === 'manuel' ? 'saisie' : esc(i.source_module)}</td>
+        <td class="num">${fmt(i.amount_total)}</td>
+        <td class="num" style="font-weight:700">${fmt(i.amount_open)}</td>
+        <td><span class="badge ${cls}">${lbl}</span></td>
+        <td style="text-align:right">
+          <button class="btn btn-ghost btn-sm" onclick="showInvoice(${i.id})">Détail</button>
+          ${MFC.invoicesEdit && i.status !== 'annulee' && Number(i.amount_settled) === 0
+            ? `<button class="btn btn-ghost btn-sm" onclick="cancelInvoice(${i.id})">Annuler</button>` : ''}
+        </td></tr>`;
+    }).join('') : `<tr><td colspan="9" class="empty">Aucune facture. Générez-en depuis un module, ou saisissez-en une à la main.</td></tr>`;
+  } catch (e) {
+    document.getElementById('invoices-rows').innerHTML = `<tr><td colspan="9" class="empty">${esc(e.message)}</td></tr>`;
+  }
+}
+
+/** Ouvre une facture existante dans le formulaire pleine page, en lecture. */
+function showInvoice(id) {
+  F.mode = 'view'; F.id = id;
+  goTo('invoice_edit');
+}
+
+async function cancelInvoice(id) {
+  if (!confirm("Annuler cette facture ? Son écriture sera extournée : l'originale reste lisible et une écriture miroir la neutralise.")) return;
+  try {
+    await api('invoice_cancel', 'POST', { id });
+    toast('Facture annulée et écriture extournée');
+    await loadInvoices();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* Génération depuis un module : on choisit la source, puis les pièces. */
+async function modalGenerateInvoice() {
+  try {
+    const d = await apiGet('invoice_open_items');
+    const avail = d.modules.filter(m => m.count > 0);
+    if (!avail.length) { toast('Aucune pièce à facturer dans les modules branchés', 'info'); return; }
+    openModal('Générer une facture depuis un module', `
+      <div class="hint" style="margin-bottom:12px">Les pièces déjà facturées n'apparaissent pas : une même pièce ne peut pas être facturée deux fois.</div>
+      <label class="lbl">Module source</label>
+      <select class="field" id="mGenModule" onchange="loadGenItems()">
+        <option value="">Choisir…</option>
+        ${avail.map(m => `<option value="${esc(m.slug)}">${esc(m.slug)} — ${m.count} pièce(s) ${m.direction === 'a_payer' ? 'à payer' : 'à encaisser'}</option>`).join('')}
+      </select>
+      <div id="mGenBody" style="margin-top:14px"></div>
+    `, async () => {
+      const module = f('mGenModule');
+      if (!module) throw new Error('Choisissez un module');
+      const refs = [...document.querySelectorAll('.gen-item:checked')].map(c => c.value);
+      if (!refs.length) throw new Error('Sélectionnez au moins une pièce');
+      const accountId = f('mGenAccount');
+      if (!accountId) throw new Error('Choisissez un compte de contrepartie');
+      await api('invoice_generate', 'POST', {
+        module, ref_ids: refs, account_id: Number(accountId),
+        entry_date: f('mGenDate') || today(), due_date: f('mGenDue'),
+        label: f('mGenLabel'), vat_rate_id: Number(f('mGenVat')) || null,
+        cost_center_id: Number(f('mGenCost')) || null,
+        journal_id: Number(f('mGenJournal')) || null,
+      });
+      toast('Facture créée et écriture passée');
+      closeModal();
+      await loadInvoices();
+    }, 'Créer la facture');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function loadGenItems() {
+  const module = f('mGenModule');
+  const box = document.getElementById('mGenBody');
+  if (!module) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="loading-row"><span class="spinner"></span></div>';
+  try {
+    const d = await apiGet('invoice_open_items', { module });
+    const isSale = d.direction === 'a_recevoir';
+    /* Les pièces sont groupées par tiers : c'est ce qui permet de facturer
+       « tous les matchs d'une équipe » en une seule fois. */
+    const groups = {};
+    d.items.forEach(i => { (groups[i.group || i.tiers || '—'] ||= []).push(i); });
+    const accounts = (S.accounts || []).filter(a => a.class === (isSale ? 'produit' : 'charge'));
+    const vats = (S.vatRates || []).filter(v => v.kind === (isSale ? 'vente' : 'achat'));
+    box.innerHTML = `
+      <div style="max-height:230px;overflow:auto;border:1.5px solid var(--ligne);border-radius:8px;padding:10px;margin-bottom:12px">
+        ${Object.keys(groups).map(g => `
+          <div style="margin-bottom:10px">
+            <label style="font-weight:700;font-size:13px;display:block;margin-bottom:4px">
+              <input type="checkbox" onchange="document.querySelectorAll('.grp-${cssId(g)}').forEach(c=>{c.checked=this.checked});updateGenTotal()"> ${esc(g)}
+            </label>
+            ${groups[g].map(i => `<label style="display:block;font-size:13px;padding-left:18px">
+              <input type="checkbox" class="gen-item grp-${cssId(g)}" value="${esc(i.ref_id)}" data-amount="${i.amount}" onchange="updateGenTotal()">
+              ${esc(i.date)} · ${esc(i.label)} · <b>${fmt(i.amount)}</b>
+            </label>`).join('')}
+          </div>`).join('')}
+      </div>
+      <div style="font-weight:800;margin-bottom:12px">Total sélectionné : <span id="mGenTotal">0.00</span> CHF</div>
+      <div style="margin-bottom:12px"><label class="lbl">${isSale ? 'Compte de produit' : 'Compte de charge'}</label>
+        <select class="field" id="mGenAccount">
+          ${accounts.map(a => `<option value="${a.id}" ${a.id == d.default_account ? 'selected' : ''}>${esc(a.number)} — ${esc(a.name)}</option>`).join('')}
+        </select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label class="lbl">Date de pièce</label><input type="date" class="field" id="mGenDate" value="${today()}"></div>
+        <div><label class="lbl">Échéance</label><input type="date" class="field" id="mGenDue"></div>
+        <div><label class="lbl">Journal</label><select class="field" id="mGenJournal">${journalOptions(isSale ? 'vente' : 'achat')}</select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label class="lbl">TVA (information)</label><select class="field" id="mGenVat"><option value="">Aucune</option>
+          ${vats.map(v => `<option value="${v.id}">${esc(v.label)}</option>`).join('')}</select></div>
+        <div><label class="lbl">Centre de coût</label><select class="field" id="mGenCost"><option value="">Aucun</option>
+          ${(S.costCenters || []).map(c => `<option value="${c.id}">${esc(c.label)}</option>`).join('')}</select></div>
+      </div>
+      <div><label class="lbl">Libellé (optionnel)</label><input class="field" id="mGenLabel" placeholder="Repris du tiers si vide"></div>`;
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function cssId(s) { return String(s).replace(/[^a-zA-Z0-9]/g, ''); }
+function updateGenTotal() {
+  const t = [...document.querySelectorAll('.gen-item:checked')].reduce((s, c) => s + Number(c.dataset.amount || 0), 0);
+  const el = document.getElementById('mGenTotal');
+  if (el) el.textContent = fmt(t);
+}
+
+/* ===============================================================
+   FACTURE — FORMULAIRE PLEINE PAGE
+
+   Le brouillon n'existe pas : enregistrer, c'est comptabiliser. C'est ce qui
+   garantit qu'aucune pièce ne vit hors du journal. Une facture existante
+   s'affiche donc en lecture, et se corrige par annulation (extourne).
+=============================================================== */
+const F = { mode: 'new', id: null, direction: 'a_payer', lines: [], tiers: { ref: '', label: '' }, invoice: null };
+
+function modalInvoice(direction = 'a_payer') {
+  F.mode = 'new'; F.id = null; F.direction = direction; F.invoice = null;
+  F.tiers = { ref: '', label: '' };
+  F.lines = [emptyLine()];
+  goTo('invoice_edit');
+}
+function emptyLine() {
+  return { product_id: '', label: '', quantity: 1, unit_price: 0, account_id: '', vat_rate_id: '', cost_center_id: '' };
+}
+
+async function openInvoiceForm() {
+  const box = document.getElementById('inv-form');
+  const actions = document.getElementById('inv-form-actions');
+  if (F.mode === 'view') {
+    try { F.invoice = await apiGet('invoice', { id: F.id }); }
+    catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    renderInvoiceView(box, actions);
+    return;
+  }
+  actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="saveInvoiceForm()">Enregistrer et comptabiliser</button>`;
+  renderInvoiceForm(box);
+}
+
+function renderInvoiceForm(box) {
+  const isSale = F.direction === 'a_recevoir';
+  const terms = S.paymentTerms || [];
+  const defTerm = terms.find(t => t.is_default == 1) || terms[0];
+  box.innerHTML = `
+    <div class="doc-head">
+      <div class="doc-kicker">${isSale ? 'Facture client' : 'Facture fournisseur'}</div>
+      <div class="doc-title">Nouvelle facture</div>
+    </div>
+    <div class="doc-grid">
+      <div>
+        <div class="doc-field"><label>${isSale ? 'Client' : 'Fournisseur'}</label>
+          <div class="ac-wrap">
+            <input class="field" id="fTiers" autocomplete="off" placeholder="Rechercher dans les contacts…"
+                   value="${esc(F.tiers.label)}" oninput="tiersSearch()" onblur="tiersBlur()">
+            <div id="fTiersList"></div>
+          </div>
+        </div>
+        <div class="doc-field"><label>Objet</label>
+          <input class="field" id="fLabel" placeholder="Objet de la facture"></div>
+        <div class="doc-field"><label>Sens</label>
+          <select class="field" id="fDir" onchange="F.direction=this.value;renderInvoiceForm(document.getElementById('inv-form'))">
+            <option value="a_payer" ${!isSale ? 'selected' : ''}>À payer (achat)</option>
+            <option value="a_recevoir" ${isSale ? 'selected' : ''}>À encaisser (vente)</option>
+          </select></div>
+      </div>
+      <div>
+        <div class="doc-field"><label>Date de facturation</label>
+          <input type="date" class="field" id="fDate" value="${today()}" onchange="recalcDue()"></div>
+        <div class="doc-field"><label>Conditions de paiement</label>
+          <select class="field" id="fTerm" onchange="recalcDue()">
+            <option value="">Échéance manuelle</option>
+            ${terms.map(t => `<option value="${t.id}" data-days="${t.days}" ${defTerm && t.id === defTerm.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}
+          </select></div>
+        <div class="doc-field"><label>Date d'échéance</label>
+          <input type="date" class="field" id="fDue"></div>
+        <div class="doc-field"><label>N° du tiers</label>
+          <input class="field" id="fNumber" placeholder="Référence de son côté"></div>
+        <div class="doc-field"><label>Journal</label>
+          <select class="field" id="fJournal">${journalOptions(isSale ? 'vente' : 'achat')}</select></div>
+      </div>
+    </div>
+    <div class="doc-lines">
+      <table>
+        <thead><tr>
+          <th style="width:170px">Produit</th><th>Description</th>
+          <th style="width:150px">Compte</th><th style="width:130px">Analytique</th>
+          <th style="width:70px">Qté</th><th style="width:100px">Prix</th><th style="width:110px">TVA</th>
+          <th style="width:110px;text-align:right">Montant</th><th style="width:34px"></th>
+        </tr></thead>
+        <tbody id="fLines"></tbody>
+      </table>
+      <div class="doc-add"><button type="button" onclick="addInvLine()">Ajouter une ligne</button></div>
+    </div>
+    <div class="doc-totals">
+      <table><tbody>
+        <tr><td>Dont TVA (information)</td><td id="fVat">0.00</td></tr>
+        <tr class="grand"><td>Total</td><td id="fTotal">CHF 0.00</td></tr>
+      </tbody></table>
+    </div>`;
+  renderInvLines();
+  recalcDue();
+}
+
+function renderInvLines() {
+  const isSale = F.direction === 'a_recevoir';
+  const accounts = (S.accounts || []).filter(a => a.class === (isSale ? 'produit' : 'charge'));
+  const products = (S.products || []).filter(p => p.direction === F.direction);
+  const vats = (S.vatRates || []).filter(v => v.kind === (isSale ? 'vente' : 'achat'));
+  const tb = document.getElementById('fLines');
+  if (!tb) return;
+  tb.innerHTML = F.lines.map((l, i) => `
+    <tr>
+      <td><select class="field" onchange="pickProduct(${i}, this.value)">
+        <option value="">—</option>
+        ${products.map(p => `<option value="${p.id}" ${p.id == l.product_id ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
+      </select></td>
+      <td><input class="field" value="${esc(l.label)}" oninput="F.lines[${i}].label=this.value" placeholder="Description"></td>
+      <td><select class="field" onchange="pickLineAccount(${i}, this.value)">
+        <option value="">— compte —</option>
+        ${accounts.map(a => `<option value="${a.id}" ${a.id == l.account_id ? 'selected' : ''}>${esc(a.number)} ${esc(a.name.slice(0, 22))}</option>`).join('')}
+      </select></td>
+      <td><select class="field" onchange="F.lines[${i}].cost_center_id=this.value">
+        <option value="">—</option>
+        ${(S.costCenters || []).map(c => `<option value="${c.id}" ${c.id == l.cost_center_id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}
+      </select></td>
+      <td><input type="number" step="0.01" class="field" style="text-align:right" value="${l.quantity}" oninput="F.lines[${i}].quantity=this.value;recalcInvTotals()"></td>
+      <td><input type="number" step="0.05" class="field" style="text-align:right" value="${l.unit_price}" oninput="F.lines[${i}].unit_price=this.value;recalcInvTotals()"></td>
+      <td><select class="field" onchange="F.lines[${i}].vat_rate_id=this.value;recalcInvTotals()">
+        <option value="">—</option>
+        ${vats.map(v => `<option value="${v.id}" ${v.id == l.vat_rate_id ? 'selected' : ''}>${v.rate_percent}%</option>`).join('')}
+      </select></td>
+      <td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums" id="fAmt${i}">0.00</td>
+      <td><button class="row-x" type="button" title="Retirer la ligne" onclick="removeInvLine(${i})">×</button></td>
+    </tr>`).join('');
+  recalcInvTotals();
+}
+function addInvLine() { F.lines.push(emptyLine()); renderInvLines(); }
+function removeInvLine(i) {
+  F.lines.splice(i, 1);
+  if (!F.lines.length) F.lines.push(emptyLine());
+  renderInvLines();
+}
+/* Choisir un produit prérenseigne prix, compte et TVA — sans écraser ce que
+   l'utilisateur a déjà saisi à la main sur la ligne. */
+function pickProduct(i, productId) {
+  const l = F.lines[i];
+  l.product_id = productId;
+  const p = (S.products || []).find(x => x.id == productId);
+  if (p) {
+    if (!l.label) l.label = p.label;
+    if (!Number(l.unit_price)) l.unit_price = p.unit_price;
+    if (!l.account_id) l.account_id = p.account_id || '';
+    if (!l.vat_rate_id) l.vat_rate_id = p.vat_rate_id || '';
+    if (!l.vat_rate_id && l.account_id) l.vat_rate_id = accountVat(l.account_id);
+  }
+  renderInvLines();
+}
+/* Le compte porte lui aussi une TVA par défaut : la reprendre évite de la
+   redire sur chaque produit, et rend la TVA juste même sur une ligne saisie
+   sans produit. Elle reste modifiable sur la ligne, c'est le dernier mot. */
+function accountVat(accountId) {
+  const a = (S.accounts || []).find(x => x.id == accountId);
+  return a && a.vat_rate_id ? a.vat_rate_id : '';
+}
+function pickLineAccount(i, accountId) {
+  const l = F.lines[i];
+  l.account_id = accountId;
+  if (!l.vat_rate_id) {
+    const v = accountVat(accountId);
+    if (v) { l.vat_rate_id = v; renderInvLines(); return; }
+  }
+  recalcInvTotals();
+}
+function recalcInvTotals() {
+  let total = 0, vat = 0;
+  F.lines.forEach((l, i) => {
+    const amt = (Number(l.quantity) || 0) * (Number(l.unit_price) || 0);
+    total += amt;
+    const r = (S.vatRates || []).find(v => v.id == l.vat_rate_id);
+    if (r && Number(r.rate_percent) > 0) vat += amt - amt / (1 + Number(r.rate_percent) / 100);
+    const cell = document.getElementById('fAmt' + i);
+    if (cell) cell.textContent = fmt(amt);
+  });
+  const t = document.getElementById('fTotal'), v = document.getElementById('fVat');
+  if (t) t.textContent = chf(total);
+  if (v) v.textContent = fmt(vat);
+}
+/* L'échéance suit la condition choisie, sauf si elle a été fixée à la main. */
+function recalcDue() {
+  const sel = document.getElementById('fTerm');
+  const due = document.getElementById('fDue');
+  const date = f('fDate') || today();
+  if (!sel || !due) return;
+  const opt = sel.selectedOptions[0];
+  const days = opt ? Number(opt.dataset.days) : NaN;
+  if (sel.value && !Number.isNaN(days)) {
+    const d = new Date(date + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    due.value = d.toISOString().slice(0, 10);
+    due.readOnly = true;
+  } else {
+    due.readOnly = false;
+  }
+}
+
+/* --- Auto-complétion du tiers sur l'annuaire partagé --- */
+let tiersTimer = null;
+function tiersSearch() {
+  const inp = document.getElementById('fTiers');
+  F.tiers = { ref: '', label: inp.value };   // toute frappe casse le lien précédent
+  clearTimeout(tiersTimer);
+  tiersTimer = setTimeout(async () => {
+    const q = inp.value.trim();
+    const box = document.getElementById('fTiersList');
+    if (!box) return;
+    if (q.length < 2) { box.innerHTML = ''; return; }
+    let rows = [];
+    try { rows = await apiGet('contacts_search', { q }); } catch (e) { /* annuaire absent : saisie libre */ }
+    box.innerHTML = `<div class="ac-list">
+      ${rows.map(r => `<div class="ac-item" onmousedown="pickTiers('${esc(r.ref_id)}','${esc(r.name).replace(/'/g, "\\'")}')">
+        ${esc(r.name)}${r.is_org ? ' <span class="sub">organisation</span>' : ''}
+        ${r.email || r.city ? `<div class="sub">${esc(r.email || '')}${r.email && r.city ? ' · ' : ''}${esc(r.city || '')}</div>` : ''}
+      </div>`).join('')}
+      <div class="ac-item ac-new" onmousedown="createTiers()">+ Créer « ${esc(q)} » dans les contacts</div>
+    </div>`;
+  }, 250);
+}
+function pickTiers(ref, name) {
+  F.tiers = { ref, label: name };
+  document.getElementById('fTiers').value = name;
+  document.getElementById('fTiersList').innerHTML = '';
+}
+/* onblur ferme la liste, mais après le onmousedown qui vient de la traiter. */
+function tiersBlur() { setTimeout(() => { const b = document.getElementById('fTiersList'); if (b) b.innerHTML = ''; }, 180); }
+
+async function createTiers() {
+  const name = document.getElementById('fTiers').value.trim();
+  if (!name) return;
+  openModal('Créer un contact', `
+    <div class="hint" style="margin-bottom:12px">Ce contact rejoint l'annuaire partagé du club. S'il y figure déjà, il sera reconnu plutôt que dupliqué.</div>
+    <div style="margin-bottom:12px"><label class="lbl">Nom</label><input class="field" id="mCtName" value="${esc(name)}"></div>
+    <div style="margin-bottom:12px"><label class="lbl">Type</label><select class="field" id="mCtOrg">
+      <option value="1">Organisation (entreprise, association)</option><option value="0">Personne</option></select></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><label class="lbl">E-mail</label><input class="field" id="mCtMail"></div>
+      <div><label class="lbl">Localité</label><input class="field" id="mCtCity"></div>
+    </div>
+  `, async () => {
+    const r = await api('contact_create', 'POST', {
+      name: f('mCtName'), is_org: f('mCtOrg') === '1', email: f('mCtMail'), city: f('mCtCity'),
+    });
+    pickTiers(r.ref_id, r.name);
+    toast(r.recognized ? 'Ce contact existait déjà, il a été rattaché' : 'Contact créé');
+    closeModal();
+  }, 'Créer');
+}
+
+async function saveInvoiceForm() {
+  const lines = F.lines
+    .filter(l => (Number(l.quantity) || 0) * (Number(l.unit_price) || 0) !== 0)
+    .map(l => ({
+      product_id: l.product_id || null, label: l.label,
+      quantity: Number(l.quantity) || 0, unit_price: Number(l.unit_price) || 0,
+      account_id: l.account_id || null, vat_rate_id: l.vat_rate_id || null,
+      cost_center_id: l.cost_center_id || null,
+    }));
+  if (!lines.length) { toast('Ajoutez au moins une ligne avec un montant', 'err'); return; }
+  if (!f('fLabel')) { toast("L'objet de la facture est requis", 'err'); return; }
+
+  try {
+    const r = await api('invoices', 'POST', {
+      direction: F.direction, label: f('fLabel'),
+      tiers_label: document.getElementById('fTiers').value.trim(),
+      tiers_contact_id: F.tiers.ref,
+      entry_date: f('fDate') || today(), due_date: f('fDue'),
+      payment_term_id: Number(f('fTerm')) || null,
+      invoice_number: f('fNumber'), journal_id: Number(f('fJournal')) || null, lines,
+    });
+    toast('Facture comptabilisée');
+    showInvoice(r.id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* --- Facture existante, en lecture --- */
+function renderInvoiceView(box, actions) {
+  const i = F.invoice;
+  const isSale = i.direction === 'a_recevoir';
+  const [cls, lbl] = INV_STATUS[i.status] || ['b-ignored', i.status];
+  actions.innerHTML = (MFC.invoicesEdit && i.status !== 'annulee' && Number(i.amount_settled) === 0)
+    ? `<button class="btn btn-ghost btn-sm" onclick="cancelInvoice(${i.id})">Annuler la facture</button>` : '';
+
+  box.innerHTML = `
+    <div class="doc-head">
+      <div class="doc-kicker">${isSale ? 'Facture client' : 'Facture fournisseur'}</div>
+      <div class="doc-title">${esc(i.piece_ref)} <span class="badge ${cls}">${lbl}</span>
+        ${i.is_overdue ? '<span class="badge b-late">en retard</span>' : ''}</div>
+    </div>
+    <div class="doc-grid">
+      <div>
+        <div class="doc-field"><label>${isSale ? 'Client' : 'Fournisseur'}</label><b>${esc(i.tiers_label || '—')}</b></div>
+        <div class="doc-field"><label>Objet</label><span>${esc(i.label)}</span></div>
+        <div class="doc-field"><label>Origine</label><span>${i.source_module === 'manuel' ? 'Saisie directe' : esc(i.source_module)}</span></div>
+        <div class="doc-field"><label>Journal</label><span>${i.journal_code ? esc(i.journal_code) + ' — ' + esc(i.journal_label) : '—'}</span></div>
+      </div>
+      <div>
+        <div class="doc-field"><label>Date de facturation</label><span>${esc(i.entry_date)}</span></div>
+        <div class="doc-field"><label>Date d'échéance</label><span>${esc(i.due_date || '—')}</span></div>
+        <div class="doc-field"><label>Reste dû</label><b>${chf(i.amount_open)}</b></div>
+      </div>
+    </div>
+    <div class="doc-lines">
+      <table>
+        <thead><tr><th>Description</th><th style="width:190px">Compte</th><th style="width:140px">Analytique</th>
+          <th style="width:70px">Qté</th><th style="width:110px">Prix</th><th style="width:120px;text-align:right">Montant</th></tr></thead>
+        <tbody>${(i.lines || []).map(l => `<tr>
+          <td>${esc(l.label)}</td>
+          <td>${esc(l.account_number || '')} ${esc((l.account_name || '').slice(0, 24))}</td>
+          <td>${esc(l.cost_center_label || '—')}</td>
+          <td>${l.quantity}</td><td>${fmt(l.unit_price)}</td>
+          <td style="text-align:right;font-weight:700">${fmt(l.amount)}</td></tr>`).join('')
+          || '<tr><td colspan="6" class="empty">Aucune ligne.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div class="doc-totals">
+      <table><tbody>
+        <tr><td>Dont TVA (information)</td><td>${fmt(i.amount_vat)}</td></tr>
+        <tr><td>Déjà réglé</td><td>${fmt(i.amount_settled)}</td></tr>
+        <tr class="grand"><td>Total</td><td>${chf(i.amount_total)}</td></tr>
+      </tbody></table>
+    </div>
+    <div class="tabs" style="padding:0 20px 0">
+      <button class="tab active" data-itab="entry" onclick="invTab('entry')">Écritures comptables</button>
+      <button class="tab" data-itab="files" onclick="invTab('files')">Pièces jointes${(i.attachments || []).length ? ' (' + i.attachments.length + ')' : ''}</button>
+      <button class="tab" data-itab="pay" onclick="invTab('pay')">Règlements</button>
+    </div>
+    <div id="inv-tab-body" style="padding:0 20px 20px"></div>`;
+  invTab('entry');
+}
+
+function invTab(tab) {
+  const i = F.invoice;
+  document.querySelectorAll('[data-itab]').forEach(t => t.classList.toggle('active', t.dataset.itab === tab));
+  const box = document.getElementById('inv-tab-body');
+  if (!box) return;
+
+  if (tab === 'entry') {
+    box.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Compte</th><th>Libellé</th><th class="num">Débit</th><th class="num">Crédit</th></tr></thead>
+      <tbody>${(i.entry_lines || []).map(l => `<tr><td>${esc(l.account_number)} — ${esc(l.account_name)}</td>
+        <td>${esc(l.label)}</td><td class="num">${Number(l.debit) > 0 ? fmt(l.debit) : ''}</td>
+        <td class="num">${Number(l.credit) > 0 ? fmt(l.credit) : ''}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="empty">Aucune écriture liée.</td></tr>'}</tbody></table></div>`;
+    return;
+  }
+  if (tab === 'files') {
+    box.innerHTML = `
+      ${MFC.invoicesEdit ? `<div style="margin-bottom:12px">
+        <input type="file" id="invFile" accept=".pdf,image/*" style="font-size:13px">
+        <button class="btn btn-primary btn-sm" onclick="uploadInvFile()">Joindre</button>
+        <div class="hint">PDF ou image, 15 Mo maximum. Le fichier n'est jamais accessible par son adresse : il passe par un contrôle de droit.</div>
+      </div>` : ''}
+      <div class="table-wrap"><table><tbody>
+        ${(i.attachments || []).map(a => `<tr>
+          <td>${esc(a.filename)}</td><td style="color:var(--gris)">${Math.round(a.size / 1024)} Ko</td>
+          <td style="text-align:right">
+            <a class="btn btn-ghost btn-sm" href="api.php?action=invoice_attach_download&id=${a.id}">Télécharger</a>
+            ${MFC.invoicesEdit ? `<button class="btn btn-ghost btn-sm" onclick="deleteInvFile(${a.id})">Retirer</button>` : ''}
+          </td></tr>`).join('') || '<tr><td class="empty">Aucune pièce jointe.</td></tr>'}
+      </tbody></table></div>`;
+    return;
+  }
+  box.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Date</th><th>Mouvement bancaire</th><th class="num">Montant affecté</th></tr></thead>
+    <tbody>${(i.reconciliations || []).map(r => `<tr><td>${r.booking_date}</td><td>${esc(r.txn_label)}</td>
+      <td class="num">${fmt(r.amount_applied)}</td></tr>`).join('')
+      || '<tr><td colspan="3" class="empty">Aucun règlement rapproché.</td></tr>'}</tbody></table></div>`;
+}
+
+async function uploadInvFile() {
+  const inp = document.getElementById('invFile');
+  if (!inp || !inp.files.length) { toast('Choisissez un fichier', 'err'); return; }
+  const fd = new FormData();
+  fd.append('file', inp.files[0]);
+  fd.append('invoice_id', F.id);
+  try {
+    await api('invoice_attach', 'POST', fd, true);
+    toast('Pièce jointe ajoutée');
+    F.invoice = await apiGet('invoice', { id: F.id });
+    renderInvoiceView(document.getElementById('inv-form'), document.getElementById('inv-form-actions'));
+    invTab('files');
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function deleteInvFile(id) {
+  if (!confirm('Retirer cette pièce jointe ? Le fichier sera supprimé du serveur.')) return;
+  try {
+    await api('invoice_attach_delete?id=' + id, 'DELETE');
+    toast('Pièce jointe retirée');
+    F.invoice = await apiGet('invoice', { id: F.id });
+    renderInvoiceView(document.getElementById('inv-form'), document.getElementById('inv-form-actions'));
+    invTab('files');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ===============================================================
+   EXERCICES
+=============================================================== */
+async function loadYears() {
+  document.getElementById('btn-new-year').style.display = MFC.fiscalYearClose ? '' : 'none';
+  try {
+    const d = await apiGet('fiscal_years');
+    S.years = d.years;
+    S.currentYearId = d.current_id;
+    document.getElementById('years-rows').innerHTML = d.years.length ? d.years.map(y => `
+      <tr>
+        <td style="font-weight:700">${esc(y.label)}${y.id == d.current_id ? ' <span class="badge b-matched">courant</span>' : ''}</td>
+        <td>${y.start_date}</td><td>${y.end_date}</td><td>${y.entry_count}</td>
+        <td>${y.has_opening ? '<span class="badge b-matched">saisie</span>' : '<span class="badge b-unmatched">manquante</span>'}</td>
+        <td>${y.status === 'cloture' ? '<span class="badge b-ignored">clôturé</span>' : '<span class="badge b-matched">ouvert</span>'}</td>
+        <td style="text-align:right">
+          ${MFC.fiscalYearClose && y.status !== 'cloture' && !y.has_opening ? `<button class="btn btn-ghost btn-sm" onclick="modalOpening(${y.id})">Saisir l'ouverture</button>` : ''}
+          ${MFC.fiscalYearClose && y.status !== 'cloture' ? `<button class="btn btn-ghost btn-sm" onclick="closeYear(${y.id}, '${esc(y.label)}')">Clôturer</button>` : ''}
+        </td></tr>`).join('')
+      : `<tr><td colspan="7" class="empty">Aucun exercice. Créez-en un avant toute écriture : sans exercice, aucune date n'est comptabilisable.</td></tr>`;
+  } catch (e) {
+    document.getElementById('years-rows').innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
+  }
+}
+
+function modalFiscalYear() {
+  /* L'exercice du club épouse la saison sportive, du 1er juillet au 30 juin :
+     les dates sont préremplies dans ce sens, et restent modifiables. */
+  const y = new Date().getFullYear();
+  const m = new Date().getMonth() + 1;
+  const startY = m >= 7 ? y : y - 1;
+  openModal('Nouvel exercice comptable', `
+    <div class="hint" style="margin-bottom:12px">L'exercice du club suit la saison sportive, du 1er juillet au 30 juin.</div>
+    <div style="margin-bottom:12px"><label class="lbl">Libellé</label><input class="field" id="mFyLabel" value="Saison ${startY}-${startY + 1}"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><label class="lbl">Début</label><input type="date" class="field" id="mFyStart" value="${startY}-07-01"></div>
+      <div><label class="lbl">Fin</label><input type="date" class="field" id="mFyEnd" value="${startY + 1}-06-30"></div>
+    </div>
+  `, async () => {
+    const r = await api('fiscal_years', 'POST', { label: f('mFyLabel'), start_date: f('mFyStart'), end_date: f('mFyEnd') });
+    toast(r.adopted_entries > 0
+      ? `Exercice créé, ${r.adopted_entries} écriture(s) existante(s) y ont été rattachées`
+      : 'Exercice créé');
+    closeModal();
+    await loadYears();
+  }, 'Créer');
+}
+
+async function modalOpening(fyId) {
+  try {
+    const d = await apiGet('opening_entry', { fiscal_year_id: fyId });
+    openModal(`Écriture d'ouverture — ${d.fiscal_year.label}`, `
+      <div class="hint" style="margin-bottom:12px">Reprise des soldes de bilan au ${d.fiscal_year.start_date}.
+        Saisissez le solde de chaque compte concerné : débiteur pour les actifs, créditeur pour les passifs.
+        Le total doit s'équilibrer.</div>
+      <input class="field" id="mOpFilter" placeholder="Filtrer les comptes…" oninput="filterOpening()" style="margin-bottom:10px">
+      <div style="max-height:300px;overflow:auto;border:1.5px solid var(--ligne);border-radius:8px">
+        <table><thead><tr><th>Compte</th><th class="num" style="width:110px">Débit</th><th class="num" style="width:110px">Crédit</th></tr></thead>
+        <tbody>${d.accounts.map(a => `<tr class="op-row" data-search="${esc((a.number + ' ' + a.name).toLowerCase())}">
+          <td style="font-size:13px">${esc(a.number)} — ${esc(a.name)}</td>
+          <td><input type="number" step="0.05" class="field op-d" data-acc="${a.id}" oninput="updateOpeningTotals()" style="text-align:right"></td>
+          <td><input type="number" step="0.05" class="field op-c" data-acc="${a.id}" oninput="updateOpeningTotals()" style="text-align:right"></td>
+        </tr>`).join('')}</tbody></table>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-weight:800;margin-top:12px">
+        <span>Total débit : <span id="mOpD">0.00</span></span>
+        <span>Total crédit : <span id="mOpC">0.00</span></span>
+        <span id="mOpDiff" style="color:var(--orange)"></span>
+      </div>
+    `, async () => {
+      const lines = [];
+      document.querySelectorAll('.op-d').forEach(inp => {
+        const acc = inp.dataset.acc;
+        const dv = Number(inp.value) || 0;
+        const cv = Number(document.querySelector(`.op-c[data-acc="${acc}"]`).value) || 0;
+        if (dv || cv) lines.push({ account_id: Number(acc), debit: dv, credit: cv });
+      });
+      if (lines.length < 2) throw new Error('Saisissez au moins deux comptes');
+      await api('opening_entry', 'POST', { fiscal_year_id: fyId, lines });
+      toast("Écriture d'ouverture enregistrée");
+      closeModal();
+      await loadYears();
+    }, 'Enregistrer');
+    updateOpeningTotals();
+  } catch (e) { toast(e.message, 'err'); }
+}
+function filterOpening() {
+  const q = (document.getElementById('mOpFilter')?.value || '').toLowerCase();
+  document.querySelectorAll('.op-row').forEach(r => {
+    r.style.display = !q || r.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+function updateOpeningTotals() {
+  let d = 0, c = 0;
+  document.querySelectorAll('.op-d').forEach(i => d += Number(i.value) || 0);
+  document.querySelectorAll('.op-c').forEach(i => c += Number(i.value) || 0);
+  const dEl = document.getElementById('mOpD'), cEl = document.getElementById('mOpC'), diff = document.getElementById('mOpDiff');
+  if (!dEl) return;
+  dEl.textContent = fmt(d);
+  cEl.textContent = fmt(c);
+  diff.textContent = Math.abs(d - c) < 0.005 ? 'équilibré' : `écart ${fmt(d - c)}`;
+  diff.style.color = Math.abs(d - c) < 0.005 ? 'var(--vert)' : 'var(--orange)';
+}
+
+async function closeYear(id, label) {
+  if (!confirm(`Clôturer « ${label} » ?\n\nLes comptes de charge et de produit seront soldés vers le compte de résultat, l'exercice sera verrouillé, et l'exercice suivant sera créé avec ses à-nouveaux.\n\nCette opération ne se défait pas.`)) return;
+  try {
+    const r = await api('fiscal_year_close', 'POST', { fiscal_year_id: id });
+    toast(`${Number(r.result) >= 0 ? 'Bénéfice' : 'Perte'} de ${chf(Math.abs(r.result))} viré. ${r.next_year_label} créé.`);
+    await loadYears();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ===============================================================
+   RÉGLAGES
+=============================================================== */
+let SETTINGS_TAB = 'accounts';
+function goSettings(tab) {
+  SETTINGS_TAB = tab;
+  document.querySelectorAll('#settings-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.stab === tab));
+  loadSettings();
+}
+function loadSettings() {
+  const body = document.getElementById('settings-body');
+  body.innerHTML = '<div class="loading-row"><span class="spinner"></span></div>';
+  const fn = { accounts: setAccounts, products: setProducts, terms: setTerms, journals: setJournals, vat: setVat, costs: setCosts, qr: setQr }[SETTINGS_TAB] || setAccounts;
+  fn(body).catch(e => { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
+}
+
+/* --- Produits : c'est le compte porté ici qui rend la saisie d'une facture
+   rapide. On choisit « Panneau publicitaire », le compte 3210 suit. --- */
+async function setProducts(body) {
+  const list = await apiGet('products', { active: 'all' });
+  body.innerHTML = `
+    <div class="panel"><div class="panel-head"><div class="panel-title">Produits et prestations</div>
+      ${MFC.settingsManage ? '<button class="btn btn-primary btn-sm" onclick="modalProduct()">+ Ajouter</button>' : ''}</div>
+      <div style="padding:0 18px"><div class="hint">Chaque produit porte son compte de contrepartie, son prix et sa TVA par défaut. Sur la facture, tout reste modifiable ligne par ligne : le produit n'est qu'un modèle de saisie.</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Produit</th><th>Compte</th><th class="num">Prix</th><th>TVA</th><th>Sens</th><th>Statut</th><th></th></tr></thead>
+      <tbody>${list.length ? list.map(p => `<tr>
+        <td style="font-weight:600">${esc(p.label)}</td>
+        <td>${p.account_number ? esc(p.account_number) + ' — ' + esc(p.account_name) : '<span style="color:var(--orange)">non défini</span>'}</td>
+        <td class="num">${fmt(p.unit_price)}</td>
+        <td>${esc(p.vat_label || '—')}</td>
+        <td>${p.direction === 'a_recevoir' ? 'Vente' : 'Achat'}</td>
+        <td>${p.active == 1 ? '<span class="badge b-matched">actif</span>' : '<span class="badge b-ignored">inactif</span>'}</td>
+        <td style="text-align:right">${MFC.settingsManage ? `<button class="btn btn-ghost btn-sm" onclick='modalProduct(${JSON.stringify(p)})'>Modifier</button>
+          <button class="btn btn-ghost btn-sm" onclick="deleteProduct(${p.id})">Retirer</button>` : ''}</td></tr>`).join('')
+        : '<tr><td colspan="7" class="empty">Aucun produit. Créez ceux que vous facturez le plus souvent : cotisation, panneau publicitaire, maillot…</td></tr>'}
+      </tbody></table></div></div>`;
+}
+function modalProduct(p) {
+  const e = p || {};
+  openModal(e.id ? 'Modifier le produit' : 'Nouveau produit', `
+    <div style="margin-bottom:12px"><label class="lbl">Libellé</label><input class="field" id="mPrLabel" value="${esc(e.label || '')}" placeholder="Panneau publicitaire"></div>
+    <div style="margin-bottom:12px"><label class="lbl">Sens</label><select class="field" id="mPrDir" onchange="prodDirChanged()">
+      <option value="a_recevoir" ${e.direction !== 'a_payer' ? 'selected' : ''}>Vente (à encaisser)</option>
+      <option value="a_payer" ${e.direction === 'a_payer' ? 'selected' : ''}>Achat (à payer)</option></select></div>
+    <div style="margin-bottom:12px"><label class="lbl">Compte de contrepartie</label>
+      <select class="field" id="mPrAccount"></select></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><label class="lbl">Prix par défaut</label><input type="number" step="0.05" class="field" id="mPrPrice" value="${e.unit_price || 0}"></div>
+      <div><label class="lbl">TVA par défaut</label><select class="field" id="mPrVat"><option value="">Aucune</option>
+        ${(S.vatRates || []).map(v => `<option value="${v.id}" ${v.id == e.vat_rate_id ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></div>
+    </div>
+  `, async () => {
+    if (!f('mPrLabel')) throw new Error('Libellé requis');
+    const payload = {
+      label: f('mPrLabel'), direction: f('mPrDir'), account_id: Number(f('mPrAccount')) || null,
+      unit_price: Number(f('mPrPrice')) || 0, vat_rate_id: Number(f('mPrVat')) || null,
+    };
+    if (e.id) await api('products', 'PUT', { ...payload, id: e.id, active: e.active });
+    else await api('products', 'POST', payload);
+    toast(e.id ? 'Produit modifié' : 'Produit créé');
+    closeModal();
+    S.products = await apiGet('products');
+    loadSettings();
+  }, e.id ? 'Enregistrer' : 'Créer');
+  prodDirChanged(e.account_id);
+}
+/* Un produit de vente vise un compte de produit, un produit d'achat un compte
+   de charge : proposer les deux inviterait à une erreur d'imputation. */
+function prodDirChanged(selected) {
+  const sel = document.getElementById('mPrAccount');
+  if (!sel) return;
+  const isSale = f('mPrDir') === 'a_recevoir';
+  sel.innerHTML = '<option value="">— non défini —</option>' + (S.accounts || [])
+    .filter(a => a.class === (isSale ? 'produit' : 'charge'))
+    .map(a => `<option value="${a.id}" ${a.id == selected ? 'selected' : ''}>${esc(a.number)} — ${esc(a.name)}</option>`).join('');
+}
+async function deleteProduct(id) {
+  try {
+    const r = await api('products?id=' + id, 'DELETE');
+    toast(r.deactivated ? 'Produit désactivé (il figure sur des factures)' : 'Produit retiré');
+    S.products = await apiGet('products');
+    loadSettings();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* --- Journaux : le code compose le numéro de pièce, il ne bouge donc plus une
+   fois qu'il a servi. Le libellé, lui, reste libre à tout moment. --- */
+const JOURNAL_KINDS = { achat: 'Achats', vente: 'Ventes', banque: 'Banque', od: 'Opérations diverses', ouverture: 'Ouverture', cloture: 'Clôture' };
+
+async function setJournals(body) {
+  const list = await apiGet('journals', { active: 'all' });
+  body.innerHTML = `
+    <div class="panel"><div class="panel-head"><div class="panel-title">Journaux comptables</div>
+      ${MFC.settingsManage ? '<button class="btn btn-primary btn-sm" onclick="modalJournal()">+ Ajouter</button>' : ''}</div>
+      <div style="padding:0 18px"><div class="hint">Chaque écriture est classée dans un journal, dont le code forme le début de son numéro de pièce (ACH-2627-0042). Créez-en autant que nécessaire, par exemple un journal de banque par compte, ou un journal de vente par activité. Le code d'un journal déjà utilisé n'est plus modifiable, sans quoi des pièces déjà émises deviendraient introuvables.</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th style="width:80px">Code</th><th>Libellé</th><th>Type</th><th>Compte bancaire</th><th class="num">Écritures</th><th>Par défaut</th><th>Statut</th><th></th></tr></thead>
+      <tbody>${list.map(j => `<tr>
+        <td style="font-family:Sora;font-weight:800">${esc(j.code)}</td>
+        <td style="font-weight:600">${esc(j.label)}</td>
+        <td>${esc(JOURNAL_KINDS[j.kind] || j.kind)}</td>
+        <td style="color:var(--gris)">${esc(j.bank_name || '')}</td>
+        <td class="num">${j.entry_count}</td>
+        <td>${j.is_default == 1 ? '<span class="badge b-matched">défaut</span>'
+             : (MFC.settingsManage && ['achat','vente','banque','od'].includes(j.kind) ? `<button class="btn btn-ghost btn-sm" onclick="setDefaultJournal(${j.id})">Définir</button>` : '')}</td>
+        <td>${j.active == 1 ? '<span class="badge b-matched">actif</span>' : '<span class="badge b-ignored">inactif</span>'}</td>
+        <td style="text-align:right">${MFC.settingsManage ? `<button class="btn btn-ghost btn-sm" onclick='modalJournal(${JSON.stringify(j)})'>Modifier</button>
+          ${j.system == 1 ? '' : `<button class="btn btn-ghost btn-sm" onclick="deleteJournal(${j.id})">Retirer</button>`}` : ''}</td>
+      </tr>`).join('') || '<tr><td colspan="8" class="empty">Aucun journal.</td></tr>'}
+      </tbody></table></div></div>`;
+}
+function modalJournal(j) {
+  const e = j || {};
+  const banks = S.bankAccounts || [];
+  openModal(e.id ? `Modifier le journal ${e.code}` : 'Nouveau journal', `
+    <div style="margin-bottom:12px"><label class="lbl">Libellé</label>
+      <input class="field" id="mJoLabel" value="${esc(e.label || '')}" placeholder="Ventes boutique"></div>
+    ${e.id ? `<div style="margin-bottom:12px"><label class="lbl">Code</label>
+        <input class="field" value="${esc(e.code)}" disabled>
+        <div class="hint" style="margin-top:6px">Le code compose le numéro des pièces de ce journal, il ne se modifie pas.</div></div>`
+      : `<div style="margin-bottom:12px"><label class="lbl">Code (optionnel)</label>
+        <input class="field" id="mJoCode" placeholder="Déduit du libellé si vide" maxlength="8">
+        <div class="hint" style="margin-top:6px">2 à 8 lettres ou chiffres. Il ouvre le numéro de chaque pièce du journal.</div></div>
+      <div style="margin-bottom:12px"><label class="lbl">Type</label>
+        <select class="field" id="mJoKind" onchange="journalKindChanged()">
+          <option value="achat">Achats</option><option value="vente">Ventes</option>
+          <option value="banque">Banque</option><option value="od">Opérations diverses</option>
+        </select></div>`}
+    <div style="margin-bottom:12px" id="mJoBankWrap"><label class="lbl">Compte bancaire rattaché</label>
+      <select class="field" id="mJoBank"><option value="">Aucun</option>
+        ${banks.map(b => `<option value="${b.id}" ${b.id == e.bank_account_id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>
+      <div class="hint" style="margin-top:6px">Les règlements importés depuis ce compte iront d'office dans ce journal.</div></div>
+    ${e.id && e.system != 1 ? `<div><label class="lbl">Statut</label><select class="field" id="mJoActive">
+      <option value="1" ${e.active != 0 ? 'selected' : ''}>Actif</option>
+      <option value="0" ${e.active == 0 ? 'selected' : ''}>Inactif</option></select></div>` : ''}
+  `, async () => {
+    if (!f('mJoLabel')) throw new Error('Libellé requis');
+    const bank = Number(f('mJoBank')) || null;
+    if (e.id) {
+      const actEl = document.getElementById('mJoActive');
+      const active = actEl ? Number(actEl.value) : Number(e.active ?? 1);
+      await api('journals', 'PUT', { id: e.id, label: f('mJoLabel'), bank_account_id: bank, is_default: e.is_default, active });
+    } else {
+      await api('journals', 'POST', { label: f('mJoLabel'), code: f('mJoCode'), kind: f('mJoKind'), bank_account_id: bank });
+    }
+    toast(e.id ? 'Journal modifié' : 'Journal créé');
+    closeModal();
+    S.journals = await apiGet('journals');
+    loadSettings();
+  }, e.id ? 'Enregistrer' : 'Créer');
+  journalKindChanged(e.kind);
+}
+/* Le rattachement bancaire n'a de sens que pour un journal de banque. */
+function journalKindChanged(kind) {
+  const wrap = document.getElementById('mJoBankWrap');
+  if (!wrap) return;
+  const k = kind || f('mJoKind') || 'achat';
+  wrap.style.display = k === 'banque' ? '' : 'none';
+}
+async function setDefaultJournal(id) {
+  try {
+    await api('journals', 'PUT', { id, is_default: 1 });
+    toast('Journal par défaut modifié');
+    S.journals = await apiGet('journals');
+    loadSettings();
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function deleteJournal(id) {
+  try {
+    const r = await api('journals?id=' + id, 'DELETE');
+    toast(r.deactivated ? 'Journal désactivé (des écritures le référencent)' : 'Journal retiré');
+    S.journals = await apiGet('journals');
+    loadSettings();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function setTerms(body) {
+  const list = await apiGet('payment_terms');
+  body.innerHTML = `
+    <div class="panel"><div class="panel-head"><div class="panel-title">Conditions de paiement</div>
+      ${MFC.settingsManage ? '<button class="btn btn-primary btn-sm" onclick="modalTerm()">+ Ajouter</button>' : ''}</div>
+      <div style="padding:0 18px"><div class="hint">L'échéance d'une facture se calcule à partir de sa date et de la condition choisie. Elle reste saisissable à la main au cas par cas.</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Libellé</th><th>Délai</th><th>Par défaut</th><th></th></tr></thead>
+      <tbody>${list.map(t => `<tr><td style="font-weight:600">${esc(t.label)}</td><td>${t.days} jour(s)</td>
+        <td>${t.is_default == 1 ? '<span class="badge b-matched">défaut</span>'
+             : (MFC.settingsManage ? `<button class="btn btn-ghost btn-sm" onclick="setDefaultTerm(${t.id})">Définir par défaut</button>` : '')}</td>
+        <td style="text-align:right">${MFC.settingsManage ? `<button class="btn btn-ghost btn-sm" onclick="deleteTerm(${t.id})">Retirer</button>` : ''}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="empty">Aucune condition.</td></tr>'}
+      </tbody></table></div></div>`;
+}
+function modalTerm() {
+  openModal('Nouvelle condition de paiement', `
+    <div style="margin-bottom:12px"><label class="lbl">Libellé</label><input class="field" id="mTeLabel" placeholder="45 jours"></div>
+    <div><label class="lbl">Délai en jours</label><input type="number" class="field" id="mTeDays" value="30"></div>
+  `, async () => {
+    if (!f('mTeLabel')) throw new Error('Libellé requis');
+    await api('payment_terms', 'POST', { label: f('mTeLabel'), days: Number(f('mTeDays')) || 0 });
+    toast('Condition ajoutée');
+    closeModal();
+    S.paymentTerms = await apiGet('payment_terms');
+    loadSettings();
+  }, 'Ajouter');
+}
+async function setDefaultTerm(id) {
+  try {
+    await api('payment_terms', 'PUT', { id, is_default: 1 });
+    toast('Condition par défaut modifiée');
+    S.paymentTerms = await apiGet('payment_terms');
+    loadSettings();
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function deleteTerm(id) {
+  try {
+    await api('payment_terms?id=' + id, 'DELETE');
+    toast('Condition retirée');
+    S.paymentTerms = await apiGet('payment_terms');
+    loadSettings();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+const SETTING_HELP = {
+  creditors_account:  'Contrepartie de toute facture fournisseur, jusqu\'à son règlement.',
+  debtors_account:    'Contrepartie de toute facture client, jusqu\'à son encaissement.',
+  suspense_account:   'Utilisé quand le compte bancaire réel n\'est pas encore connu.',
+  result_account:     'Reçoit le bénéfice ou la perte à la clôture de l\'exercice.',
+  vat_charge_account: 'Charge trimestrielle de TVA sous le régime de la dette fiscale nette.',
+  vat_payable_account:'Dette de TVA envers l\'AFC, soldée au paiement.',
+};
+
+async function setAccounts(body) {
+  const all = await apiGet('settings');
+  const rows = all.filter(s => s.setting_key.endsWith('_account'));
+  const accounts = S.accounts || [];
+  body.innerHTML = `
+    <div class="panel"><div class="panel-head"><div class="panel-title">Comptes par défaut</div>
+      <div class="hint">Aucun compte n'est écrit en dur dans le code : tout se règle ici.</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Réglage</th><th>Compte</th></tr></thead>
+      <tbody>${rows.map(s => `<tr>
+        <td><div style="font-weight:600">${esc(s.label)}</div><div class="hint">${esc(SETTING_HELP[s.setting_key] || '')}</div></td>
+        <td><select class="field set-acc" data-scope="${esc(s.scope)}" data-key="${esc(s.setting_key)}">
+          <option value="">— non défini —</option>
+          ${accounts.map(a => `<option value="${a.id}" ${a.id == s.account_id ? 'selected' : ''}>${esc(a.number)} — ${esc(a.name)}</option>`).join('')}
+        </select></td></tr>`).join('')}</tbody>
+    </table></div>
+    ${MFC.settingsManage ? `<div style="padding:14px"><button class="btn btn-primary" onclick="saveAccountSettings()">Enregistrer</button></div>` : ''}
+    </div>`;
+  if (!MFC.settingsManage) document.querySelectorAll('.set-acc').forEach(s => s.disabled = true);
+}
+async function saveAccountSettings() {
+  const settings = [...document.querySelectorAll('.set-acc')].map(s => ({
+    scope: s.dataset.scope, setting_key: s.dataset.key, account_id: Number(s.value) || null,
+  }));
+  try {
+    await api('settings', 'PUT', { settings });
+    toast('Réglages enregistrés');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function setVat(body) {
+  const [rates, settlement] = await Promise.all([apiGet('vat_rates'), apiGet('vat_settlement_rates')]);
+  body.innerHTML = `
+    <div class="warn-box">Le club est assujetti au régime de la <b>dette fiscale nette</b> : la TVA payée aux fournisseurs n'est pas déductible,
+      et les produits comme les charges se comptabilisent TTC. La TVA portée sur une facture est une information, elle ne génère pas de ligne d'écriture.</div>
+    <div class="panel"><div class="panel-head"><div class="panel-title">Taux facturés</div>
+      ${MFC.settingsManage ? '<button class="btn btn-primary btn-sm" onclick="modalVatRate()">+ Ajouter</button>' : ''}</div>
+      <div style="padding:0 18px"><div class="hint">Un taux se modifie à tout moment. La TVA de toutes les factures qui le portent est alors recalculée, après confirmation : sous la dette fiscale nette la TVA est une information et aucune écriture ne change, mais elle reste imprimée sur des pièces déjà envoyées.</div></div>
+    <div class="table-wrap"><table><thead><tr><th>Libellé</th><th>Taux</th><th>Type</th><th>Statut</th><th></th></tr></thead>
+      <tbody>${rates.map(r => `<tr><td>${esc(r.label)}</td><td>${r.rate_percent} %</td>
+        <td>${r.kind === 'vente' ? 'Vente' : 'Achat'}</td>
+        <td>${r.active == 1 ? '<span class="badge b-matched">actif</span>' : '<span class="badge b-ignored">inactif</span>'}</td>
+        <td style="text-align:right">${MFC.settingsManage ? `<button class="btn btn-ghost btn-sm" onclick='modalVatRate(${JSON.stringify(r)})'>Modifier</button>
+          <button class="btn btn-ghost btn-sm" onclick="deleteVatRate(${r.id})">Retirer</button>` : ''}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <div class="panel"><div class="panel-head"><div class="panel-title">Taux de la dette fiscale nette</div>
+      ${MFC.settingsManage ? '<button class="btn btn-primary btn-sm" onclick="modalTdfnRate()">+ Ajouter</button>' : ''}</div>
+      <div style="padding:0 18px"><div class="hint">Attribués par l'AFC, jusqu'à deux selon l'activité. Rattachez chacun aux comptes de produit concernés pour que le décompte trimestriel se calcule seul.</div></div>
+    <div class="table-wrap"><table><thead><tr><th>Libellé</th><th>Taux</th><th></th></tr></thead>
+      <tbody>${settlement.rates.length ? settlement.rates.map(r => `<tr><td>${esc(r.label)}</td><td>${r.rate_percent} %</td>
+        <td style="text-align:right">${MFC.settingsManage ? `<button class="btn btn-ghost btn-sm" onclick="deleteTdfnRate(${r.id})">Retirer</button>` : ''}</td></tr>`).join('')
+        : '<tr><td colspan="3" class="empty">Aucun taux saisi. Reprenez ceux qui figurent sur votre décision d\'assujettissement AFC.</td></tr>'}
+      </tbody></table></div></div>
+    ${settlement.rates.length ? `<div class="panel"><div class="panel-head"><div class="panel-title">Rattachement aux comptes de produit</div></div>
+    <div class="table-wrap"><table><thead><tr><th>Compte</th><th>Taux appliqué</th></tr></thead>
+      <tbody>${settlement.revenue_accounts.map(a => `<tr><td>${esc(a.number)} — ${esc(a.name)}</td>
+        <td><select class="field" ${MFC.settingsManage ? '' : 'disabled'} onchange="setAccountTdfn(${a.id}, this.value)">
+          <option value="">— aucun —</option>
+          ${settlement.rates.map(r => `<option value="${r.id}" ${r.id == a.vat_settlement_rate_id ? 'selected' : ''}>${esc(r.label)} (${r.rate_percent} %)</option>`).join('')}
+        </select></td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+}
+function modalVatRate(r) {
+  const e = r || {};
+  openModal(e.id ? 'Modifier le taux de TVA' : 'Nouveau taux de TVA', `
+    <div style="margin-bottom:12px"><label class="lbl">Libellé</label>
+      <input class="field" id="mVatLabel" value="${esc(e.label || '')}" placeholder="TVA 8.1% (taux normal)"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><label class="lbl">Taux (%)</label><input type="number" step="0.1" class="field" id="mVatRate" value="${e.rate_percent ?? ''}"></div>
+      <div><label class="lbl">Type</label>
+        ${e.id ? `<input class="field" value="${e.kind === 'vente' ? 'Vente' : 'Achat'}" disabled>`
+               : `<select class="field" id="mVatKind"><option value="vente">Vente</option><option value="achat">Achat</option></select>`}</div>
+    </div>
+    ${e.id ? `<div style="margin-top:12px"><label class="lbl">Statut</label><select class="field" id="mVatActive">
+      <option value="1" ${e.active != 0 ? 'selected' : ''}>Actif</option>
+      <option value="0" ${e.active == 0 ? 'selected' : ''}>Inactif</option></select></div>` : ''}
+  `, async () => {
+    if (!f('mVatLabel')) throw new Error('Libellé requis');
+    if (!e.id) {
+      await api('vat_rates', 'POST', { label: f('mVatLabel'), rate_percent: Number(f('mVatRate')) || 0, kind: f('mVatKind') });
+      toast('Taux ajouté'); closeModal(); loadSettings(); return;
+    }
+    const payload = { id: e.id, label: f('mVatLabel'), rate_percent: Number(f('mVatRate')) || 0, active: Number(f('mVatActive')) };
+    /* Premier appel sans `confirm` : le serveur ne modifie rien et dit combien
+       de factures seraient réécrites. C'est lui qui compte, jamais le
+       navigateur, sans quoi le chiffre annoncé pourrait être faux. */
+    let res = await api('vat_rates', 'PUT', payload);
+    if (res.needs_confirm) {
+      const ok = confirm(`Passer ce taux de ${res.old_rate} % à ${res.new_rate} % ?\n\n`
+        + `${res.affected} facture(s) portent ce taux : leur TVA affichée sera recalculée.\n\n`
+        + `Les montants facturés et les écritures comptables ne changent pas (régime de la dette fiscale nette).`);
+      if (!ok) return;
+      res = await api('vat_rates', 'PUT', { ...payload, confirm: 1 });
+    }
+    toast(res.recomputed ? `Taux modifié, ${res.recomputed} facture(s) recalculée(s)` : 'Taux modifié');
+    closeModal();
+    S.vatRates = await apiGet('vat_rates');
+    loadSettings();
+  }, e.id ? 'Enregistrer' : 'Ajouter');
+}
+function modalTdfnRate() {
+  openModal('Nouveau taux de dette fiscale nette', `
+    <div class="hint" style="margin-bottom:12px">Reprenez le taux exact figurant sur votre décision d'assujettissement.</div>
+    <div style="margin-bottom:12px"><label class="lbl">Libellé de l'activité</label><input class="field" id="mTdLabel" placeholder="Sport / Buvette…"></div>
+    <div><label class="lbl">Taux (%)</label><input type="number" step="0.1" class="field" id="mTdRate"></div>
+  `, async () => {
+    if (!f('mTdLabel')) throw new Error('Libellé requis');
+    await api('vat_settlement_rates', 'POST', { label: f('mTdLabel'), rate_percent: Number(f('mTdRate')) || 0 });
+    toast('Taux ajouté'); closeModal(); loadSettings();
+  }, 'Ajouter');
+}
+async function deleteVatRate(id) {
+  try { const r = await api('vat_rates?id=' + id, 'DELETE'); toast(r.deactivated ? 'Taux désactivé (il est utilisé par des factures)' : 'Taux retiré'); loadSettings(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function deleteTdfnRate(id) {
+  try { await api('vat_settlement_rates?id=' + id, 'DELETE'); toast('Taux retiré'); loadSettings(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function setAccountTdfn(accountId, rateId) {
+  try { await api('vat_settlement_rates', 'PUT', { account_id: accountId, vat_settlement_rate_id: Number(rateId) || null }); toast('Rattachement enregistré'); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function setCosts(body) {
+  const list = await apiGet('cost_centers', { active: 'all' });
+  body.innerHTML = `
+    <div class="panel"><div class="panel-head"><div class="panel-title">Centres de coût</div>
+      <div style="display:flex;gap:8px">
+        ${MFC.settingsManage ? '<button class="btn btn-ghost btn-sm" onclick="syncCostCenters()">Reprendre depuis le référentiel club</button>' : ''}
+        ${MFC.settingsManage ? '<button class="btn btn-primary btn-sm" onclick="modalCostCenter()">+ Ajouter</button>' : ''}
+      </div></div>
+      <div style="padding:0 18px"><div class="hint">Portés par chaque ligne d'écriture et modifiables après coup : ils sont analytiques et n'entrent pas dans l'équilibre débit/crédit.</div></div>
+    <div class="table-wrap"><table><thead><tr><th>Code</th><th>Libellé</th><th>Type</th><th>Statut</th><th></th></tr></thead>
+      <tbody>${list.length ? list.map(c => `<tr><td style="font-family:Sora;font-weight:700">${esc(c.code)}</td><td>${esc(c.label)}</td>
+        <td>${({ equipe: 'Équipe', categorie: 'Catégorie', autre: 'Autre' })[c.kind] || esc(c.kind)}</td>
+        <td>${c.active == 1 ? '<span class="badge b-matched">actif</span>' : '<span class="badge b-ignored">inactif</span>'}</td>
+        <td style="text-align:right">${MFC.settingsManage ? `<button class="btn btn-ghost btn-sm" onclick="deleteCostCenter(${c.id})">Retirer</button>` : ''}</td></tr>`).join('')
+        : '<tr><td colspan="5" class="empty">Aucun centre de coût. Reprenez les équipes et catégories du club, ou ajoutez les vôtres.</td></tr>'}
+      </tbody></table></div></div>`;
+}
+async function syncCostCenters() {
+  try { const r = await api('cost_centers_sync_club', 'POST', {}); toast(`${r.created} centre(s) de coût repris`); loadSettings(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+function modalCostCenter() {
+  openModal('Nouveau centre de coût', `
+    <div style="margin-bottom:12px"><label class="lbl">Libellé</label><input class="field" id="mCcLabel" placeholder="Buvette, Meyrin Cup, Administration…"></div>
+    <div><label class="lbl">Type</label><select class="field" id="mCcKind">
+      <option value="autre">Autre</option><option value="equipe">Équipe</option><option value="categorie">Catégorie</option></select></div>
+  `, async () => {
+    if (!f('mCcLabel')) throw new Error('Libellé requis');
+    await api('cost_centers', 'POST', { label: f('mCcLabel'), kind: f('mCcKind') });
+    toast('Centre de coût ajouté'); closeModal(); loadSettings();
+  }, 'Ajouter');
+}
+async function deleteCostCenter(id) {
+  try { const r = await api('cost_centers?id=' + id, 'DELETE'); toast(r.deactivated ? 'Centre désactivé (il est utilisé par des écritures)' : 'Centre retiré'); loadSettings(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function setQr(body) {
+  const all = await apiGet('settings');
+  const keys = ['creditor_name', 'creditor_street', 'creditor_zip', 'creditor_city', 'creditor_country', 'vat_method'];
+  const rows = all.filter(s => keys.includes(s.setting_key));
+  body.innerHTML = `
+    <div class="panel"><div class="panel-head"><div class="panel-title">Coordonnées du club et méthode de décompte</div>
+      <div class="hint">Servent de bloc créancier sur les factures émises.</div></div>
+      <div style="padding:18px;display:grid;gap:12px;max-width:560px">
+        ${rows.map(s => s.setting_key === 'vat_method'
+          ? `<div><label class="lbl">${esc(s.label)}</label>
+              <select class="field set-val" data-scope="${esc(s.scope)}" data-key="${esc(s.setting_key)}">
+                <option value="convenues" ${s.value === 'convenues' ? 'selected' : ''}>Contre-prestations convenues (à la facturation)</option>
+                <option value="recues" ${s.value === 'recues' ? 'selected' : ''}>Contre-prestations reçues (à l'encaissement)</option>
+              </select></div>`
+          : `<div><label class="lbl">${esc(s.label)}</label>
+              <input class="field set-val" data-scope="${esc(s.scope)}" data-key="${esc(s.setting_key)}" value="${esc(s.value || '')}"></div>`).join('')}
+        ${MFC.settingsManage ? '<div><button class="btn btn-primary" onclick="saveValueSettings()">Enregistrer</button></div>' : ''}
+      </div></div>`;
+  if (!MFC.settingsManage) document.querySelectorAll('.set-val').forEach(s => s.disabled = true);
+}
+async function saveValueSettings() {
+  const settings = [...document.querySelectorAll('.set-val')].map(s => ({
+    scope: s.dataset.scope, setting_key: s.dataset.key, value: s.value,
+  }));
+  try { await api('settings', 'PUT', { settings }); toast('Réglages enregistrés'); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+/* ===============================================================
    INIT
 =============================================================== */
 (async function init() {
   document.getElementById('me-foot').textContent = MFC.name || '';
+  /* Contexte chargé en un appel, chaque bloc isolé côté serveur : un droit
+     manquant dégrade l'écran concerné sans jamais vider la page. */
   try {
-    S.accounts = await apiGet('accounts', { active: 'all' });
-  } catch (e) { /* chargé à nouveau lors de la navigation si besoin */ }
+    const b = await apiGet('bootstrap');
+    S.accounts     = b.accounts      || [];
+    S.costCenters  = b.cost_centers  || [];
+    S.vatRates     = b.vat_rates     || [];
+    S.products     = b.products      || [];
+    S.journals     = b.journals      || [];
+    S.paymentTerms = b.payment_terms || [];
+    S.bankAccounts = b.bank_accounts || S.bankAccounts || [];
+    S.years        = b.fiscal_years  || [];
+    S.currentYearId = b.current_fiscal_year ? b.current_fiscal_year.id : null;
+  } catch (e) {
+    toast('Contexte partiellement indisponible : ' + e.message, 'err');
+  }
   goTo('dashboard');
 })();
 </script>
