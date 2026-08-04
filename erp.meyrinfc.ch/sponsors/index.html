@@ -249,6 +249,27 @@ tailwind.config = {
             <div id="dashTier"></div>
           </div>
         </div>
+        <div class="grid lg:grid-cols-3 gap-3.5 mt-3.5">
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
+            <h2 class="font-semibold text-[14.5px]">Pipeline commercial</h2>
+            <p class="text-[12px] text-mute mb-3">Opportunités ouvertes par étape</p>
+            <div id="dashPipeline"></div>
+          </div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-4 flex flex-col justify-center gap-3.5">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-brand-50 text-brand-600 grid place-items-center shrink-0"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+              <div><p class="font-display font-bold text-[16px] tnum leading-none" id="dashAvgSponsor">–</p><p class="text-[11.5px] text-mute mt-1">Revenu moyen / sponsor actif</p></div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-violet2-50 text-violet2-600 grid place-items-center shrink-0"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg></div>
+              <div><p class="font-display font-bold text-[16px] tnum leading-none" id="dashOppRate">–</p><p class="text-[11.5px] text-mute mt-1">Taux de transformation du pipeline</p></div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-rose2-50 text-rose2-600 grid place-items-center shrink-0"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 7v5l3 2"/></svg></div>
+              <div><p class="font-display font-bold text-[16px] tnum leading-none" id="dashAtRisk">–</p><p class="text-[11.5px] text-mute mt-1">Sponsor(s) à risque</p></div>
+            </div>
+          </div>
+        </div>
         <div class="grid lg:grid-cols-2 gap-3.5 mt-3.5">
           <div class="bg-white border border-line rounded-xl2 shadow-card">
             <div class="flex items-center justify-between px-5 pt-4 pb-2">
@@ -885,6 +906,27 @@ function renderDashboard() {
     + kpi('Contrats échéant', expiringInSeason.length, 'fin durant ' + seasonLabel(y), ic('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'), 'bg-amber2-50 text-amber2-600')
     + kpi('Opportunités ouvertes', oppOpen.length, chf(oppVal) + ' CHF en jeu', ic('<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>'), 'bg-violet2-50 text-violet2-600')
     + kpi('Tâches en retard', tasksLate, S.tasks.filter(t => !+t.done).length + ' ouvertes', ic('<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'), tasksLate ? 'bg-rose2-50 text-rose2-600' : 'bg-brand-50 text-brand-600');
+
+  // Pipeline commercial : répartition des opportunités par étape (toutes, y compris signées)
+  const stageColors = ['#9A988C', '#3B6FE0', '#E8902A', '#7B59D8', '#c5a900', '#1F9D5B'];
+  const stageCounts = STAGES.map((s, i) => S.opps.filter(o => o.stage === i).length);
+  const maxStage = Math.max(...stageCounts, 1);
+  document.getElementById('dashPipeline').innerHTML = S.opps.length ?
+    '<div class="space-y-2.5 text-[12px]">' + STAGES.map((s, i) => {
+      const c = stageCounts[i]; const pct = Math.round(c / maxStage * 100);
+      return '<div><div class="flex items-center justify-between mb-1"><span class="flex items-center gap-2"><i class="w-2.5 h-2.5 rounded-sm" style="background:' + stageColors[i] + '"></i>' + s.replace(' 🎉','') + '</span><span class="tnum font-semibold">' + c + '</span></div>'
+        + '<div class="h-1.5 bg-canvas rounded-full overflow-hidden"><div class="progress-anim h-full rounded-full" style="width:' + (c ? Math.max(pct,4) : 0) + '%;background:' + stageColors[i] + '"></div></div></div>';
+    }).join('') + '</div>'
+    : '<p class="text-[12.5px] text-mute py-6 text-center">Aucune opportunité enregistrée.</p>';
+
+  // Mini-stats complémentaires
+  const avgSponsor = activeSponsorIds.size ? seasonRevenue / activeSponsorIds.size : 0;
+  document.getElementById('dashAvgSponsor').textContent = chf(avgSponsor) + ' CHF';
+  const won = S.opps.filter(o => o.stage === 5).length;
+  const oppRate = S.opps.length ? Math.round(won / S.opps.length * 100) : 0;
+  document.getElementById('dashOppRate').textContent = oppRate + ' %';
+  const atRisk = S.sponsors.filter(sp => sp.status === 'À risque').length;
+  document.getElementById('dashAtRisk').textContent = atRisk;
 
   const reminders = computeReminders();
   document.getElementById('dashExpiring').innerHTML = reminders.length ? reminders.map(rm => {

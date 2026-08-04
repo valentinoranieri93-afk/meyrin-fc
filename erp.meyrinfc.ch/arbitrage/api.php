@@ -133,6 +133,12 @@ function init_schema(PDO $pdo): void {
     if (!in_array('ref_id', $catCols)) {
         $pdo->exec("ALTER TABLE categories ADD COLUMN ref_id TEXT NOT NULL DEFAULT ''");
     }
+    /* Equipe masquee localement (referentiel actif, donc non supprimable : club_sync la
+       recreerait). Sert a nettoyer la liste des equipes sans aucun match, sans jamais
+       toucher au referentiel ERP ni redevenir visible tant que la saison n'a pas de match. */
+    if (!in_array('hidden', array_column($pdo->query('PRAGMA table_info(teams)')->fetchAll(), 'name'))) {
+        $pdo->exec('ALTER TABLE teams ADD COLUMN hidden INTEGER DEFAULT 0');
+    }
 
     /* Reparation puis verrou : les doublons nes de la synchro concurrente sont
        fusionnes, et l'index unique rend leur reapparition impossible, quel que
@@ -510,6 +516,7 @@ const ARB_PERMS = [
     'users'           => ['GET' => 'matches.view', 'write' => null], // ecriture traitee dans le bloc
     'teams'           => ['GET' => 'matches.view', 'write' => 'teams.manage'],
     'teams_bulk_save' => 'teams.manage',
+    'team_hide'       => 'teams.manage',
     'categories'      => ['GET' => 'matches.view', 'write' => 'teams.manage'],
     'seasons'         => ['GET' => 'matches.view', 'write' => 'seasons.manage'],
     'matches'         => ['GET' => 'matches.view', 'write' => 'matches.edit'],
@@ -554,7 +561,10 @@ switch ($action) {
         if ($method === 'GET') {
             club_sync(db());
             $season_id = resolve_season_id(db(), (int)($_GET['season_id'] ?? 0));
-            $st = db()->prepare('SELECT * FROM teams WHERE season_id = ? ORDER BY category, name');
+            $includeHidden = !empty($_GET['include_hidden']);
+            $sql = 'SELECT t.*, (SELECT COUNT(*) FROM matches m WHERE m.team_id = t.id) AS match_count
+                    FROM teams t WHERE t.season_id = ?' . ($includeHidden ? '' : ' AND t.hidden = 0') . ' ORDER BY t.category, t.name';
+            $st = db()->prepare($sql);
             $st->execute([$season_id]);
             out(club_sort_teams($st->fetchAll(), club_team_rank(db(), $season_id)));
         }
@@ -635,6 +645,25 @@ switch ($action) {
         fail('Méthode non supportée', 405);
     }
 
+    /* Masquage local d'une equipe sans match (referentiel actif : la suppression ne
+       tiendrait pas, club_sync la recreerait tant qu'elle existe dans l'ERP). Ne touche
+       jamais name/category/coach_name/active, donc pas concerne par club_readonly. */
+    case 'team_hide': {
+        require_auth();
+        if ($method !== 'POST') fail('Méthode non supportée', 405);
+        $id     = i($b, 'id');
+        $hidden = !empty($b['hidden']) ? 1 : 0;
+        if (!$id) fail('ID requis');
+        $pdo = db();
+        if ($hidden) {
+            $st = $pdo->prepare('SELECT COUNT(*) FROM matches WHERE team_id = ?');
+            $st->execute([$id]);
+            if ((int) $st->fetchColumn() > 0) fail('Cette équipe a des matchs, elle ne peut pas être masquée', 409);
+        }
+        $pdo->prepare('UPDATE teams SET hidden = ? WHERE id = ?')->execute([$hidden, $id]);
+        out(['ok' => true, 'hidden' => (bool) $hidden]);
+    }
+
     /* Enregistrement groupé de l'écran Équipes. Sous référentiel, seul le
        montant de l'indemnité y est encore modifiable. */
     case 'teams_bulk_save': {
@@ -656,7 +685,9 @@ switch ($action) {
                 fail('Erreur lors de la sauvegarde : ' . $e->getMessage(), 500);
             }
             $season_id = resolve_season_id($pdo, i($b, 'season_id'));
-            $q = $pdo->prepare('SELECT * FROM teams WHERE season_id = ?');
+            $includeHidden = !empty($b['include_hidden']);
+            $q = $pdo->prepare('SELECT t.*, (SELECT COUNT(*) FROM matches m WHERE m.team_id = t.id) AS match_count
+                                 FROM teams t WHERE t.season_id = ?' . ($includeHidden ? '' : ' AND t.hidden = 0'));
             $q->execute([$season_id]);
             out(['ok' => true, 'teams' => club_sort_teams($q->fetchAll(), club_team_rank($pdo, $season_id))]);
         }
@@ -1407,7 +1438,7 @@ switch ($action) {
                 COALESCE(SUM(CASE WHEN m.status IN ("pending","paid") THEN 1 ELSE 0 END), 0) as count_total
             FROM teams t
             LEFT JOIN matches m ON m.team_id = t.id AND m.season_id = ?
-            WHERE t.active = 1 AND t.season_id = ?
+            WHERE t.active = 1 AND t.hidden = 0 AND t.season_id = ?
             GROUP BY t.id
             ORDER BY t.category, t.name
         ');

@@ -218,6 +218,7 @@ tailwind.config = {
           </div>
         </div>
         <div id="dashKpis" class="grid grid-cols-2 xl:grid-cols-4 gap-3.5"></div>
+        <div id="dashMini" class="grid grid-cols-2 xl:grid-cols-3 gap-3.5 mt-3.5"></div>
         <div class="grid lg:grid-cols-3 gap-3.5 mt-3.5">
           <div class="lg:col-span-2 bg-white border border-line rounded-xl2 shadow-card p-5">
             <h2 class="font-semibold text-[14.5px]">Alertes</h2>
@@ -235,13 +236,17 @@ tailwind.config = {
             <h2 class="font-semibold text-[14.5px] mb-3">Budgets par département</h2>
             <div id="dashBudgets"></div>
           </div>
-          <div class="bg-white border border-line rounded-xl2 shadow-card">
-            <div class="flex items-center justify-between px-5 pt-4 pb-2">
-              <h2 class="font-semibold text-[14.5px]">Commandes récentes</h2>
-              <button onclick="go('commandes')" class="text-[12px] font-medium text-brand-600 hover:underline">Tout voir →</button>
-            </div>
-            <div id="dashOrders" class="divide-y divide-line"></div>
+          <div class="bg-white border border-line rounded-xl2 shadow-card p-5">
+            <h2 class="font-semibold text-[14.5px] mb-3">Dépenses par département</h2>
+            <div id="dashSpendChart"></div>
           </div>
+        </div>
+        <div class="bg-white border border-line rounded-xl2 shadow-card mt-3.5">
+          <div class="flex items-center justify-between px-5 pt-4 pb-2">
+            <h2 class="font-semibold text-[14.5px]">Commandes récentes</h2>
+            <button onclick="go('commandes')" class="text-[12px] font-medium text-brand-600 hover:underline">Tout voir →</button>
+          </div>
+          <div id="dashOrders" class="divide-y divide-line"></div>
         </div>
       </section>
 
@@ -907,6 +912,34 @@ async function loadDashboard() {
   document.getElementById('dashLowStock').innerHTML = d.low_stock.length
     ? d.low_stock.map(a => `<div class="flex items-center justify-between py-2 border-b border-line last:border-0"><p class="text-[12.5px]">${esc(a.name)}</p><span class="text-[11px] font-bold text-rose2-600 tnum">${a.total}/${a.alert_threshold}</span></div>`).join('')
     : '<p class="text-[12.5px] text-mute py-2">Tout est au vert</p>';
+
+  // Mini-stats : consommation budgétaire globale de l'exercice
+  const totalAllocated = d.budgets.reduce((s, b) => s + (+b.amount_allocated || 0), 0);
+  const totalSpent = d.budgets.reduce((s, b) => s + (+b.spent || 0), 0);
+  const consumptionPct = totalAllocated > 0 ? Math.round(totalSpent / totalAllocated * 100) : 0;
+  const overBudgetCount = d.budgets.filter(b => +b.amount_allocated > 0 && +b.spent > +b.amount_allocated).length;
+  const miniIc = p => `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  const mini = (label, value, icon, cls) => `
+    <div class="bg-white border border-line rounded-xl2 shadow-card p-4 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg ${cls} grid place-items-center shrink-0">${icon}</div>
+      <div><p class="font-display font-bold text-[16px] tnum leading-none">${value}</p><p class="text-[11.5px] text-mute mt-1">${label}</p></div>
+    </div>`;
+  document.getElementById('dashMini').innerHTML =
+    mini('Budget engagé sur l\'exercice', chf(totalSpent) + ' CHF', miniIc('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'), 'bg-brand-50 text-brand-600')
+    + mini('Taux de consommation budgétaire', consumptionPct + ' %', miniIc('<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>'), consumptionPct > 90 ? 'bg-rose2-50 text-rose2-600' : 'bg-violet2-50 text-violet2-600')
+    + mini('Département(s) en dépassement', overBudgetCount, miniIc('<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L14.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>'), overBudgetCount ? 'bg-rose2-50 text-rose2-600' : 'bg-brand-50 text-brand-600');
+
+  // Dépenses par département (barres horizontales, top 6)
+  const spendColors = ['#3B6FE0', '#1F9D5B', '#E8902A', '#7B59D8', '#c5a900', '#D8463A'];
+  const topSpend = [...d.budgets].sort((a, b) => (+b.spent) - (+a.spent)).filter(b => +b.spent > 0).slice(0, 6);
+  const maxSpend = Math.max(...topSpend.map(b => +b.spent), 1);
+  document.getElementById('dashSpendChart').innerHTML = topSpend.length ?
+    '<div class="space-y-2.5 text-[12px]">' + topSpend.map((b, i) => {
+      const pct = Math.round(+b.spent / maxSpend * 100);
+      return `<div><div class="flex items-center justify-between mb-1"><span class="flex items-center gap-2"><i class="w-2.5 h-2.5 rounded-sm" style="background:${spendColors[i % spendColors.length]}"></i>${esc(b.department_name)}</span><span class="tnum font-semibold">${chf(b.spent)} CHF</span></div>
+        <div class="h-1.5 bg-canvas rounded-full overflow-hidden"><div class="progress-anim h-full rounded-full" style="width:${Math.max(pct,4)}%;background:${spendColors[i % spendColors.length]}"></div></div></div>`;
+    }).join('') + '</div>'
+    : '<p class="text-[12.5px] text-mute py-6 text-center">Aucune dépense enregistrée sur cet exercice.</p>';
 
   document.getElementById('dashBudgets').innerHTML = d.budgets.length ? d.budgets.map(budgetBar).join('') : '<p class="text-[12.5px] text-mute">Aucun budget défini pour cet exercice</p>';
 
