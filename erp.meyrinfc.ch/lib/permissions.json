@@ -107,5 +107,21 @@
       "register.close":   "Cloturer une journee de caisse",
       "register.reports": "Consulter l'historique et les rapports de caisse"
     }
+  },
+
+  "compta": {
+    "label": "Comptabilite",
+    "permissions": {
+      "accounts.view":  "Consulter le plan comptable",
+      "accounts.edit":  "Creer et modifier les comptes du plan comptable",
+      "journal.view":   "Consulter les ecritures et le journal",
+      "journal.edit":   "Creer et supprimer des ecritures manuelles",
+      "bank.view":      "Consulter les comptes bancaires et leurs transactions",
+      "bank.manage":    "Creer et modifier les comptes bancaires",
+      "bank.import":    "Importer un releve bancaire et annuler un lot",
+      "bank.reconcile": "Rapprocher une transaction bancaire avec une ecriture",
+      "periods.close":  "Creer et cloturer les periodes comptables",
+      "reports.view":   "Consulter les rapports (balance, journal)"
+    }
   }
 }

@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comptabilité — Meyrin FC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --jaune:#ffdd00; --jaune-fonce:#c5a900; --jaune-soft:#FFF3C4; --jaune-pale:#FFF9D9;
+  --noir:#15140F; --noir-2:#211F18; --noir-3:#2C2A21; --encre:#1A1915;
+  --gris:#6E6C61; --gris-2:#9A988C;
+  --ligne:#E9E6DC; --ligne-2:#F0EDE4; --ligne-dark:#28261E;
+  --bg:#F6F4ED; --carte:#FFFFFF;
+  --vert:#1F9D5B; --vert-bg:#E4F4EA;
+  --rouge:#D8463A; --rouge-bg:#FBE7E4;
+  --orange:#E8902A; --orange-bg:#FCEEDB;
+  --bleu:#3B6FE0; --bleu-bg:#E6EDFB;
+  --violet:#7B59D8; --violet-bg:#EEE8FB;
+  --ombre-s:0 1px 2px rgba(0,0,0,.04),0 1px 3px rgba(0,0,0,.06);
+  --ombre:0 4px 6px rgba(0,0,0,.07),0 12px 24px rgba(0,0,0,.10);
+  --r:14px; --r-s:10px;
+}
+*{box-sizing:border-box}
+body{font-family:"Inter",-apple-system,system-ui,sans-serif;font-size:14px;line-height:1.5;margin:0;background:var(--bg);color:var(--encre)}
+h1,h2,h3,h4{font-family:"Sora","Inter",sans-serif;margin:0}
+input,select,textarea{font-family:inherit;font-size:14px}
+button{font-family:inherit;cursor:pointer}
+.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+
+/* ===== SIDEBAR ===== */
+.sidebar{background:var(--noir);color:#C9C7BD;display:flex;flex-direction:column;border-right:1px solid var(--ligne-dark)}
+.sidebar-head{padding:20px 18px;border-bottom:1px solid var(--ligne-dark)}
+.sidebar-head .app-name{font-family:"Sora";font-size:15px;font-weight:700;color:#fff}
+.sidebar-head .app-sub{font-size:10.5px;color:#8C897C;margin-top:2px}
+.nav{flex:1;padding:14px 10px;overflow-y:auto}
+.nav-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:#75736A;padding:14px 10px 6px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;color:#C9C7BD;text-decoration:none;font-size:13.5px;font-weight:500;cursor:pointer;border:none;background:none;width:100%;text-align:left}
+.nav-item svg{width:16px;height:16px;color:#8E8C82;flex-shrink:0}
+.nav-item:hover{background:#211F18;color:#fff}
+.nav-item:hover svg{color:#fff}
+.nav-item.active{background:var(--jaune);color:var(--noir);font-weight:600}
+.nav-item.active svg{color:var(--noir)}
+.sidebar-foot{padding:14px;border-top:1px solid var(--ligne-dark);font-size:11.5px;color:#8C897C}
+
+/* ===== MAIN ===== */
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{background:#fff;border-bottom:1px solid var(--ligne);padding:14px 26px;display:flex;align-items:center;justify-content:space-between;min-height:62px}
+.page-title{font-family:"Sora";font-size:17px;font-weight:700}
+.page-sub{font-size:12px;color:var(--gris);margin-top:1px}
+.topbar-actions{display:flex;align-items:center;gap:10px}
+.content{padding:22px 26px;max-width:1320px}
+.view{display:none;animation:fadeIn .15s ease}
+.view.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ligne);background:#fff;border-radius:var(--r-s);padding:8px 14px;font-size:13px;font-weight:600;color:var(--encre);transition:.12s}
+.btn svg{width:14px;height:14px}
+.btn:hover{background:var(--bg)}
+.btn-sm{padding:6px 11px;font-size:12.5px}
+.btn-primary{background:var(--jaune);border-color:var(--jaune);color:var(--noir)}
+.btn-primary:hover{background:var(--jaune-fonce);border-color:var(--jaune-fonce)}
+.btn-dark{background:var(--noir);border-color:var(--noir);color:#fff}
+.btn-dark:hover{background:var(--noir-2)}
+.btn-danger{background:var(--rouge-bg);border-color:var(--rouge-bg);color:var(--rouge)}
+.btn-danger:hover{background:#f7d6d1}
+.btn-ghost{background:none;border-color:transparent}
+.btn-ghost:hover{background:var(--bg)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ===== KPI / MINI ===== */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.kpi{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r);padding:16px 18px;box-shadow:var(--ombre-s)}
+.kpi-ico{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:13px}
+.kpi-ico svg{width:19px;height:19px}
+.kpi-val{font-family:"Sora";font-size:24px;font-weight:700;letter-spacing:-.6px;line-height:1}
+.kpi-lbl{font-size:12.5px;color:var(--gris);margin-top:5px;font-weight:500}
+
+/* ===== PANEL / TABLE ===== */
+.panel{background:var(--carte);border:1px solid var(--ligne);border-radius:var(--r);box-shadow:var(--ombre-s);overflow:hidden;margin-bottom:16px}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--ligne-2);gap:10px;flex-wrap:wrap}
+.panel-title{font-family:"Sora";font-size:14.5px;font-weight:700}
+.panel-body{padding:18px}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+thead th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);font-weight:700;text-align:left;padding:10px 14px;border-bottom:1px solid var(--ligne);white-space:nowrap}
+tbody td{padding:10px 14px;border-bottom:1px solid var(--ligne-2);font-size:13px;vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--bg)}
+td.num,th.num{text-align:right;font-family:"Sora";font-variant-numeric:tabular-nums}
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.toolbar-right{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.field,select.field,textarea.field{border:1.5px solid var(--ligne);border-radius:var(--r-s);background:#fff;color:var(--noir);padding:8px 11px;font-size:13.5px;width:100%}
+.field:focus{outline:none;border-color:var(--jaune);box-shadow:0 0 0 4px rgba(255,221,0,.25)}
+label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px}
+.b-actif{background:var(--bleu-bg);color:var(--bleu)}
+.b-passif{background:var(--violet-bg);color:var(--violet)}
+.b-produit{background:var(--vert-bg);color:var(--vert)}
+.b-charge{background:var(--orange-bg);color:var(--orange)}
+.b-matched{background:var(--vert-bg);color:var(--vert)}
+.b-unmatched{background:var(--orange-bg);color:var(--orange)}
+.b-ignored{background:var(--ligne-2);color:var(--gris)}
+.empty{text-align:center;padding:50px 20px;color:var(--gris)}
+.empty svg{width:34px;height:34px;color:var(--gris-2);margin-bottom:10px}
+.spinner{width:20px;height:20px;border:3px solid var(--ligne);border-top-color:var(--noir);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-row{text-align:center;padding:36px;color:var(--gris)}
+
+/* ===== MODAL ===== */
+.overlay{position:fixed;inset:0;background:rgba(21,20,15,.45);display:none;z-index:40}
+.overlay.show{display:block}
+.modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;box-shadow:var(--ombre);width:560px;max-width:92vw;max-height:88vh;overflow-y:auto;z-index:41;display:none}
+.modal.show{display:block}
+.modal-head{padding:18px 22px;border-bottom:1px solid var(--ligne-2);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-family:"Sora";font-size:16px;font-weight:700}
+.modal-body{padding:20px 22px}
+.modal-foot{padding:16px 22px;border-top:1px solid var(--ligne-2);display:flex;justify-content:flex-end;gap:8px}
+.close-x{background:none;border:none;font-size:20px;color:var(--gris);line-height:1;padding:4px}
+
+/* ===== TOASTS ===== */
+#toasts{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:60}
+.toast{display:flex;align-items:center;gap:9px;background:var(--noir);color:#fff;padding:11px 16px;border-radius:10px;font-size:13px;font-weight:500;box-shadow:var(--ombre);animation:fadeIn .15s ease}
+.toast svg{width:16px;height:16px;flex-shrink:0}
+.toast-ok svg{color:var(--vert)}
+.toast-err{background:var(--rouge)}
+.toast-info svg{color:var(--bleu)}
+
+/* ===== ENTRY LINES EDITOR ===== */
+.lines-editor{border:1px solid var(--ligne);border-radius:var(--r-s);overflow:hidden;margin-bottom:10px}
+.line-row{display:grid;grid-template-columns:2.2fr 1fr 1fr auto;gap:8px;padding:8px;border-bottom:1px solid var(--ligne-2);align-items:center}
+.line-row:last-child{border-bottom:none}
+.line-totals{display:flex;justify-content:space-between;padding:10px 14px;background:var(--bg);font-family:"Sora";font-size:13px;font-weight:700}
+.line-totals.balanced{color:var(--vert)}
+.line-totals.unbalanced{color:var(--rouge)}
+
+@media(max-width:980px){.kpi-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:768px){.app{grid-template-columns:1fr}.sidebar{display:none}.content{padding:16px}.line-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <div class="app-name">Comptabilité</div>
+      <div class="app-sub">Meyrin FC</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-label">Vue d'ensemble</div>
+      <button class="nav-item active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4.5" width="7" height="7" rx="1.5"/><rect x="14" y="4.5" width="7" height="7" rx="1.5"/><rect x="3" y="14.5" width="7" height="7" rx="1.5"/><rect x="14" y="14.5" width="7" height="7" rx="1.5"/></svg>
+        Tableau de bord
+      </button>
+      <div class="nav-label">Comptabilité</div>
+      <button class="nav-item" data-view="accounts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/><path d="M4 19a2 2 0 0 0 2 2h14"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        Plan comptable
+      </button>
+      <button class="nav-item" data-view="entries">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6h-3z"/><path d="M13 2v6h6"/><path d="M9 13h6M9 17h4"/></svg>
+        Écritures
+      </button>
+      <div class="nav-label">Banques</div>
+      <button class="nav-item" data-view="bank">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 21h18M4 21V9l8-6 8 6v12M9 21V13h6v8"/></svg>
+        Comptes &amp; import
+      </button>
+      <button class="nav-item" data-view="reconcile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        Rapprochement
+      </button>
+      <div class="nav-label">Pilotage</div>
+      <button class="nav-item" data-view="reports">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+        Rapports
+      </button>
+      <button class="nav-item" data-view="periods">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
+        Périodes
+      </button>
+    </nav>
+    <div class="sidebar-foot" id="me-foot"></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="page-title" id="page-title">Tableau de bord</div>
+        <div class="page-sub" id="page-sub">Vue d'ensemble de la comptabilité</div>
+      </div>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </div>
+    <div class="content">
+
+      <!-- ===== DASHBOARD ===== -->
+      <div id="v-dashboard" class="view active">
+        <div class="kpi-grid" id="dash-kpis">
+          <div class="loading-row"><span class="spinner"></span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Transactions bancaires à rapprocher</div><div class="panel-act" style="cursor:pointer;font-size:12.5px;color:var(--gris)" onclick="goTo('reconcile')">Tout voir →</div></div>
+          <div class="panel-body" style="padding:0" id="dash-unmatched"><div class="loading-row"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+
+      <!-- ===== PLAN COMPTABLE ===== -->
+      <div id="v-accounts" class="view">
+        <div class="toolbar">
+          <input type="text" class="field" style="max-width:260px" id="acc-search" placeholder="Rechercher un compte…" oninput="renderAccounts()">
+          <select class="field" style="max-width:180px" id="acc-filter-class" onchange="renderAccounts()">
+            <option value="">Toutes les classes</option>
+            <option value="actif">Actif</option>
+            <option value="passif">Passif</option>
+            <option value="produit">Produit</option>
+            <option value="charge">Charge</option>
+          </select>
+          <div class="toolbar-right">
+            <button class="btn btn-primary btn-sm" id="btn-new-account" style="display:none" onclick="modalAccount()">+ Nouveau compte</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>N°</th><th>Nom</th><th>Catégorie</th><th>Classe</th><th>Lettrage</th><th></th></tr></thead>
+              <tbody id="accounts-rows"><tr><td colspan="6" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== ÉCRITURES ===== -->
+      <div id="v-entries" class="view">
+        <div class="toolbar">
+          <input type="date" class="field" style="max-width:160px" id="ent-from" onchange="loadEntries()">
+          <input type="date" class="field" style="max-width:160px" id="ent-to" onchange="loadEntries()">
+          <select class="field" style="max-width:200px" id="ent-source" onchange="loadEntries()">
+            <option value="">Toutes origines</option>
+            <option value="manuel">Écritures manuelles</option>
+          </select>
+          <div class="toolbar-right">
+            <button class="btn btn-primary btn-sm" id="btn-new-entry" style="display:none" onclick="modalEntry()">+ Nouvelle écriture</button>
+          </div>
+        </div>
+        <div id="entries-list"><div class="loading-row"><span class="spinner"></span></div></div>
+      </div>
+
+      <!-- ===== BANQUES ===== -->
+      <div id="v-bank" class="view">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Comptes bancaires</div>
+            <button class="btn btn-primary btn-sm" id="btn-new-bank-account" style="display:none" onclick="modalBankAccount()">+ Nouveau compte</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Nom</th><th>Type</th><th>IBAN</th><th>Compte du plan comptable</th><th></th></tr></thead>
+              <tbody id="bank-accounts-rows"><tr><td colspan="5" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Importer un relevé (camt.053)</div>
+            <button class="btn btn-ghost btn-sm" onclick="goTo('bank_batches')">Historique des imports →</button>
+          </div>
+          <div class="panel-body" id="import-zone">
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+              <div style="flex:1;min-width:220px">
+                <label class="lbl">Compte bancaire cible</label>
+                <select class="field" id="import-bank-account"></select>
+              </div>
+              <div style="flex:1;min-width:220px">
+                <label class="lbl">Fichier .xml (camt.053)</label>
+                <input type="file" class="field" id="import-file" accept=".xml">
+              </div>
+              <button class="btn btn-dark" id="btn-preview-import" onclick="previewImport()">Aperçu</button>
+            </div>
+            <div id="import-preview"></div>
+          </div>
+        </div>
+        <div class="panel" id="bank-batches-panel" style="display:none">
+          <div class="panel-head"><div class="panel-title">Historique des imports</div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Compte</th><th>Fichier</th><th class="num">Importées</th><th>Par</th><th></th></tr></thead>
+              <tbody id="batches-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== RAPPROCHEMENT ===== -->
+      <div id="v-reconcile" class="view">
+        <div class="toolbar">
+          <select class="field" style="max-width:260px" id="rec-bank-account" onchange="loadReconcileList()"></select>
+          <select class="field" style="max-width:180px" id="rec-state" onchange="loadReconcileList()">
+            <option value="unmatched">Non rapprochées</option>
+            <option value="matched">Rapprochées</option>
+            <option value="">Toutes</option>
+          </select>
+        </div>
+        <div id="reconcile-list"><div class="loading-row"><span class="spinner"></span></div></div>
+      </div>
+
+      <!-- ===== RAPPORTS ===== -->
+      <div id="v-reports" class="view">
+        <div class="toolbar">
+          <input type="date" class="field" style="max-width:160px" id="rep-from" onchange="loadReports()">
+          <input type="date" class="field" style="max-width:160px" id="rep-to" onchange="loadReports()">
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Balance des comptes</div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>N°</th><th>Compte</th><th>Classe</th><th class="num">Débit</th><th class="num">Crédit</th><th class="num">Solde</th></tr></thead>
+              <tbody id="balance-rows"><tr><td colspan="6" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Journal des écritures</div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Compte</th><th class="num">Débit</th><th class="num">Crédit</th></tr></thead>
+              <tbody id="journal-rows"><tr><td colspan="6" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== PÉRIODES ===== -->
+      <div id="v-periods" class="view">
+        <div class="toolbar">
+          <div class="toolbar-right">
+            <button class="btn btn-primary btn-sm" id="btn-new-period" style="display:none" onclick="modalPeriod()">+ Nouvelle période</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Libellé</th><th>Début</th><th>Fin</th><th>Statut</th><th></th></tr></thead>
+              <tbody id="periods-rows"><tr><td colspan="5" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeModal()"></div>
+<div class="modal" id="modal">
+  <div class="modal-head"><div class="modal-title" id="modal-title"></div><button class="close-x" onclick="closeModal()">✕</button></div>
+  <div class="modal-body" id="modal-body"></div>
+  <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button><button class="btn btn-primary" id="modal-submit"></button></div>
+</div>
+<div id="toasts"></div>
+
+<script>
+/* ===============================================================
+   ÉTAT
+=============================================================== */
+const S = {
+  currentView: 'dashboard',
+  accounts: [],
+  bankAccounts: [],
+  entries: [],
+  periods: [],
+};
+
+/* ===============================================================
+   API
+=============================================================== */
+async function api(action, method = 'GET', data = null, isForm = false) {
+  const url = `api.php?action=${action}`;
+  const opts = { method, credentials: 'same-origin' };
+  if (data && !isForm) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(data);
+  } else if (data && isForm) {
+    opts.body = data;
+  }
+  const res = await fetch(url, opts);
+  const json = await res.json().catch(() => ({ error: 'Réponse invalide' }));
+  if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
+  return json;
+}
+async function apiGet(action, params = {}) {
+  const qs = new URLSearchParams({ action, ...params }).toString();
+  const res = await fetch(`api.php?${qs}`, { credentials: 'same-origin' });
+  const json = await res.json().catch(() => ({ error: 'Réponse invalide' }));
+  if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
+  return json;
+}
+
+/* ===============================================================
+   HELPERS
+=============================================================== */
+function esc(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmt(n) {
+  return new Intl.NumberFormat('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0).replace(/[\s ]/g, "'");
+}
+function chf(n) { return fmt(n) + ' CHF'; }
+function classLabel(c) { return { actif: 'Actif', passif: 'Passif', produit: 'Produit', charge: 'Charge' }[c] || c; }
+function today() { return new Date().toISOString().slice(0, 10); }
+
+function toast(msg, type = 'ok') {
+  const icons = {
+    ok:   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    err:  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+  };
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.innerHTML = (icons[type] || '') + `<span>${esc(msg)}</span>`;
+  document.getElementById('toasts').append(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+/* ===============================================================
+   MODAL GÉNÉRIQUE
+=============================================================== */
+function openModal(title, bodyHtml, onSubmit, submitLabel = 'Enregistrer') {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  const btn = document.getElementById('modal-submit');
+  btn.textContent = submitLabel;
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try { await onSubmit(); }
+    catch (e) { toast(e.message, 'err'); }
+    finally { btn.disabled = false; }
+  };
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('modal').classList.remove('show');
+}
+function f(id) { return document.getElementById(id)?.value ?? ''; }
+
+/* ===============================================================
+   NAVIGATION
+=============================================================== */
+const VIEW_META = {
+  dashboard: ['Tableau de bord', 'Vue d\'ensemble de la comptabilité'],
+  accounts:  ['Plan comptable', 'Comptes du club, importés depuis Odoo'],
+  entries:   ['Écritures', 'Journal des écritures manuelles'],
+  bank:      ['Comptes & import', 'Comptes bancaires et import de relevés'],
+  bank_batches: ['Comptes & import', 'Historique des imports'],
+  reconcile: ['Rapprochement', 'Associer une transaction bancaire à une écriture'],
+  reports:   ['Rapports', 'Balance des comptes et journal'],
+  periods:   ['Périodes', 'Exercices et clôtures'],
+};
+
+function goTo(view) {
+  const btn = document.querySelector(`.nav-item[data-view="${view === 'bank_batches' ? 'bank' : view}"]`);
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n === btn));
+  const meta = VIEW_META[view] || VIEW_META.dashboard;
+  document.getElementById('page-title').textContent = meta[0];
+  document.getElementById('page-sub').textContent = meta[1];
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  const targetId = 'v-' + (view === 'bank_batches' ? 'bank' : view);
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === targetId));
+  S.currentView = view;
+
+  if (view === 'bank_batches') {
+    document.getElementById('bank-batches-panel').style.display = '';
+    loadBatches();
+  } else if (view === 'bank') {
+    document.getElementById('bank-batches-panel').style.display = 'none';
+  }
+
+  const loaders = {
+    dashboard: loadDashboard, accounts: loadAccounts, entries: loadEntries,
+    bank: loadBankView, reconcile: loadReconcileList, reports: loadReports, periods: loadPeriods,
+  };
+  (loaders[view] || loaders.dashboard)();
+}
+
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => goTo(btn.dataset.view));
+});
+
+/* ===============================================================
+   DASHBOARD
+=============================================================== */
+async function loadDashboard() {
+  // Chaque bloc se charge indépendamment : un droit manquant sur l'un des deux
+  // ne doit jamais vider tout le tableau de bord (leçon déjà tirée ailleurs
+  // dans l'ERP sur les chargements groupés en Promise.all).
+  let balance = [], unmatched = [];
+  try { balance = await apiGet('report_balance'); } catch (e) { /* pas le droit reports.view, KPIs financiers omis */ }
+  try { unmatched = await apiGet('bank_transactions', { state: 'unmatched' }); } catch (e) { /* pas le droit bank.view */ }
+
+  const totalActif = balance.filter(a => a.class === 'actif').reduce((s, a) => s + a.balance, 0);
+  const totalCharges = balance.filter(a => a.class === 'charge').reduce((s, a) => s + a.balance, 0);
+  const totalProduits = balance.filter(a => a.class === 'produit').reduce((s, a) => s - a.balance, 0);
+  document.getElementById('dash-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-ico" style="background:var(--bleu-bg)">${dashIc('wallet','var(--bleu)')}</div><div class="kpi-val">${chf(totalActif)}</div><div class="kpi-lbl">Trésorerie & actifs (solde débit)</div></div>
+    <div class="kpi"><div class="kpi-ico" style="background:var(--vert-bg)">${dashIc('up','var(--vert)')}</div><div class="kpi-val">${chf(totalProduits)}</div><div class="kpi-lbl">Produits comptabilisés</div></div>
+    <div class="kpi"><div class="kpi-ico" style="background:var(--orange-bg)">${dashIc('down','var(--orange)')}</div><div class="kpi-val">${chf(totalCharges)}</div><div class="kpi-lbl">Charges comptabilisées</div></div>
+    <div class="kpi"><div class="kpi-ico" style="background:${unmatched.length ? 'var(--rouge-bg)' : 'var(--vert-bg)'}">${dashIc('bank', unmatched.length ? 'var(--rouge)' : 'var(--vert)')}</div><div class="kpi-val">${unmatched.length}</div><div class="kpi-lbl">Transactions à rapprocher</div></div>
+  `;
+  const el = document.getElementById('dash-unmatched');
+  el.innerHTML = unmatched.length ? unmatched.slice(0, 8).map(t => `
+    <div style="display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--ligne-2)">
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.label || t.counterparty || 'Mouvement bancaire')}</div><div style="font-size:11.5px;color:var(--gris)">${t.booking_date}</div></div>
+      <div style="font-family:Sora;font-weight:700;font-size:13px;color:${t.amount>=0?'var(--vert)':'var(--rouge)'}">${t.amount>=0?'+':''}${chf(t.amount)}</div>
+    </div>`).join('') : `<div class="empty">Aucune transaction en attente de rapprochement.</div>`;
+}
+function dashIc(name, color) {
+  const paths = {
+    wallet: '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h3v-4z"/>',
+    up: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    down: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>',
+    bank: '<path d="M3 21h18M4 21V9l8-6 8 6v12M9 21V13h6v8"/>',
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px">${paths[name] || ''}</svg>`;
+}
+
+/* ===============================================================
+   PLAN COMPTABLE
+=============================================================== */
+async function loadAccounts() {
+  document.getElementById('btn-new-account').style.display = MFC.accountsEdit ? '' : 'none';
+  try {
+    S.accounts = await apiGet('accounts', { active: 'all' });
+    renderAccounts();
+  } catch (e) { toast(e.message, 'err'); }
+}
+function renderAccounts() {
+  const q = f('acc-search').toLowerCase();
+  const cls = f('acc-filter-class');
+  const rows = S.accounts.filter(a =>
+    (!cls || a.class === cls) &&
+    (!q || a.number.includes(q) || a.name.toLowerCase().includes(q) || (a.category||'').toLowerCase().includes(q))
+  );
+  const tbody = document.getElementById('accounts-rows');
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="6" class="empty">Aucun compte ne correspond.</td></tr>`; return; }
+  tbody.innerHTML = rows.map(a => `
+    <tr style="${a.active==0?'opacity:.5':''}">
+      <td style="font-family:Sora;font-weight:700">${esc(a.number)}</td>
+      <td>${esc(a.name)}</td>
+      <td style="color:var(--gris)">${esc(a.category||'—')}</td>
+      <td><span class="badge b-${a.class}">${classLabel(a.class)}</span></td>
+      <td>${a.allow_lettrage==1 ? '<span style="color:var(--vert)">✓</span>' : '<span style="color:var(--gris-2)">—</span>'}</td>
+      <td style="text-align:right">${MFC.accountsEdit ? `<button class="btn btn-ghost btn-sm" onclick="modalAccount(${a.id})">Modifier</button>` : ''}</td>
+    </tr>`).join('');
+}
+function modalAccount(id) {
+  const a = id ? S.accounts.find(x => x.id === id) : {};
+  openModal(id ? 'Modifier le compte' : 'Nouveau compte', `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div><label class="lbl">Numéro</label><input class="field" id="mAccNumber" value="${esc(a.number||'')}" ${id?'disabled':''} placeholder="1020"></div>
+      <div><label class="lbl">Classe</label><select class="field" id="mAccClass">${['actif','passif','produit','charge'].map(c=>`<option value="${c}" ${a.class===c?'selected':''}>${classLabel(c)}</option>`).join('')}</select></div>
+    </div>
+    <div style="margin-bottom:12px"><label class="lbl">Nom du compte</label><input class="field" id="mAccName" value="${esc(a.name||'')}" placeholder="Banque Raiffeisen CC"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div><label class="lbl">Catégorie (libre)</label><input class="field" id="mAccCategory" value="${esc(a.category||'')}" placeholder="Banque et espèces"></div>
+      <div><label class="lbl">Devise</label><input class="field" id="mAccCurrency" value="${esc(a.currency||'CHF')}"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="mAccLettrage" ${a.allow_lettrage==1?'checked':''}> Compte pouvant être rapproché (débiteurs, créanciers, comptes courants…)</label>
+    ${id ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px"><input type="checkbox" id="mAccActive" ${a.active==1?'checked':''}> Compte actif</label>` : ''}
+  `, async () => {
+    const payload = {
+      name: f('mAccName'), category: f('mAccCategory'), class: f('mAccClass'),
+      currency: f('mAccCurrency') || 'CHF', allow_lettrage: document.getElementById('mAccLettrage').checked ? 1 : 0,
+    };
+    if (!payload.name) throw new Error('Le nom du compte est requis');
+    if (id) {
+      payload.id = id;
+      payload.active = document.getElementById('mAccActive').checked ? 1 : 0;
+      await api('accounts', 'PUT', payload);
+      toast('Compte mis à jour');
+    } else {
+      payload.number = f('mAccNumber');
+      if (!payload.number) throw new Error('Le numéro de compte est requis');
+      await api('accounts', 'POST', payload);
+      toast('Compte créé');
+    }
+    closeModal();
+    await loadAccounts();
+  });
+}
+
+/* ===============================================================
+   ÉCRITURES (JOURNAL)
+=============================================================== */
+async function loadEntries() {
+  document.getElementById('btn-new-entry').style.display = MFC.journalEdit ? '' : 'none';
+  try {
+    const params = {};
+    if (f('ent-from')) params.from = f('ent-from');
+    if (f('ent-to')) params.to = f('ent-to');
+    if (f('ent-source')) params.source_module = f('ent-source');
+    S.entries = await apiGet('entries', params);
+    renderEntries();
+  } catch (e) { toast(e.message, 'err'); }
+}
+function renderEntries() {
+  const el = document.getElementById('entries-list');
+  if (!S.entries.length) { el.innerHTML = `<div class="panel"><div class="empty">Aucune écriture sur cette période.</div></div>`; return; }
+  el.innerHTML = S.entries.map(e => {
+    const total = e.lines.reduce((s, l) => s + Number(l.debit), 0);
+    return `<div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">${esc(e.label)}</div>
+          <div style="font-size:11.5px;color:var(--gris);margin-top:2px">${e.entry_date}${e.piece_ref ? ' · ' + esc(e.piece_ref) : ''} · ${e.source_module === 'manuel' ? 'Écriture manuelle' : esc(e.source_module)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-family:Sora;font-weight:700">${chf(total)}</div>
+          ${(MFC.journalEdit && e.source_module === 'manuel') ? `<button class="btn btn-ghost btn-sm" onclick="deleteEntry(${e.id})">Supprimer</button>` : ''}
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Compte</th><th>Libellé</th><th class="num">Débit</th><th class="num">Crédit</th></tr></thead>
+        <tbody>${e.lines.map(l => `<tr><td>${esc(l.account_number)} — ${esc(l.account_name)}</td><td style="color:var(--gris)">${esc(l.label||'')}</td><td class="num">${Number(l.debit)>0?fmt(l.debit):''}</td><td class="num">${Number(l.credit)>0?fmt(l.credit):''}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+  }).join('');
+}
+async function deleteEntry(id) {
+  if (!confirm('Supprimer cette écriture ?')) return;
+  try {
+    const res = await fetch(`api.php?action=entry_delete&id=${id}`, { method: 'DELETE', credentials: 'same-origin' });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Erreur');
+    toast('Écriture supprimée');
+    await loadEntries();
+  } catch (e) { toast(e.message, 'err'); }
+}
+function modalEntry() {
+  const accOptions = S.accounts.filter(a => a.active == 1).map(a => `<option value="${a.id}">${esc(a.number)} — ${esc(a.name)}</option>`).join('');
+  openModal('Nouvelle écriture', `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div><label class="lbl">Date</label><input type="date" class="field" id="mEntDate" value="${today()}"></div>
+      <div><label class="lbl">Référence pièce (optionnel)</label><input class="field" id="mEntRef" placeholder="Facture n°…"></div>
+    </div>
+    <div style="margin-bottom:12px"><label class="lbl">Libellé</label><input class="field" id="mEntLabel" placeholder="Ex : Paiement facture fournisseur X"></div>
+    <label class="lbl">Lignes</label>
+    <div class="lines-editor" id="mEntLines">
+      ${entryLineRow(accOptions)}${entryLineRow(accOptions)}
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" onclick="addEntryLine()">+ Ajouter une ligne</button>
+    <div class="line-totals" id="mEntTotals" style="margin-top:10px">Débit 0.00 · Crédit 0.00</div>
+  `, async () => {
+    const date = f('mEntDate'), label = f('mEntLabel');
+    if (!date) throw new Error('La date est requise');
+    if (!label) throw new Error('Le libellé est requis');
+    const lines = [...document.querySelectorAll('#mEntLines .line-row')].map(row => ({
+      account_id: parseInt(row.querySelector('.line-account').value) || 0,
+      debit: parseFloat(row.querySelector('.line-debit').value) || 0,
+      credit: parseFloat(row.querySelector('.line-credit').value) || 0,
+      label: row.querySelector('.line-label').value || '',
+    })).filter(l => l.account_id && (l.debit > 0 || l.credit > 0));
+    if (lines.length < 2) throw new Error('Au moins deux lignes avec un montant sont requises');
+    await api('entries', 'POST', { entry_date: date, piece_ref: f('mEntRef'), label, lines });
+    toast('Écriture créée');
+    closeModal();
+    await loadEntries();
+  }, 'Créer l\'écriture');
+  document.getElementById('mEntLines').addEventListener('input', updateEntryTotals);
+  document.getElementById('mEntLines').addEventListener('change', updateEntryTotals);
+}
+function entryLineRow(accOptions) {
+  return `<div class="line-row">
+    <select class="field line-account"><option value="">— Compte —</option>${accOptions}</select>
+    <input type="number" step="0.01" min="0" class="field line-debit" placeholder="Débit">
+    <input type="number" step="0.01" min="0" class="field line-credit" placeholder="Crédit">
+    <button class="btn btn-ghost btn-sm" type="button" onclick="this.closest('.line-row').remove(); updateEntryTotals();">✕</button>
+  </div>`;
+}
+function addEntryLine() {
+  const accOptions = S.accounts.filter(a => a.active == 1).map(a => `<option value="${a.id}">${esc(a.number)} — ${esc(a.name)}</option>`).join('');
+  document.getElementById('mEntLines').insertAdjacentHTML('beforeend', entryLineRow(accOptions));
+}
+function updateEntryTotals() {
+  let debit = 0, credit = 0;
+  document.querySelectorAll('#mEntLines .line-row').forEach(row => {
+    debit += parseFloat(row.querySelector('.line-debit').value) || 0;
+    credit += parseFloat(row.querySelector('.line-credit').value) || 0;
+  });
+  const el = document.getElementById('mEntTotals');
+  const balanced = Math.abs(debit - credit) < 0.005;
+  el.className = 'line-totals ' + (balanced ? 'balanced' : 'unbalanced');
+  el.textContent = `Débit ${fmt(debit)} · Crédit ${fmt(credit)}` + (balanced ? ' ✓ équilibrée' : ' — déséquilibrée');
+}
+
+/* ===============================================================
+   BANQUES
+=============================================================== */
+async function loadBankView() {
+  document.getElementById('btn-new-bank-account').style.display = MFC.bankManage ? '' : 'none';
+  try {
+    S.bankAccounts = await apiGet('bank_accounts');
+    renderBankAccounts();
+    const sel = document.getElementById('import-bank-account');
+    sel.innerHTML = S.bankAccounts.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('') || '<option value="">Aucun compte — créez-en un ci-dessus</option>';
+  } catch (e) { toast(e.message, 'err'); }
+}
+function renderBankAccounts() {
+  const tbody = document.getElementById('bank-accounts-rows');
+  if (!S.bankAccounts.length) { tbody.innerHTML = `<tr><td colspan="5" class="empty">Aucun compte bancaire. Créez-en un pour commencer.</td></tr>`; return; }
+  tbody.innerHTML = S.bankAccounts.map(b => `
+    <tr>
+      <td style="font-weight:600">${esc(b.name)}</td>
+      <td>${({bank:'Compte bancaire',card:'Carte',cash:'Espèces'})[b.type] || b.type}</td>
+      <td style="color:var(--gris);font-size:12px">${esc(b.iban||'—')}</td>
+      <td>${b.account_number ? esc(b.account_number) : '<span style="color:var(--gris-2)">non relié</span>'}</td>
+      <td style="text-align:right">${MFC.bankManage ? `<button class="btn btn-ghost btn-sm" onclick="modalBankAccount(${b.id})">Modifier</button>` : ''}</td>
+    </tr>`).join('');
+}
+function modalBankAccount(id) {
+  const b = id ? S.bankAccounts.find(x => x.id === id) : {};
+  // Comptes de trésorerie (classe actif) en priorité : c'est là que vivent les comptes bancaires du plan comptable.
+  const bankLike = S.accounts.filter(a => a.active == 1 && a.class === 'actif');
+  const accOptions = (bankLike.length ? bankLike : S.accounts.filter(a => a.active == 1))
+    .map(a => `<option value="${a.id}" ${b.account_id==a.id?'selected':''}>${esc(a.number)} — ${esc(a.name)}</option>`).join('');
+  openModal(id ? 'Modifier le compte bancaire' : 'Nouveau compte bancaire', `
+    <div style="margin-bottom:12px"><label class="lbl">Nom</label><input class="field" id="mBaName" value="${esc(b.name||'')}" placeholder="Banque Raiffeisen CC"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div><label class="lbl">Type</label><select class="field" id="mBaType">
+        <option value="bank" ${b.type==='bank'?'selected':''}>Compte bancaire</option>
+        <option value="card" ${b.type==='card'?'selected':''}>Carte</option>
+        <option value="cash" ${b.type==='cash'?'selected':''}>Espèces</option>
+      </select></div>
+      <div><label class="lbl">Devise</label><input class="field" id="mBaCurrency" value="${esc(b.currency||'CHF')}"></div>
+    </div>
+    <div style="margin-bottom:12px"><label class="lbl">IBAN (optionnel)</label><input class="field" id="mBaIban" value="${esc(b.iban||'')}" placeholder="CH36 8080 8001 8622 9324 1"></div>
+    <div><label class="lbl">Compte du plan comptable correspondant</label><select class="field" id="mBaAccount"><option value="">— Aucun —</option>${accOptions}</select></div>
+  `, async () => {
+    const payload = { name: f('mBaName'), type: f('mBaType'), currency: f('mBaCurrency') || 'CHF', iban: f('mBaIban'), account_id: parseInt(f('mBaAccount')) || 0 };
+    if (!payload.name) throw new Error('Le nom est requis');
+    if (id) { payload.id = id; payload.active = 1; await api('bank_accounts', 'PUT', payload); toast('Compte mis à jour'); }
+    else { await api('bank_accounts', 'POST', payload); toast('Compte créé'); }
+    closeModal();
+    await loadBankView();
+  });
+}
+
+let IMPORT_PARSED = null;
+async function previewImport() {
+  const bankAccountId = f('import-bank-account');
+  const fileInput = document.getElementById('import-file');
+  if (!bankAccountId) { toast('Choisis un compte bancaire cible', 'err'); return; }
+  if (!fileInput.files.length) { toast('Choisis un fichier', 'err'); return; }
+  const fd = new FormData();
+  fd.append('bank_account_id', bankAccountId);
+  fd.append('file', fileInput.files[0]);
+  try {
+    const res = await fetch('api.php?action=bank_import_preview', { method: 'POST', credentials: 'same-origin', body: fd });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Erreur');
+    IMPORT_PARSED = json;
+    document.getElementById('import-preview').innerHTML = `
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head">
+          <div class="panel-title">${json.total} mouvement${json.total>1?'s':''} détecté${json.total>1?'s':''} — ${json.new} nouveau${json.new>1?'x':''}, ${json.already_known} déjà importé${json.already_known>1?'s':''}</div>
+          <button class="btn btn-primary btn-sm" onclick="commitImport()" ${json.new===0?'disabled':''}>Importer les ${json.new} nouveaux</button>
+        </div>
+        <div class="table-wrap" style="max-height:420px;overflow-y:auto">
+          <table><thead><tr><th>Date</th><th>Libellé</th><th>Tiers</th><th class="num">Montant</th><th></th></tr></thead>
+          <tbody>${json.entries.map(e => `
+            <tr style="${e.already_imported?'opacity:.45':''}">
+              <td>${e.booking_date}</td><td>${esc(e.label)}</td><td style="color:var(--gris)">${esc(e.counterparty||'—')}</td>
+              <td class="num" style="color:${e.amount>=0?'var(--vert)':'var(--rouge)'}">${e.amount>=0?'+':''}${fmt(e.amount)}</td>
+              <td>${e.already_imported ? '<span class="badge b-ignored">déjà importé</span>' : '<span class="badge b-matched">nouveau</span>'}</td>
+            </tr>`).join('')}</tbody></table>
+        </div>
+      </div>`;
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function commitImport() {
+  const bankAccountId = f('import-bank-account');
+  const fileInput = document.getElementById('import-file');
+  const fd = new FormData();
+  fd.append('bank_account_id', bankAccountId);
+  fd.append('file', fileInput.files[0]);
+  try {
+    const res = await fetch('api.php?action=bank_import_commit', { method: 'POST', credentials: 'same-origin', body: fd });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Erreur');
+    toast(`${json.imported} transaction(s) importée(s)` + (json.skipped ? `, ${json.skipped} déjà connue(s) ignorée(s)` : ''));
+    document.getElementById('import-preview').innerHTML = '';
+    fileInput.value = '';
+    IMPORT_PARSED = null;
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function loadBatches() {
+  try {
+    const batches = await apiGet('bank_import_batches');
+    document.getElementById('batches-rows').innerHTML = batches.length ? batches.map(b => `
+      <tr>
+        <td>${(b.created_at||'').slice(0,16).replace('T',' ')}</td>
+        <td>${esc(b.bank_account_name)}</td>
+        <td style="color:var(--gris);font-size:12px">${esc(b.filename)}</td>
+        <td class="num">${b.imported_count}</td>
+        <td>${esc(b.imported_by)}</td>
+        <td style="text-align:right">${b.rolled_back==1 ? '<span class="badge b-ignored">annulé</span>' : (MFC.bankImport ? `<button class="btn btn-ghost btn-sm" onclick="rollbackBatch(${b.id})">Annuler ce lot</button>` : '')}</td>
+      </tr>`).join('') : `<tr><td colspan="6" class="empty">Aucun import.</td></tr>`;
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function rollbackBatch(id) {
+  if (!confirm('Annuler ce lot d\'import ? Les transactions non rapprochées seront retirées.')) return;
+  try {
+    const res = await fetch(`api.php?action=bank_import_rollback&id=${id}`, { method: 'DELETE', credentials: 'same-origin' });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Erreur');
+    toast('Lot annulé');
+    await loadBatches();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ===============================================================
+   RAPPROCHEMENT
+=============================================================== */
+async function loadReconcileList() {
+  const sel = document.getElementById('rec-bank-account');
+  if (!sel.options.length) {
+    if (!S.bankAccounts.length) S.bankAccounts = await apiGet('bank_accounts');
+    sel.innerHTML = '<option value="">Tous les comptes</option>' + S.bankAccounts.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+  }
+  try {
+    const params = {};
+    if (f('rec-bank-account')) params.bank_account_id = f('rec-bank-account');
+    if (f('rec-state')) params.state = f('rec-state');
+    const txns = await apiGet('bank_transactions', params);
+    const el = document.getElementById('reconcile-list');
+    if (!txns.length) { el.innerHTML = `<div class="panel"><div class="empty">Aucune transaction.</div></div>`; return; }
+    el.innerHTML = `<div class="panel"><div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Libellé</th><th>Tiers</th><th class="num">Montant</th><th>Statut</th><th></th></tr></thead>
+      <tbody>${txns.map(t => `
+        <tr>
+          <td>${t.booking_date}</td>
+          <td>${esc(t.label)}</td>
+          <td style="color:var(--gris)">${esc(t.counterparty||'—')}</td>
+          <td class="num" style="color:${t.amount>=0?'var(--vert)':'var(--rouge)'}">${t.amount>=0?'+':''}${fmt(t.amount)}</td>
+          <td><span class="badge b-${t.reconciled_state}">${({unmatched:'à rapprocher',matched:'rapprochée',ignored:'ignorée'})[t.reconciled_state]}</span></td>
+          <td style="text-align:right">${MFC.bankReconcile && t.reconciled_state==='unmatched' ? `<button class="btn btn-primary btn-sm" onclick="openReconcileModal(${t.id})">Rapprocher</button>` : ''}</td>
+        </tr>`).join('')}</tbody>
+    </table></div></div>`;
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function openReconcileModal(txnId) {
+  let suggestions = [];
+  try { suggestions = await apiGet('reconcile_suggestions', { bank_transaction_id: txnId }); } catch (e) {}
+  openModal('Rapprocher la transaction', `
+    ${suggestions.length ? `
+      <label class="lbl">Suggestions (même montant, ± 45 jours)</label>
+      <div class="lines-editor">
+        ${suggestions.map(s => `<div class="line-row" style="grid-template-columns:1fr auto">
+          <div><div style="font-weight:600;font-size:13px">${esc(s.label)}</div><div style="font-size:11.5px;color:var(--gris)">${s.entry_date}${s.piece_ref?' · '+esc(s.piece_ref):''}</div></div>
+          <button class="btn btn-primary btn-sm" type="button" onclick="reconcileWith(${txnId}, ${s.id})">Choisir</button>
+        </div>`).join('')}
+      </div>
+      <div style="text-align:center;margin:12px 0;color:var(--gris);font-size:12px">— ou —</div>
+    ` : ''}
+    <label class="lbl">Rechercher une écriture par numéro (ID)</label>
+    <div style="display:flex;gap:8px">
+      <input type="number" class="field" id="mRecEntryId" placeholder="ID de l'écriture">
+    </div>
+  `, async () => {
+    const entryId = parseInt(f('mRecEntryId'));
+    if (!entryId) throw new Error('Choisis une suggestion ou saisis un ID d\'écriture');
+    await api('reconcile', 'POST', { bank_transaction_id: txnId, journal_entry_id: entryId });
+    toast('Transaction rapprochée');
+    closeModal();
+    await loadReconcileList();
+  }, 'Rapprocher');
+}
+async function reconcileWith(txnId, entryId) {
+  try {
+    await api('reconcile', 'POST', { bank_transaction_id: txnId, journal_entry_id: entryId });
+    toast('Transaction rapprochée');
+    closeModal();
+    await loadReconcileList();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ===============================================================
+   RAPPORTS
+=============================================================== */
+async function loadReports() {
+  try {
+    const params = {};
+    if (f('rep-from')) params.from = f('rep-from');
+    if (f('rep-to')) params.to = f('rep-to');
+    const [balance, journal] = await Promise.all([apiGet('report_balance', params), apiGet('report_journal', params)]);
+    const balanceRows = balance.filter(a => a.total_debit > 0 || a.total_credit > 0);
+    document.getElementById('balance-rows').innerHTML = balanceRows.length ? balanceRows.map(a => `
+      <tr><td style="font-family:Sora;font-weight:700">${esc(a.number)}</td><td>${esc(a.name)}</td><td><span class="badge b-${a.class}">${classLabel(a.class)}</span></td>
+      <td class="num">${fmt(a.total_debit)}</td><td class="num">${fmt(a.total_credit)}</td><td class="num" style="font-weight:700">${fmt(a.balance)}</td></tr>`).join('')
+      : `<tr><td colspan="6" class="empty">Aucun mouvement sur cette période.</td></tr>`;
+    document.getElementById('journal-rows').innerHTML = journal.length ? journal.map(l => `
+      <tr><td>${l.entry_date}</td><td style="color:var(--gris)">${esc(l.piece_ref||'—')}</td><td>${esc(l.entry_label)}</td>
+      <td>${esc(l.account_number)} — ${esc(l.account_name)}</td><td class="num">${Number(l.debit)>0?fmt(l.debit):''}</td><td class="num">${Number(l.credit)>0?fmt(l.credit):''}</td></tr>`).join('')
+      : `<tr><td colspan="6" class="empty">Aucune écriture sur cette période.</td></tr>`;
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ===============================================================
+   PÉRIODES
+=============================================================== */
+async function loadPeriods() {
+  document.getElementById('btn-new-period').style.display = MFC.periodsClose ? '' : 'none';
+  try {
+    S.periods = await apiGet('periods');
+    document.getElementById('periods-rows').innerHTML = S.periods.length ? S.periods.map(p => `
+      <tr><td style="font-weight:600">${esc(p.label)}</td><td>${p.start_date}</td><td>${p.end_date}</td>
+      <td>${p.closed==1 ? '<span class="badge b-ignored">clôturée</span>' : '<span class="badge b-matched">ouverte</span>'}</td>
+      <td style="text-align:right">${MFC.periodsClose ? `<button class="btn btn-ghost btn-sm" onclick="togglePeriod(${p.id}, ${p.closed==1?0:1})">${p.closed==1?'Rouvrir':'Clôturer'}</button>` : ''}</td></tr>`).join('')
+      : `<tr><td colspan="5" class="empty">Aucune période définie. Sans période, les écritures restent modifiables sans limite de date.</td></tr>`;
+  } catch (e) { toast(e.message, 'err'); }
+}
+function modalPeriod() {
+  openModal('Nouvelle période comptable', `
+    <div style="margin-bottom:12px"><label class="lbl">Libellé</label><input class="field" id="mPerLabel" placeholder="Exercice 2026-2027"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><label class="lbl">Début</label><input type="date" class="field" id="mPerStart"></div>
+      <div><label class="lbl">Fin</label><input type="date" class="field" id="mPerEnd"></div>
+    </div>
+  `, async () => {
+    const label = f('mPerLabel'), start = f('mPerStart'), end = f('mPerEnd');
+    if (!label || !start || !end) throw new Error('Tous les champs sont requis');
+    await api('periods', 'POST', { label, start_date: start, end_date: end });
+    toast('Période créée');
+    closeModal();
+    await loadPeriods();
+  }, 'Créer');
+}
+async function togglePeriod(id, closed) {
+  if (closed && !confirm('Clôturer cette période ? Les écritures qui y sont datées ne pourront plus être ni ajoutées ni supprimées.')) return;
+  try {
+    await api('periods', 'PUT', { id, closed });
+    toast(closed ? 'Période clôturée' : 'Période rouverte');
+    await loadPeriods();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ===============================================================
+   INIT
+=============================================================== */
+(async function init() {
+  document.getElementById('me-foot').textContent = MFC.name || '';
+  try {
+    S.accounts = await apiGet('accounts', { active: 'all' });
+  } catch (e) { /* chargé à nouveau lors de la navigation si besoin */ }
+  goTo('dashboard');
+})();
+</script>
+</body>
+</html>

@@ -68,5 +68,15 @@
     "color": "#3B6FE0",
     "color_bg": "#E6EDFB",
     "active": true
+  },
+  {
+    "slug": "compta",
+    "name": "Comptabilité",
+    "url": "/compta",
+    "description": "Plan comptable, écritures, comptes bancaires et rapprochement",
+    "icon": "wallet",
+    "color": "#1F9D5B",
+    "color_bg": "#E4F4EA",
+    "active": true
   }
 ]

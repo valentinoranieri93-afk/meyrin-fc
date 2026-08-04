@@ -214,6 +214,7 @@ Contenu principal :  padding 22–26px, max-width selon app
 | `erp.meyrinfc.ch/commandes/shop` | Tailwind CDN | index.php (boutique publique, sans session) |
 | `erp.meyrinfc.ch` | CSS custom (variables) | index.php |
 | `erp.meyrinfc.ch/rh` | CSS custom (variables) | index.html (SPA, sert via index.php) |
+| `erp.meyrinfc.ch/compta` | CSS custom (variables) | index.html (SPA, sert via index.php) |
 
 > Pour les apps en **CSS custom**, utiliser les variables CSS ci-dessus.
 > Pour **Sponsors** (Tailwind), utiliser la config Tailwind définie dans ce fichier + classes Tailwind avec valeurs hardcodées (`text-[#15140F]`, `bg-[#15140F]`, etc.) pour les cas non couverts.
