@@ -955,6 +955,7 @@ const CMD_PERMS = [
   'request_cart'             => 'requests.create',
   'request_fulfill_stock'    => 'requests.validate',
   'request_to_order'         => 'requests.validate',
+  'requests_consolidate'     => 'requests.validate',
 
   /* --- commandes fournisseurs -------------------------------------------- */
   'orders'                   => ['GET' => 'orders.view', 'write' => 'orders.edit'],
@@ -2077,7 +2078,7 @@ switch ($action) {
       // available_boutique : stock boutique disponible pour la variante, tous lieux confondus (utilisé côté staff
       // pour choisir entre le bouton Ajouter (depuis le stock) et À commander).
       $sql = "SELECT r.*, a.name AS article_name, v.label AS variant_label, v.barcode,
-                     a.sale_price_ttc, a.purchase_price,
+                     a.sale_price_ttc, a.purchase_price, a.supplier_id, sup.name AS supplier_name,
                      (SELECT COALESCE(SUM(quantity),0) FROM stock_levels WHERE variant_id = r.variant_id AND usage = 'boutique') AS available_boutique,
                      (SELECT GROUP_CONCAT(value, ' / ') FROM (
                         SELECT value FROM variant_attributes WHERE variant_id = r.variant_id ORDER BY is_primary DESC, attribute_id
@@ -2091,6 +2092,7 @@ switch ($action) {
               FROM requests r
               JOIN article_variants v ON v.id = r.variant_id
               JOIN articles a ON a.id = v.article_id
+              LEFT JOIN suppliers sup ON sup.id = a.supplier_id
               JOIN users req ON req.id = r.requester_id
               LEFT JOIN users rev ON rev.id = r.reviewed_by
               LEFT JOIN request_carts rc ON rc.id = r.cart_id";
@@ -2419,6 +2421,90 @@ switch ($action) {
     out(['ok' => true, 'order_id' => $orderId]);
   }
 
+  /* Consolidation en lot, choisie explicitement par le staff (voir écran dédié côté demandes) : plusieurs
+     demandes en attente, potentiellement soumises par des personnes différentes sur plusieurs jours, deviennent
+     un nouveau brouillon de commande PAR FOURNISSEUR — jamais fusionnées dans un brouillon préexistant (contrairement
+     à request_to_order), pour que le staff voie exactement ce qui vient d'être créé plutôt que de découvrir un
+     mélange avec un brouillon plus ancien sans rapport. Les lignes pour une même variante sont additionnées entre
+     elles à l'intérieur du lot. Tolérante aux id devenus invalides entre l'affichage de la liste et le clic
+     (demande déjà traitée entretemps par quelqu'un d'autre, article sans fournisseur) : ces lignes sont ignorées
+     et rapportées, plutôt que de faire échouer tout le lot pour une seule ligne problématique. */
+  case 'requests_consolidate': {
+    $u = require_auth();
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $ids = array_values(array_unique(array_map('intval', is_array($b['request_ids'] ?? null) ? $b['request_ids'] : [])));
+    if (!count($ids)) fail('Aucune demande sélectionnée');
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $rows = db()->prepare("SELECT r.id, r.variant_id, r.quantity, r.status,
+                                   a.supplier_id, a.purchase_price, a.department_id
+                            FROM requests r
+                            JOIN article_variants v ON v.id = r.variant_id
+                            JOIN articles a ON a.id = v.article_id
+                            WHERE r.id IN ($placeholders)");
+    $rows->execute($ids);
+    $rows = $rows->fetchAll();
+    $found = [];
+    foreach ($rows as $row) $found[(int)$row['id']] = $row;
+
+    $skipped = [];
+    $bySupplier = [];
+    foreach ($ids as $id) {
+      $row = $found[$id] ?? null;
+      if (!$row) { $skipped[] = ['id' => $id, 'reason' => 'Demande introuvable']; continue; }
+      // 'approved' inclus : demandes validées via l'ancien flux (avant les boutons Ajouter/À commander), pas
+      // encore rattachées à une commande. Seul 'ordered'/'received'/'rejected' rend la demande inéligible.
+      if (!in_array($row['status'], ['pending', 'approved'], true)) { $skipped[] = ['id' => $id, 'reason' => 'N\'est plus en attente ni validée']; continue; }
+      if (!$row['supplier_id']) { $skipped[] = ['id' => $id, 'reason' => 'Article sans fournisseur préféré']; continue; }
+      $bySupplier[(int)$row['supplier_id']][] = $row;
+    }
+    if (!count($bySupplier)) fail('Aucune des demandes sélectionnées ne peut être consolidée (' . implode(', ', array_column($skipped, 'reason')) . ')');
+
+    $vatRate = (float) setting('vat_rate', '8.1');
+    $orderDate = date('Y-m-d');
+    $created = [];
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+      foreach ($bySupplier as $supplierId => $items) {
+        $pdo->prepare('INSERT INTO purchase_orders (supplier_id, order_date, created_by) VALUES (?,?,?)')
+            ->execute([$supplierId, $orderDate, $u['id']]);
+        $orderId = (int) $pdo->lastInsertId();
+        assign_order_season($pdo, $orderId, '', $orderDate);
+
+        $lineByVariant = [];   // variant_id => ['qty' => .., 'price' => ..]
+        $allocByDept = [];     // department_id => amount TTC
+        $reqIds = [];
+        foreach ($items as $row) {
+          $vid = (int) $row['variant_id']; $qty = (float) $row['quantity']; $price = (float) $row['purchase_price'];
+          if (!isset($lineByVariant[$vid])) $lineByVariant[$vid] = ['qty' => 0.0, 'price' => $price];
+          $lineByVariant[$vid]['qty'] += $qty;
+          if ($row['department_id']) {
+            $amountTtc = round($qty * $price * (1 + $vatRate / 100), 2);
+            $allocByDept[(int)$row['department_id']] = ($allocByDept[(int)$row['department_id']] ?? 0) + $amountTtc;
+          }
+          $reqIds[] = (int) $row['id'];
+        }
+        $insLine = $pdo->prepare('INSERT INTO purchase_order_lines (order_id, variant_id, quantity_ordered, unit_price) VALUES (?,?,?,?)');
+        foreach ($lineByVariant as $vid => $l) $insLine->execute([$orderId, $vid, $l['qty'], $l['price']]);
+        $insAlloc = $pdo->prepare('INSERT INTO purchase_order_budget_allocations (order_id, department_id, amount) VALUES (?,?,?)');
+        foreach ($allocByDept as $deptId => $amount) $insAlloc->execute([$orderId, $deptId, round($amount, 2)]);
+        $linkReq = $pdo->prepare('INSERT OR IGNORE INTO purchase_order_requests (order_id, request_id) VALUES (?,?)');
+        $updReq = $pdo->prepare("UPDATE requests SET status='ordered', reviewed_by=?, reviewed_at=datetime('now') WHERE id=?");
+        foreach ($reqIds as $rid) { $linkReq->execute([$orderId, $rid]); $updReq->execute([$u['id'], $rid]); }
+
+        $supplierName = $pdo->query("SELECT name FROM suppliers WHERE id=$supplierId")->fetchColumn();
+        $created[] = ['order_id' => $orderId, 'supplier_id' => $supplierId, 'supplier_name' => $supplierName,
+                       'lines' => count($lineByVariant), 'requests' => count($reqIds)];
+      }
+      $pdo->commit();
+    } catch (Throwable $e) {
+      if ($pdo->inTransaction()) $pdo->rollBack();
+      fail('Consolidation impossible : ' . $e->getMessage(), 500);
+    }
+    log_activity($u['id'], 'Demandes consolidées', count($ids) . ' demande(s) → ' . count($created) . ' commande(s)');
+    out(['ok' => true, 'created' => $created, 'skipped' => $skipped]);
+  }
+
   /* ============ COMMANDES FOURNISSEURS ============ */
 
   case 'orders': {
@@ -2651,7 +2737,15 @@ switch ($action) {
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
-      db()->prepare('DELETE FROM purchase_orders WHERE id = ?')->execute([i($_GET, 'id')]);
+      $id = i($_GET, 'id');
+      $current = db()->query("SELECT status FROM purchase_orders WHERE id=$id")->fetch();
+      if (!$current) fail('Commande introuvable', 404);
+      // Seule une commande annulée peut être supprimée : les autres statuts portent un historique réel
+      // (lignes, répartition budgétaire, réceptions) qu'une suppression effacerait silencieusement au lieu
+      // de le tracer. Pour se débarrasser d'une commande active, il faut d'abord l'annuler.
+      if ($current['status'] !== 'cancelled') fail('Seule une commande annulée peut être supprimée');
+      db()->prepare('DELETE FROM purchase_orders WHERE id = ?')->execute([$id]);
+      log_activity($u['id'], 'Commande supprimée', "ID $id");
       out(['ok' => true]);
     }
     fail('Méthode non supportée', 405);
@@ -2668,20 +2762,36 @@ switch ($action) {
     $pdo = db();
     $pdo->beginTransaction();
     try {
-      $orderDate = date('Y-m-d');
-      $pdo->prepare('INSERT INTO purchase_orders (supplier_id, order_date, created_by) VALUES (?,?,?)')->execute([$v['supplier_id'], $orderDate, $u['id']]);
-      $orderId = (int) $pdo->lastInsertId();
-      assign_order_season($pdo, $orderId, '', $orderDate);
-      $pdo->prepare('INSERT INTO purchase_order_lines (order_id, variant_id, quantity_ordered, unit_price) VALUES (?,?,?,?)')
-          ->execute([$orderId, $v['id'], $r['quantity'], $v['purchase_price']]);
+      // Même logique que request_to_order : on rattache au brouillon le plus récent de ce fournisseur au lieu
+      // d'en créer un nouveau à chaque clic. Avant ce correctif, chaque demande validée produisait sa propre
+      // commande même quand un brouillon existait déjà pour le même fournisseur (bug remonté en prod : 2 clics
+      // sur 2 demandes ont créé 2 commandes distinctes chez Onis Swiss Sagl au lieu d'une seule).
+      $draft = $pdo->query("SELECT id FROM purchase_orders WHERE status='draft' AND supplier_id={$v['supplier_id']} ORDER BY id DESC LIMIT 1")->fetch();
+      if ($draft) {
+        $orderId = (int) $draft['id'];
+      } else {
+        $orderDate = date('Y-m-d');
+        $pdo->prepare('INSERT INTO purchase_orders (supplier_id, order_date, created_by) VALUES (?,?,?)')->execute([$v['supplier_id'], $orderDate, $u['id']]);
+        $orderId = (int) $pdo->lastInsertId();
+        assign_order_season($pdo, $orderId, '', $orderDate);
+      }
+      $existingLine = $pdo->query("SELECT id FROM purchase_order_lines WHERE order_id=$orderId AND variant_id={$v['id']}")->fetch();
+      if ($existingLine) {
+        $pdo->prepare('UPDATE purchase_order_lines SET quantity_ordered = quantity_ordered + ? WHERE id = ?')
+            ->execute([$r['quantity'], $existingLine['id']]);
+      } else {
+        $pdo->prepare('INSERT INTO purchase_order_lines (order_id, variant_id, quantity_ordered, unit_price) VALUES (?,?,?,?)')
+            ->execute([$orderId, $v['id'], $r['quantity'], $v['purchase_price']]);
+      }
       // Pré-répartition budgétaire automatique (best-effort, TVA incluse), voir commentaire équivalent dans request_to_order.
       if ($v['department_id']) {
         $vatRate = (float) setting('vat_rate', '8.1');
         $amountTtc = round($r['quantity'] * $v['purchase_price'] * (1 + $vatRate / 100), 2);
-        $pdo->prepare('INSERT INTO purchase_order_budget_allocations (order_id, department_id, amount) VALUES (?,?,?)')
+        $pdo->prepare('INSERT INTO purchase_order_budget_allocations (order_id, department_id, amount) VALUES (?,?,?)
+                       ON CONFLICT(order_id, department_id) DO UPDATE SET amount = amount + excluded.amount')
             ->execute([$orderId, $v['department_id'], $amountTtc]);
       }
-      $pdo->prepare('INSERT INTO purchase_order_requests (order_id, request_id) VALUES (?,?)')->execute([$orderId, $reqId]);
+      $pdo->prepare('INSERT OR IGNORE INTO purchase_order_requests (order_id, request_id) VALUES (?,?)')->execute([$orderId, $reqId]);
       $pdo->prepare("UPDATE requests SET status='ordered' WHERE id=?")->execute([$reqId]);
       $pdo->commit();
     } catch (Exception $e) {

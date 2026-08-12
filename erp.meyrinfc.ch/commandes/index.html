@@ -257,6 +257,7 @@ tailwind.config = {
             <h1 class="font-display text-[22px] font-bold tracking-tight">Demandes</h1>
             <p class="text-mute text-[13px] mt-0.5" id="requestsSub"></p>
           </div>
+          <button onclick="openConsolidateModal()" class="staff-only h-9 px-3.5 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold hover:bg-brand-700 shadow-card transition">Consolider les demandes en attente</button>
         </div>
 
         <!-- Demandeur : expérience "boutique" + panier -->
@@ -957,10 +958,11 @@ function budgetBar(b) {
 }
 
 /* ================================================================ MODALE GÉNÉRIQUE */
-function openModal(title, bodyHtml, onSubmit) {
+function openModal(title, bodyHtml, onSubmit, submitLabel = 'Enregistrer') {
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = bodyHtml;
   const btn = document.getElementById('modalSubmit');
+  btn.textContent = submitLabel;
   btn.onclick = async () => { try { await onSubmit(); } catch (e) { toast(e.message, true); } };
   document.getElementById('modal').classList.remove('hidden');
 }
@@ -1265,6 +1267,76 @@ async function requestToOrder(id) {
 async function quickOrder(reqId) {
   try { await api('orders_quick_from_request', 'POST', { request_id: reqId }); toast('Commande créée'); loadRequests(); }
   catch (e) { toast(e.message, true); }
+}
+
+/* Consolidation en lot : plusieurs demandes en attente (souvent soumises par des personnes différentes,
+   étalées sur plusieurs jours — ex. 25 coachs) deviennent un nouveau brouillon de commande par fournisseur en
+   un seul geste, au lieu d'une commande par demande. Sélection explicite plutôt que fusion automatique
+   silencieuse (voir requestToOrder) : le staff voit avant coup ce qui va être créé. */
+function consolidateCandidates() {
+  // 'approved' inclus : demandes validées via l'ancien flux (bouton "Commander" de compat), qui n'ont pas
+  // encore de commande derrière elles — exactement le cas qui doit pouvoir être consolidé.
+  return (S.requests || []).filter(r => r.status === 'pending' || r.status === 'approved');
+}
+function openConsolidateModal() {
+  const rows = consolidateCandidates();
+  if (!rows.length) return toast('Aucune demande en attente à consolider', true);
+  const bySupplier = new Map();
+  rows.forEach(r => {
+    const key = r.supplier_id || 0;
+    if (!bySupplier.has(key)) bySupplier.set(key, { name: r.supplier_name || 'Sans fournisseur préféré', rows: [] });
+    bySupplier.get(key).rows.push(r);
+  });
+  const groupsHtml = [...bySupplier.entries()].map(([supplierId, g]) => {
+    const disabled = !supplierId;
+    return `
+    <div class="border border-line rounded-xl mb-3 overflow-hidden">
+      <div class="flex items-center gap-2 px-3 py-2 bg-canvas/60 border-b border-line">
+        <input type="checkbox" ${disabled ? 'disabled' : ''} onchange="toggleConsolidateGroup(${supplierId}, this.checked)" class="cons-group-cb" data-supplier="${supplierId}">
+        <span class="font-semibold text-[12.5px]">${esc(g.name)}</span>
+        <span class="text-[11px] text-mute">(${g.rows.length} ligne${g.rows.length > 1 ? 's' : ''})</span>
+        ${disabled ? '<span class="text-[11px] text-rose2-600 ml-auto">Définis un fournisseur préféré sur l\'article pour pouvoir la consolider</span>' : ''}
+      </div>
+      <div class="divide-y divide-line">
+        ${g.rows.map(r => `
+        <label class="flex items-center gap-2.5 px-3 py-2 text-[12.5px] hover:bg-canvas/40 cursor-pointer ${disabled ? 'opacity-50 pointer-events-none' : ''}">
+          <input type="checkbox" ${disabled ? 'disabled' : ''} class="cons-cb" data-supplier="${supplierId}" value="${r.id}" onchange="updateConsolidateSummary()">
+          <span class="flex-1 min-w-0 truncate">${esc(r.article_name)}${r.variant_attrs ? ` — ${esc(r.variant_attrs)}` : ''} <span class="text-mute">x${r.quantity}</span></span>
+          <span class="text-[10.5px] font-semibold px-1.5 py-0.5 rounded ${reqBadge(r.status)} shrink-0">${REQ_STATUS_LABEL[r.status]}</span>
+          <span class="text-mute text-[11.5px] shrink-0">${esc(r.requester_name)} · ${dateCH(r.created_at)}</span>
+        </label>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  openModal('Consolider les demandes en attente', `
+    <p class="text-[12.5px] text-mute mb-3">Coche les demandes à regrouper. Une commande fournisseur (brouillon) est créée par fournisseur, avec les quantités additionnées pour un même article.</p>
+    ${groupsHtml}
+    <p id="consolidateSummary" class="text-[12.5px] font-semibold mt-2"></p>
+  `, consolidateSelected, 'Créer la/les commande(s)');
+  updateConsolidateSummary();
+}
+function toggleConsolidateGroup(supplierId, checked) {
+  document.querySelectorAll(`.cons-cb[data-supplier="${supplierId}"]`).forEach(cb => cb.checked = checked);
+  updateConsolidateSummary();
+}
+function updateConsolidateSummary() {
+  const checked = [...document.querySelectorAll('.cons-cb:checked')];
+  const suppliers = new Set(checked.map(cb => cb.dataset.supplier));
+  const el = document.getElementById('consolidateSummary');
+  if (!el) return;
+  el.textContent = checked.length
+    ? `${checked.length} demande(s) sélectionnée(s) → ${suppliers.size} commande(s) fournisseur à créer`
+    : 'Aucune demande sélectionnée';
+}
+async function consolidateSelected() {
+  const ids = [...document.querySelectorAll('.cons-cb:checked')].map(cb => +cb.value);
+  if (!ids.length) throw new Error('Sélectionne au moins une demande');
+  const res = await api('requests_consolidate', 'POST', { request_ids: ids });
+  closeModal();
+  const n = res.created.length;
+  toast(`${n} commande${n > 1 ? 's' : ''} créée${n > 1 ? 's' : ''} (${res.created.reduce((s, c) => s + c.requests, 0)} demande(s))`);
+  if (res.skipped && res.skipped.length) toast(`${res.skipped.length} demande(s) ignorée(s) (déjà traitées entretemps)`, true);
+  loadRequests();
 }
 
 /* ================================================================ FOURNISSEURS */
@@ -2446,6 +2518,7 @@ async function openFicheCommande(id) {
         ${o.status==='sent' ? `<button onclick="setOrderStatus(${o.id},'confirmed')" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Marquer confirmée</button>` : ''}
         ${['sent','confirmed','received_partial'].includes(o.status) ? `<button onclick="modalReceive(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Réceptionner</button>` : ''}
         ${['draft','sent','confirmed','received_partial','received_total'].includes(o.status) ? `<button onclick="cancelOrder(${o.id}, ${['received_partial','received_total'].includes(o.status)})" class="h-9 px-3 rounded-lg border border-rose2-600 text-rose2-600 bg-white text-[12.5px] font-medium hover:bg-rose2-50">Annuler la commande</button>` : ''}
+        ${o.status==='cancelled' ? `<button onclick="deleteOrder(${o.id})" class="h-9 px-3 rounded-lg bg-rose2-600 text-white text-[12.5px] font-semibold hover:opacity-90 transition">Supprimer</button>` : ''}
         <button onclick="downloadOrderCsv(${o.id})" class="h-9 px-3 rounded-lg bg-brand-600 text-[#15140F] text-[12.5px] font-semibold">Télécharger le bon de commande</button>
         <button onclick="printOrder(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">Imprimer</button>
         <button onclick="modalInvoice(${o.id})" class="h-9 px-3 rounded-lg border border-line bg-white text-[12.5px] font-medium">+ Facture</button>
@@ -2527,6 +2600,11 @@ async function cancelOrder(id, wasReceived) {
     : 'Annuler cette commande ? Les demandes qui lui étaient liées redeviennent disponibles pour une nouvelle commande.';
   if (!confirm(msg)) return;
   try { await api('orders', 'PUT', { id, status: 'cancelled' }); toast('Commande annulée'); openFicheCommande(id); }
+  catch (e) { toast(e.message, true); }
+}
+async function deleteOrder(id) {
+  if (!confirm('Supprimer définitivement cette commande annulée ? Ses lignes et sa répartition budgétaire disparaissent avec elle, sans retour possible.')) return;
+  try { await api('orders&id=' + id, 'DELETE'); toast('Commande supprimée'); go('commandes'); loadOrders(); }
   catch (e) { toast(e.message, true); }
 }
 // Accumule, pour la session de réception en cours (scans + validation finale), les quantités reçues par
