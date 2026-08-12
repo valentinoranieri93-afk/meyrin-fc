@@ -29,6 +29,7 @@ $perms = [
     'invoicesIssue' => mfc_can('compta.invoices.issue'),
     'fiscalYearClose' => mfc_can('compta.fiscalyear.close'),
     'settingsManage'  => mfc_can('compta.settings.manage'),
+    'auditView'       => mfc_can('compta.audit.view'),
     'name'          => $user['name'] ?? '',
     'erpUrl'        => ERP_URL,
 ];

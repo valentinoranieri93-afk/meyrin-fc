@@ -31,6 +31,9 @@ button{font-family:inherit;cursor:pointer}
 
 /* ===== SIDEBAR ===== */
 .sidebar{background:var(--noir);color:#C9C7BD;display:flex;flex-direction:column;border-right:1px solid var(--ligne-dark)}
+.back-erp{display:flex;align-items:center;gap:6px;padding:14px 18px 0;font-size:12px;font-weight:600;color:#8C897C;text-decoration:none;transition:color .15s}
+.back-erp:hover{color:#fff}
+.back-erp svg{width:14px;height:14px;flex-shrink:0}
 .sidebar-head{padding:20px 18px;border-bottom:1px solid var(--ligne-dark)}
 .sidebar-head .app-name{font-family:"Sora";font-size:15px;font-weight:700;color:#fff}
 .sidebar-head .app-sub{font-size:10.5px;color:#8C897C;margin-top:2px}
@@ -104,6 +107,7 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
 .b-unmatched{background:var(--orange-bg);color:var(--orange)}
 .b-ignored{background:var(--ligne-2);color:var(--gris)}
 .b-late{background:var(--rouge-bg,#fdecec);color:var(--rouge,#c0392b)}
+.b-audit-del{background:var(--rouge-bg);color:var(--rouge)}
 /* Sous-onglets : pastilles détachées, défilables sur petit écran plutôt que
    compressées jusqu'à devenir illisibles. */
 .tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;scrollbar-width:thin}
@@ -195,6 +199,14 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
 <body>
 <div class="app">
   <aside class="sidebar">
+    <!-- Retour au portail : la Comptabilité est un module servi par l'ERP et
+         s'ouvre dans le même onglet, sans ce lien le seul retour possible
+         serait le bouton Précédent du navigateur (même motif que les autres
+         modules, ex. commandes/index.html). -->
+    <a href="/" class="back-erp">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Retour à l'ERP
+    </a>
     <div class="sidebar-head">
       <div class="app-name">Comptabilité</div>
       <div class="app-sub">Meyrin FC</div>
@@ -483,6 +495,7 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
           <button class="tab" data-stab="vat" onclick="goSettings('vat')">TVA</button>
           <button class="tab" data-stab="costs" onclick="goSettings('costs')">Centres de coût</button>
           <button class="tab" data-stab="qr" onclick="goSettings('qr')">Coordonnées du club</button>
+          <button class="tab" data-stab="audit" onclick="goSettings('audit')">Journal d'audit</button>
         </div>
         <div id="settings-body"><div class="loading-row"><span class="spinner"></span></div></div>
       </div>
@@ -2131,7 +2144,7 @@ function goSettings(tab) {
 function loadSettings() {
   const body = document.getElementById('settings-body');
   body.innerHTML = '<div class="loading-row"><span class="spinner"></span></div>';
-  const fn = { accounts: setAccounts, products: setProducts, terms: setTerms, journals: setJournals, vat: setVat, costs: setCosts, qr: setQr }[SETTINGS_TAB] || setAccounts;
+  const fn = { accounts: setAccounts, products: setProducts, terms: setTerms, journals: setJournals, vat: setVat, costs: setCosts, qr: setQr, audit: setAudit }[SETTINGS_TAB] || setAccounts;
   fn(body).catch(e => { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
 }
 
@@ -2536,6 +2549,77 @@ async function saveValueSettings() {
   }));
   try { await api('settings', 'PUT', { settings }); toast('Réglages enregistrés'); }
   catch (e) { toast(e.message, 'err'); }
+}
+
+/* --- Journal d'audit (art. 957a CO) : lecture seule, alimenté côté serveur à
+   chaque création/suppression d'écriture, de facture, et modification de
+   paramètre (compte, taux TVA, TDFN, centre de coût, réglage). Rien ici ne
+   permet de corriger ou d'effacer une ligne : c'est tout l'intérêt d'un
+   journal d'audit. --- */
+const AUDIT_ENTITY_LABEL = {
+  journal_entry: 'Écriture', invoice: 'Facture', account: 'Compte',
+  vat_rate: 'Taux TVA', vat_settlement_rate: 'Taux TDFN', cost_center: 'Centre de coût',
+  compta_settings: 'Réglage',
+};
+const AUDIT_ACTION_LABEL = {
+  create: 'Création', update: 'Modification', delete: 'Suppression',
+  deactivate: 'Désactivation', cancel: 'Annulation',
+};
+const AUDIT_ACTION_CLASS = {
+  create: 'b-matched', update: 'b-unmatched', delete: 'b-audit-del', deactivate: 'b-ignored', cancel: 'b-audit-del',
+};
+async function setAudit(body) {
+  body.innerHTML = `
+    <div class="panel"><div class="panel-head"><div class="panel-title">Journal d'audit</div>
+      <div class="hint">Qui a créé, modifié ou supprimé quoi. Alimenté automatiquement, non modifiable.</div></div>
+      <div style="padding:0 18px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:end">
+        <div><label class="lbl">Type</label><select class="field" id="auEntity" style="min-width:160px">
+          <option value="">Tous</option>
+          ${Object.entries(AUDIT_ENTITY_LABEL).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}
+        </select></div>
+        <div><label class="lbl">Du</label><input type="date" class="field" id="auFrom"></div>
+        <div><label class="lbl">Au</label><input type="date" class="field" id="auTo"></div>
+        <div style="flex:1;min-width:180px"><label class="lbl">Recherche</label><input class="field" id="auQ" placeholder="Utilisateur, pièce…"></div>
+        <button class="btn btn-primary" onclick="loadAuditLog()">Filtrer</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Utilisateur</th><th>Type</th><th>Action</th><th>Résumé</th><th></th></tr></thead>
+        <tbody id="audit-rows"><tr><td colspan="6" class="loading-row"><span class="spinner"></span></td></tr></tbody>
+      </table></div></div>`;
+  await loadAuditLog();
+}
+let AUDIT_ROWS = [];
+async function loadAuditLog() {
+  AUDIT_ROWS = await apiGet('audit_log', {
+    entity_type: f('auEntity') || '', from: f('auFrom') || '', to: f('auTo') || '', q: f('auQ') || '',
+  });
+  // data-index plutôt qu'un résumé/JSON injecté dans l'attribut onclick : le texte comptable (noms de
+  // compte, libellés) contient couramment des apostrophes qui casseraient un attribut délimité par des quotes.
+  document.getElementById('audit-rows').innerHTML = AUDIT_ROWS.length ? AUDIT_ROWS.map((r, idx) => `
+    <tr>
+      <td class="tnum" style="white-space:nowrap">${esc((r.created_at || '').slice(0, 16))}</td>
+      <td>${esc(r.user_name || '—')}</td>
+      <td>${esc(AUDIT_ENTITY_LABEL[r.entity_type] || r.entity_type)}</td>
+      <td><span class="badge ${AUDIT_ACTION_CLASS[r.action] || 'b-ignored'}">${esc(AUDIT_ACTION_LABEL[r.action] || r.action)}</span></td>
+      <td>${esc(r.summary)}</td>
+      <td style="text-align:right">${r.changes ? `<button class="btn btn-ghost btn-sm" onclick="auditDetail(${idx})">Détail</button>` : ''}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">Aucune trace pour ces filtres</td></tr>';
+}
+function auditDetail(idx) {
+  const row = AUDIT_ROWS[idx];
+  const summary = row.summary;
+  let changes = {};
+  try { changes = JSON.parse(row.changes || '{}'); } catch (e) { /* trace corrompue, affichée vide */ }
+  const fieldLabel = { rate_percent: 'Taux', label: 'Libellé', active: 'Actif', kind: 'Type', name: 'Nom',
+    category: 'Catégorie', class: 'Classe', currency: 'Devise', allow_lettrage: 'Lettrage autorisé',
+    vat_rate_id: 'Taux TVA', vat_settlement_rate_id: 'Taux TDFN', account_id: 'Compte', value: 'Valeur',
+    due_date: 'Échéance', invoice_number: 'N° facture', notes: 'Notes', cost_center_id: 'Centre de coût',
+    tiers_label: 'Tiers', amount_vat: 'Montant TVA' };
+  const rows = Object.entries(changes).map(([k, [before, after]]) => `
+    <tr><td style="font-weight:600">${esc(fieldLabel[k] || k)}</td>
+      <td style="color:var(--rouge)">${esc(before ?? '—')}</td>
+      <td style="color:var(--vert)">${esc(after ?? '—')}</td></tr>`).join('');
+  openModal(summary, `<table style="width:100%"><thead><tr><th>Champ</th><th>Avant</th><th>Après</th></tr></thead><tbody>${rows}</tbody></table>`, async () => closeModal(), 'Fermer');
 }
 
 /* ===============================================================

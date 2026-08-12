@@ -127,7 +127,8 @@
       "invoices.edit":  "Creer, modifier et annuler des factures",
       "invoices.issue": "Emettre et imprimer une facture avec son bulletin QR",
       "fiscalyear.close": "Creer un exercice, saisir l'ouverture et cloturer l'exercice",
-      "settings.manage": "Modifier les reglages : comptes par defaut, taux de TVA, centres de cout"
+      "settings.manage": "Modifier les reglages : comptes par defaut, taux de TVA, centres de cout",
+      "audit.view": "Consulter le journal d'audit (tracabilite des ecritures, factures et parametres)"
     }
   }
 }

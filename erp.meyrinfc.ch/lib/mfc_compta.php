@@ -321,6 +321,29 @@ function compta_mark_paid(string $module, string $refId, string $paidAt): bool {
 class ComptaException extends RuntimeException {}
 
 /**
+ * Trace une action dans le journal d'audit (art. 957a CO — traçabilité).
+ *
+ * Best-effort et volontairement permissif sur les erreurs : un souci
+ * d'écriture dans audit_log (disque plein, table verrouillée) ne doit jamais
+ * faire échouer l'opération comptable qu'il accompagne. Appelé DANS la même
+ * transaction que l'opération auditée quand elle existe : si celle-ci est
+ * annulée (rollBack), la trace d'audit l'est avec elle — on ne veut pas
+ * enregistrer qu'une écriture a été créée si elle ne l'a finalement pas été.
+ *
+ * $changes : diff avant/après pour une modification, ex. ['rate_percent' => [8.1, 7.7]].
+ * Vide pour une création (rien à comparer) ou une suppression (l'état déjà
+ * connu du $summary suffit).
+ */
+function compta_audit_log(PDO $pdo, string $entityType, ?int $entityId, string $action, string $summary, string $userName, array $changes = []): void {
+    try {
+        $pdo->prepare('INSERT INTO audit_log (entity_type, entity_id, action, summary, changes, user_name) VALUES (?,?,?,?,?,?)')
+            ->execute([$entityType, $entityId, $action, $summary, $changes ? json_encode($changes, JSON_UNESCAPED_UNICODE) : '', $userName]);
+    } catch (\Throwable $e) {
+        // Ne jamais bloquer la comptabilité pour un souci de traçabilité.
+    }
+}
+
+/**
  * Enregistre une écriture équilibrée et renvoie son identifiant.
  *
  * $lines : liste de ['account_id' => int, 'debit' => float, 'credit' => float,
@@ -400,6 +423,10 @@ function compta_post_entry(PDO $pdo, array $e): int {
          VALUES (?,?,?,?,?,?,?)'
     );
     foreach ($clean as $c) $ins->execute(array_merge([$entryId], $c));
+
+    // Chemin unique de création d'écriture (saisie manuelle, extourne, facture,
+    // ouverture/clôture d'exercice) : un seul point d'audit couvre tout.
+    compta_audit_log($pdo, 'journal_entry', $entryId, 'create', "Écriture $pieceRef — $label", (string) ($e['created_by'] ?? ''));
 
     return $entryId;
 }

@@ -291,6 +291,24 @@ function init_schema(PDO $pdo): void {
         reconciled_at TEXT DEFAULT (datetime('now')),
         reconciled_by TEXT DEFAULT ''
     );
+    /* Journal d'audit (art. 957a CO — traçabilité) : qui a fait quoi, sur quelle
+       pièce, et avec quelle valeur avant/après pour les modifications de
+       paramètres. Alimenté par compta_audit_log() (lib/mfc_compta.php), jamais
+       écrit directement depuis un écran. Ne référence pas ses entités par clé
+       étrangère : une écriture ou un compte supprimé ne doit pas pouvoir
+       emporter la trace de son existence passée avec lui.
+       'changes' : JSON best-effort {champ: [avant, après]}, vide si non applicable
+       (une création n'a pas d'« avant »). */
+    CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER,
+        action TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '',
+        changes TEXT DEFAULT '',
+        user_name TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now'))
+    );
     ");
 
     /* Anti-doublon d'import : une référence banque (AcctSvcrRef) ne doit jamais
@@ -328,6 +346,8 @@ function init_schema(PDO $pdo): void {
     CREATE INDEX IF NOT EXISTS ix_inv_src       ON invoice_source_items(source_module, source_ref_id);
     CREATE INDEX IF NOT EXISTS ix_inv_lines     ON invoice_lines(invoice_id);
     CREATE INDEX IF NOT EXISTS ix_inv_att       ON invoice_attachments(invoice_id);
+    CREATE INDEX IF NOT EXISTS ix_audit_entity  ON audit_log(entity_type, entity_id);
+    CREATE INDEX IF NOT EXISTS ix_audit_date    ON audit_log(created_at);
     ");
 
     /* Reprise des factures créées avant les lignes : chacune devient une facture
@@ -608,6 +628,7 @@ const CP_PERMS = [
     'report_balance_sheet'    => 'reports.view',
     'report_income_statement' => 'reports.view',
     'report_aged_balance'     => 'reports.view',
+    'audit_log'               => 'audit.view',
 ];
 
 $rule = array_key_exists($action, CP_PERMS) ? CP_PERMS[$action] : 'journal.edit';
@@ -685,7 +706,9 @@ case 'accounts': {
         try {
             $pdo->prepare('INSERT INTO accounts (number, name, category, class, currency, allow_lettrage, vat_rate_id) VALUES (?,?,?,?,?,?,?)')
                 ->execute([$number, $name, s($b, 'category'), $class, s($b, 'currency', 'CHF'), i($b, 'allow_lettrage'), i($b, 'vat_rate_id') ?: null]);
-            out(['ok' => true, 'id' => (int) $pdo->lastInsertId()]);
+            $newId = (int) $pdo->lastInsertId();
+            compta_audit_log($pdo, 'account', $newId, 'create', "Compte $number — $name", $userName);
+            out(['ok' => true, 'id' => $newId]);
         } catch (\Exception $e) { fail('Ce numéro de compte existe déjà'); }
     }
     if ($method === 'PUT') {
@@ -693,9 +716,19 @@ case 'accounts': {
         if (!$id) fail('ID requis');
         $class = s($b, 'class', 'charge');
         if (!in_array($class, ['actif', 'passif', 'produit', 'charge'], true)) fail('Classe de compte invalide');
+        $old = $pdo->prepare('SELECT * FROM accounts WHERE id = ?'); $old->execute([$id]); $old = $old->fetch();
+        if (!$old) fail('Compte introuvable', 404);
+        $new = [
+            'name' => s($b, 'name'), 'category' => s($b, 'category'), 'class' => $class,
+            'currency' => s($b, 'currency', 'CHF'), 'allow_lettrage' => i($b, 'allow_lettrage'),
+            'vat_rate_id' => i($b, 'vat_rate_id') ?: null, 'active' => i($b, 'active', 1),
+        ];
         $pdo->prepare('UPDATE accounts SET name=?, category=?, class=?, currency=?, allow_lettrage=?, vat_rate_id=?, active=? WHERE id=?')
-            ->execute([s($b, 'name'), s($b, 'category'), $class, s($b, 'currency', 'CHF'), i($b, 'allow_lettrage'),
-                       i($b, 'vat_rate_id') ?: null, i($b, 'active', 1), $id]);
+            ->execute([$new['name'], $new['category'], $new['class'], $new['currency'], $new['allow_lettrage'],
+                       $new['vat_rate_id'], $new['active'], $id]);
+        $diff = [];
+        foreach ($new as $k => $v) { if ((string) $old[$k] !== (string) $v) $diff[$k] = [$old[$k], $v]; }
+        if ($diff) compta_audit_log($pdo, 'account', $id, 'update', "Compte {$old['number']} — {$old['name']}", $userName, $diff);
         out(['ok' => true]);
     }
     fail('Méthode non supportée', 405);
@@ -796,6 +829,8 @@ case 'entry_delete': {
     $invSt = $pdo->prepare('SELECT COUNT(*) FROM invoices WHERE journal_entry_id = ?');
     $invSt->execute([$id]);
     if ((int) $invSt->fetchColumn() > 0) fail("Cette écriture porte une facture, annulez la facture plutôt que l'écriture", 409);
+    // Tracé AVANT la suppression physique : c'est la seule trace qui subsistera de cette écriture.
+    compta_audit_log($pdo, 'journal_entry', $id, 'delete', 'Écriture ' . ($entry['piece_ref'] ?: "#$id") . ' — ' . $entry['label'], $userName);
     $pdo->prepare('DELETE FROM journal_entries WHERE id = ?')->execute([$id]);
     out(['ok' => true]);
 }
@@ -1351,12 +1386,23 @@ case 'invoices': {
            il faut annuler la facture (extourne) et en refaire une. */
         $id = i($b, 'id');
         if (!$id) fail('ID requis');
+        $oldSt = $pdo->prepare('SELECT due_date, invoice_number, notes, amount_vat, vat_rate_id, cost_center_id, tiers_label, piece_ref, label FROM invoices WHERE id = ?');
+        $oldSt->execute([$id]);
+        $old = $oldSt->fetch();
+        if (!$old) fail('Facture introuvable', 404);
+        $new = [
+            'due_date' => s($b, 'due_date'), 'invoice_number' => s($b, 'invoice_number'), 'notes' => s($b, 'notes'),
+            'amount_vat' => esc_num($b['amount_vat'] ?? 0), 'vat_rate_id' => i($b, 'vat_rate_id') ?: null,
+            'cost_center_id' => i($b, 'cost_center_id') ?: null, 'tiers_label' => s($b, 'tiers_label'),
+        ];
         $pdo->prepare('UPDATE invoices SET due_date=?, invoice_number=?, notes=?, amount_vat=?, vat_rate_id=?, cost_center_id=?, tiers_label=? WHERE id=?')
             ->execute([
-                s($b, 'due_date'), s($b, 'invoice_number'), s($b, 'notes'),
-                esc_num($b['amount_vat'] ?? 0), i($b, 'vat_rate_id') ?: null,
-                i($b, 'cost_center_id') ?: null, s($b, 'tiers_label'), $id,
+                $new['due_date'], $new['invoice_number'], $new['notes'],
+                $new['amount_vat'], $new['vat_rate_id'], $new['cost_center_id'], $new['tiers_label'], $id,
             ]);
+        $diff = [];
+        foreach ($new as $k => $v) { if ((string) $old[$k] !== (string) $v) $diff[$k] = [$old[$k], $v]; }
+        if ($diff) compta_audit_log($pdo, 'invoice', $id, 'update', 'Facture ' . ($old['piece_ref'] ?: "#$id") . ' — ' . $old['label'], $userName, $diff);
         /* Le centre de coût suit sur la ligne de résultat de l'écriture : il est
            analytique, il n'entre pas dans l'équilibre débit/crédit. */
         $inv = $pdo->prepare('SELECT journal_entry_id, account_id FROM invoices WHERE id = ?');
@@ -1478,6 +1524,7 @@ case 'invoice_cancel': {
             }
         }
         $pdo->prepare("UPDATE invoices SET status = 'annulee' WHERE id = ?")->execute([$id]);
+        compta_audit_log($pdo, 'invoice', $id, 'cancel', 'Facture ' . ($inv['piece_ref'] ?: "#$id") . ' — ' . $inv['label'], $userName);
         $pdo->commit();
         out(['ok' => true]);
     } catch (ComptaException $e) {
@@ -2289,6 +2336,7 @@ case 'settings': {
     }
     if ($method === 'PUT') {
         $items = is_array($b['settings'] ?? null) ? $b['settings'] : [$b];
+        $selOld = $pdo->prepare('SELECT account_id, value, label FROM compta_settings WHERE scope = ? AND setting_key = ?');
         $upd = $pdo->prepare('UPDATE compta_settings SET account_id = ?, value = ? WHERE scope = ? AND setting_key = ? AND scope != \'system\'');
         $pdo->beginTransaction();
         try {
@@ -2296,11 +2344,15 @@ case 'settings': {
                 $scope = trim((string) ($it['scope'] ?? ''));
                 $key   = trim((string) ($it['setting_key'] ?? ''));
                 if ($scope === '' || $key === '') continue;
-                $upd->execute([
-                    !empty($it['account_id']) ? (int) $it['account_id'] : null,
-                    (string) ($it['value'] ?? ''),
-                    $scope, $key,
-                ]);
+                $selOld->execute([$scope, $key]);
+                $old = $selOld->fetch();
+                $newAccountId = !empty($it['account_id']) ? (int) $it['account_id'] : null;
+                $newValue     = (string) ($it['value'] ?? '');
+                $upd->execute([$newAccountId, $newValue, $scope, $key]);
+                if ($old && ((string) $old['account_id'] !== (string) $newAccountId || $old['value'] !== $newValue)) {
+                    compta_audit_log($pdo, 'compta_settings', null, 'update', 'Réglage ' . ($old['label'] ?: "$scope.$key"), $userName,
+                        ['account_id' => [$old['account_id'], $newAccountId], 'value' => [$old['value'], $newValue]]);
+                }
             }
             $pdo->commit();
             out(['ok' => true]);
@@ -2324,7 +2376,9 @@ case 'vat_rates': {
         if (!in_array($kind, ['vente', 'achat'], true)) fail('Type de taux invalide');
         $pdo->prepare('INSERT INTO vat_rates (label, rate_percent, kind) VALUES (?,?,?)')
             ->execute([$label, esc_num($b['rate_percent'] ?? 0), $kind]);
-        out(['ok' => true, 'id' => (int) $pdo->lastInsertId()]);
+        $newId = (int) $pdo->lastInsertId();
+        compta_audit_log($pdo, 'vat_rate', $newId, 'create', "Taux TVA $label", $userName);
+        out(['ok' => true, 'id' => $newId]);
     }
     if ($method === 'PUT') {
         $id = i($b, 'id');
@@ -2359,6 +2413,10 @@ case 'vat_rates': {
             if ($changed) {
                 foreach ($touched as $invId) { invoice_recompute_vat($pdo, $invId); $recomputed++; }
             }
+            $diff = [];
+            if ($changed) $diff['rate_percent'] = [esc_num($old['rate_percent']), $newRate];
+            if ($old['label'] !== s($b, 'label')) $diff['label'] = [$old['label'], s($b, 'label')];
+            if ($diff) compta_audit_log($pdo, 'vat_rate', $id, 'update', 'Taux TVA ' . $old['label'], $userName, $diff);
             $pdo->commit();
         } catch (\Exception $e) { $pdo->rollBack(); fail($e->getMessage()); }
         out(['ok' => true, 'recomputed' => $recomputed]);
@@ -2366,6 +2424,8 @@ case 'vat_rates': {
     if ($method === 'DELETE') {
         $id = i($_GET, 'id');
         if (!$id) fail('ID requis');
+        $rateSt = $pdo->prepare('SELECT label FROM vat_rates WHERE id = ?'); $rateSt->execute([$id]); $rateLabel = $rateSt->fetchColumn();
+        if ($rateLabel === false) fail('Taux introuvable', 404);
         /* Un taux déjà porté par une facture est désactivé, jamais supprimé :
            l'effacer rendrait illisible la TVA d'une pièce déjà comptabilisée.
            Un taux servant encore de défaut à un produit ou à un compte est
@@ -2377,8 +2437,10 @@ case 'vat_rates': {
         $used->execute([':id' => $id]);
         if ((int) $used->fetchColumn() > 0) {
             $pdo->prepare('UPDATE vat_rates SET active = 0 WHERE id = ?')->execute([$id]);
+            compta_audit_log($pdo, 'vat_rate', $id, 'deactivate', "Taux TVA $rateLabel", $userName);
             out(['ok' => true, 'deactivated' => true]);
         }
+        compta_audit_log($pdo, 'vat_rate', $id, 'delete', "Taux TVA $rateLabel", $userName);
         $pdo->prepare('DELETE FROM vat_rates WHERE id = ?')->execute([$id]);
         out(['ok' => true]);
     }
@@ -2403,26 +2465,45 @@ case 'vat_settlement_rates': {
         if (!$label) fail('Libellé requis');
         $pdo->prepare('INSERT INTO vat_settlement_rates (label, rate_percent) VALUES (?,?)')
             ->execute([$label, esc_num($b['rate_percent'] ?? 0)]);
-        out(['ok' => true, 'id' => (int) $pdo->lastInsertId()]);
+        $newId = (int) $pdo->lastInsertId();
+        compta_audit_log($pdo, 'vat_settlement_rate', $newId, 'create', "TDFN $label", $userName);
+        out(['ok' => true, 'id' => $newId]);
     }
     if ($method === 'PUT') {
         /* Deux usages : modifier un taux, ou rattacher un taux à un compte. */
         if (isset($b['account_id'])) {
-            $pdo->prepare('UPDATE accounts SET vat_settlement_rate_id = ? WHERE id = ?')
-                ->execute([i($b, 'vat_settlement_rate_id') ?: null, i($b, 'account_id')]);
+            $accId = i($b, 'account_id');
+            $accSt = $pdo->prepare('SELECT number, name, vat_settlement_rate_id FROM accounts WHERE id = ?'); $accSt->execute([$accId]); $acc = $accSt->fetch();
+            $newRateId = i($b, 'vat_settlement_rate_id') ?: null;
+            $pdo->prepare('UPDATE accounts SET vat_settlement_rate_id = ? WHERE id = ?')->execute([$newRateId, $accId]);
+            if ($acc && (string) $acc['vat_settlement_rate_id'] !== (string) $newRateId) {
+                compta_audit_log($pdo, 'account', $accId, 'update', "Compte {$acc['number']} — {$acc['name']}", $userName,
+                    ['vat_settlement_rate_id' => [$acc['vat_settlement_rate_id'], $newRateId]]);
+            }
             out(['ok' => true]);
         }
         $id = i($b, 'id');
         if (!$id) fail('ID requis');
+        $old = $pdo->prepare('SELECT * FROM vat_settlement_rates WHERE id = ?'); $old->execute([$id]); $old = $old->fetch();
+        if (!$old) fail('Taux introuvable', 404);
+        $newLabel = s($b, 'label'); $newRate = esc_num($b['rate_percent'] ?? 0); $newActive = i($b, 'active', 1);
         $pdo->prepare('UPDATE vat_settlement_rates SET label=?, rate_percent=?, active=? WHERE id=?')
-            ->execute([s($b, 'label'), esc_num($b['rate_percent'] ?? 0), i($b, 'active', 1), $id]);
+            ->execute([$newLabel, $newRate, $newActive, $id]);
+        $diff = [];
+        if ($old['label'] !== $newLabel) $diff['label'] = [$old['label'], $newLabel];
+        if (abs((float) $old['rate_percent'] - $newRate) > 0.0001) $diff['rate_percent'] = [esc_num($old['rate_percent']), $newRate];
+        if ((int) $old['active'] !== $newActive) $diff['active'] = [(int) $old['active'], $newActive];
+        if ($diff) compta_audit_log($pdo, 'vat_settlement_rate', $id, 'update', 'TDFN ' . $old['label'], $userName, $diff);
         out(['ok' => true]);
     }
     if ($method === 'DELETE') {
         $id = i($_GET, 'id');
         if (!$id) fail('ID requis');
+        $rateSt = $pdo->prepare('SELECT label FROM vat_settlement_rates WHERE id = ?'); $rateSt->execute([$id]); $rateLabel = $rateSt->fetchColumn();
+        if ($rateLabel === false) fail('Taux introuvable', 404);
         $pdo->prepare('UPDATE accounts SET vat_settlement_rate_id = NULL WHERE vat_settlement_rate_id = ?')->execute([$id]);
         $pdo->prepare('DELETE FROM vat_settlement_rates WHERE id = ?')->execute([$id]);
+        compta_audit_log($pdo, 'vat_settlement_rate', $id, 'delete', "TDFN $rateLabel", $userName);
         out(['ok' => true]);
     }
     fail('Méthode non supportée', 405);
@@ -2449,27 +2530,41 @@ case 'cost_centers': {
         try {
             $pdo->prepare('INSERT INTO cost_centers (code, label, kind, club_ref) VALUES (?,?,?,?)')
                 ->execute([$code, $label, $kind, s($b, 'club_ref')]);
-            out(['ok' => true, 'id' => (int) $pdo->lastInsertId()]);
+            $newId = (int) $pdo->lastInsertId();
+            compta_audit_log($pdo, 'cost_center', $newId, 'create', "Centre de coût $code — $label", $userName);
+            out(['ok' => true, 'id' => $newId]);
         } catch (\Exception $e) { fail('Ce code de centre de coût existe déjà'); }
     }
     if ($method === 'PUT') {
         $id = i($b, 'id');
         if (!$id) fail('ID requis');
+        $old = $pdo->prepare('SELECT * FROM cost_centers WHERE id = ?'); $old->execute([$id]); $old = $old->fetch();
+        if (!$old) fail('Centre de coût introuvable', 404);
+        $newLabel = s($b, 'label'); $newKind = s($b, 'kind', 'autre'); $newActive = i($b, 'active', 1);
         $pdo->prepare('UPDATE cost_centers SET label=?, kind=?, active=? WHERE id=?')
-            ->execute([s($b, 'label'), s($b, 'kind', 'autre'), i($b, 'active', 1), $id]);
+            ->execute([$newLabel, $newKind, $newActive, $id]);
+        $diff = [];
+        if ($old['label'] !== $newLabel) $diff['label'] = [$old['label'], $newLabel];
+        if ($old['kind'] !== $newKind) $diff['kind'] = [$old['kind'], $newKind];
+        if ((int) $old['active'] !== $newActive) $diff['active'] = [(int) $old['active'], $newActive];
+        if ($diff) compta_audit_log($pdo, 'cost_center', $id, 'update', "Centre de coût {$old['code']} — {$old['label']}", $userName, $diff);
         out(['ok' => true]);
     }
     if ($method === 'DELETE') {
         $id = i($_GET, 'id');
         if (!$id) fail('ID requis');
+        $ccSt = $pdo->prepare('SELECT code, label FROM cost_centers WHERE id = ?'); $ccSt->execute([$id]); $cc = $ccSt->fetch();
+        if (!$cc) fail('Centre de coût introuvable', 404);
         /* Un centre de coût déjà utilisé est désactivé : le supprimer viderait
            l'analytique des écritures passées. */
         $used = $pdo->prepare('SELECT COUNT(*) FROM journal_lines WHERE cost_center_id = ?');
         $used->execute([$id]);
         if ((int) $used->fetchColumn() > 0) {
             $pdo->prepare('UPDATE cost_centers SET active = 0 WHERE id = ?')->execute([$id]);
+            compta_audit_log($pdo, 'cost_center', $id, 'deactivate', "Centre de coût {$cc['code']} — {$cc['label']}", $userName);
             out(['ok' => true, 'deactivated' => true]);
         }
+        compta_audit_log($pdo, 'cost_center', $id, 'delete', "Centre de coût {$cc['code']} — {$cc['label']}", $userName);
         $pdo->prepare('DELETE FROM cost_centers WHERE id = ?')->execute([$id]);
         out(['ok' => true]);
     }
@@ -2511,6 +2606,31 @@ case 'line_cost_center': {
     $pdo->prepare('UPDATE journal_lines SET cost_center_id = ? WHERE id = ?')
         ->execute([i($b, 'cost_center_id') ?: null, $lineId]);
     out(['ok' => true]);
+}
+
+/**
+ * Consultation du journal d'audit — art. 957a CO. Lecture seule : rien
+ * n'écrit ici, seul compta_audit_log() alimente la table (voir les points
+ * d'audit répartis dans ce fichier et dans mfc_compta.php::compta_post_entry
+ * / invoice_create). Filtrable par type d'entité, par pièce précise, par
+ * période et par mot-clé (utilisateur ou résumé), plafonné à 500 lignes.
+ */
+case 'audit_log': {
+    $pdo = db();
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $where = ['1=1']; $params = [];
+    if (!empty($_GET['entity_type'])) { $where[] = 'entity_type = ?'; $params[] = $_GET['entity_type']; }
+    if (!empty($_GET['entity_id']))   { $where[] = 'entity_id = ?';   $params[] = (int) $_GET['entity_id']; }
+    if (!empty($_GET['from']))        { $where[] = 'date(created_at) >= ?'; $params[] = $_GET['from']; }
+    if (!empty($_GET['to']))          { $where[] = 'date(created_at) <= ?'; $params[] = $_GET['to']; }
+    if (!empty($_GET['q'])) {
+        $where[] = '(summary LIKE ? OR user_name LIKE ?)';
+        $like = '%' . $_GET['q'] . '%';
+        array_push($params, $like, $like);
+    }
+    $st = $pdo->prepare('SELECT * FROM audit_log WHERE ' . implode(' AND ', $where) . ' ORDER BY id DESC LIMIT 500');
+    $st->execute($params);
+    out($st->fetchAll());
 }
 
 /* ============================================================ RAPPORTS */
@@ -3085,6 +3205,10 @@ function invoice_create(PDO $pdo, array $d): int {
             $l['unit_price'], $l['amount'], $l['account_id'], $l['vat_rate_id'], $l['cost_center_id'],
         ]);
     }
+
+    // Chemin unique de création de facture (saisie manuelle, génération depuis
+    // un module métier) : un seul point d'audit couvre tout.
+    compta_audit_log($pdo, 'invoice', $invoiceId, 'create', "Facture $pieceRef — $label", (string) ($d['created_by'] ?? ''));
 
     return $invoiceId;
 }
