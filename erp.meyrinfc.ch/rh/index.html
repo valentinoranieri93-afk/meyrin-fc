@@ -1041,15 +1041,13 @@ function renderEmployeeTable(){
      dans la fiche détaillée, plutôt qu'étalées ici en pills. */
   el.innerHTML = list.length ? `<table><thead><tr><th>Nom</th><th>E-mail</th><th>Téléphone</th><th>Indemnité${currentSeason?' ('+esc(currentSeason.label)+')':''}</th><th></th></tr></thead><tbody>
     ${list.map(ee => {
-      // Même calcul que la fiche employé (clic sur le nom) : le total annuel des affectations
-      // de la saison affichée, divisé selon l'échéance de versement de la personne — jamais
-      // un montant mensuel générique, cette colonne dépend de la fiche de chaque employé.
-      const isSemestriel = (ee.paiement || 'mensuel') === 'semestriel';
+      // Même source que la fiche employé (clic sur le nom) : le total annuel des affectations
+      // de la saison affichée, affiché tel quel (pas de division par échéance de versement ici).
       const totalAnnuel = ee.assignments
         .filter(a => Number(a.season_id) === STATE.seasonId)
         .reduce((s, a) => s + Number(a.montant), 0);
-      const periodValue = isSemestriel ? totalAnnuel / 2 : totalAnnuel / 12;
-      const periodSuffix = isSemestriel ? 'CHF/sem.' : 'CHF/mois';
+      const periodValue = totalAnnuel;
+      const periodSuffix = 'CHF/an';
       return `<tr>
       <td><a href="javascript:void(0)" data-obj="${esc(JSON.stringify(ee))}" onclick="employeeDetailModal(JSON.parse(this.dataset.obj))" style="color:var(--noir)"><strong>${esc(ee.last_name)}</strong>${ee.first_name?' '+esc(ee.first_name):''}</a>${ee.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactif</span>':''}${(ee.annuaire && ee.annuaire.other_qualities.length)?ee.annuaire.other_qualities.map(q=>` <span class="pill" style="background:var(--gris-bg,#f1f1f1);color:var(--gris)" title="Aussi ${esc(q)} dans l'annuaire du club">${esc(q)}</span>`).join(''):''}${(ee.annuaire && ee.annuaire.a_verifier)?' <span class="pill" style="background:var(--orange-bg,#fff3e0);color:var(--orange,#b26a00)" title="Fiche annuaire à vérifier (doublon probable)">à vérifier</span>':''}</td>
       <td style="font-size:12.5px;color:var(--gris)">${esc(ee.email)}</td>
