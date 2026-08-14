@@ -2011,6 +2011,7 @@ async function exportCoachesPDF(coachFilter) {
         const amt = parseFloat(m.fee_amount || 0).toFixed(2);
         return `<tr>
           <td>${d}${m.match_time ? '<br><span class="sub">' + pdfEsc(m.match_time) + '</span>' : ''}</td>
+          <td>${pdfEsc(m.match_number || '–')}</td>
           <td>${vs}</td>
           <td><span class="tag-lieu ${m.is_home == 1 ? 'dom' : 'ext'}">${lieu}</span></td>
           <td>${pdfEsc(m.competition || '–')}</td>
@@ -2054,6 +2055,7 @@ async function exportCoachesPDF(coachFilter) {
           <thead>
             <tr>
               <th style="width:90px">Date</th>
+              <th style="width:70px">N° match</th>
               <th>Match</th>
               <th style="width:55px">Lieu</th>
               <th>Compétition</th>

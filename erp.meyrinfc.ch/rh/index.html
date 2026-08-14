@@ -48,6 +48,8 @@ table{border-collapse:collapse;width:100%}
 .season-sel{width:100%;background:#211F18;border:1.5px solid #34322a;border-radius:9px;padding:8px 10px;font-size:13px;font-weight:600;color:#E8E6DD;cursor:pointer}
 .season-sel:focus{border-color:var(--jaune-fonce)}
 .sb-nav{flex:1;padding:16px 12px;overflow-y:auto}
+.sb-group{margin-bottom:14px}
+.sb-group:last-child{margin-bottom:0}
 .sb-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;font-size:13.5px;font-weight:600;color:#C9C7BD;margin-bottom:2px;transition:background .15s,color .15s}
 .sb-item svg{width:16px;height:16px;flex-shrink:0;opacity:.75}
 .sb-item:hover{background:#211F18;color:#fff}
@@ -285,25 +287,38 @@ if (!window.MFC) {
 }
 const MFC = window.MFC || {};
 
-const NAV_ALL = [
-  { id: 'dashboard', label: 'Dashboard',             icon: 'dashboard', need: 'teamsView' },
-  { id: 'teams',     label: 'Équipes',               icon: 'teams',     need: 'teamsView' },
-  { id: 'employees', label: 'Employés',              icon: 'employees', need: 'employeesView' },
-  { id: 'players',   label: 'Joueurs (1ère équipe)', icon: 'players',   need: 'employeesView' },
-  { id: 'primes',    label: 'Primes de match',       icon: 'primes',    need: 'employeesView' },
-  { id: 'payments',  label: 'Paiements',             icon: 'payments',  need: 'payrollView' },
-  /* Les paramètres regroupent barème d'indemnités et règles de paie : on ne
-     les propose qu'à qui peut agir sur au moins l'un des deux. */
-  { id: 'settings',  label: 'Paramètres',            icon: 'settings',
-    need: ['teamsEdit', 'indemnites', 'payrollView'] },
+/* Navigation regroupée par blocs (2026-08-14, retour de Valentino) : la liste plate
+   mélangeait des destinations de nature différente (pilotage d'équipe, paie joueurs,
+   paiements, administration). Chaque bloc est filtré indépendamment, et un bloc qui ne
+   contient plus aucun item accessible (droits insuffisants) ne laisse pas de séparateur
+   vide dans la sidebar. */
+const NAV_GROUPS = [
+  { items: [
+    { id: 'dashboard', label: 'Dashboard',             icon: 'dashboard', need: 'teamsView' },
+    { id: 'teams',     label: 'Équipes',               icon: 'teams',     need: 'teamsView' },
+    { id: 'employees', label: 'Employés',              icon: 'employees', need: 'employeesView' },
+  ] },
+  { items: [
+    { id: 'players',   label: 'Joueurs (1ère équipe)', icon: 'players',   need: 'employeesView' },
+    { id: 'primes',    label: 'Primes de match',       icon: 'primes',    need: 'employeesView' },
+  ] },
+  { items: [
+    { id: 'payments',  label: 'Paiements',             icon: 'payments',  need: 'payrollView' },
+  ] },
+  { items: [
+    /* Les paramètres regroupent barème d'indemnités et règles de paie : on ne
+       les propose qu'à qui peut agir sur au moins l'un des deux. */
+    { id: 'settings',  label: 'Paramètres',            icon: 'settings',
+      need: ['teamsEdit', 'indemnites', 'payrollView'] },
+  ] },
 ];
 
 /* Un onglet n'est affiché que si la personne a le droit correspondant. Le
    serveur revérifie chaque appel : ceci évite d'ouvrir un écran qui ne
    renverrait que des erreurs. */
-const NAV = NAV_ALL.filter(n =>
-  Array.isArray(n.need) ? n.need.some(k => MFC[k]) : MFC[n.need]
-);
+function navAllowed(n){ return Array.isArray(n.need) ? n.need.some(k => MFC[k]) : MFC[n.need]; }
+const NAV_ALL = NAV_GROUPS.flatMap(g => g.items);
+const NAV = NAV_ALL.filter(navAllowed);
 
 function render() {
   const app = document.getElementById('app');
@@ -321,7 +336,11 @@ function render() {
         </select>
       </div>
       <div class="sb-nav">
-        ${NAV.map(n => `<div class="sb-item ${STATE.page===n.id?'active':''}" onclick="goTo('${n.id}')">${ic(n.icon)}<span>${n.label}</span></div>`).join('')}
+        ${NAV_GROUPS.map(g => {
+          const items = g.items.filter(navAllowed);
+          if (!items.length) return '';
+          return `<div class="sb-group">${items.map(n => `<div class="sb-item ${STATE.page===n.id?'active':''}" onclick="goTo('${n.id}')">${ic(n.icon)}<span>${n.label}</span></div>`).join('')}</div>`;
+        }).join('')}
       </div>
       <div class="sb-foot">
         <div class="sb-user">${esc(STATE.user?.name || '')}</div>
@@ -379,16 +398,16 @@ async function apiSoft(action, fallback, allowed = true, params = null){
 }
 
 async function loadRefData(){
-  /* Ces quatre jeux de données étaient chargés d'un bloc : un seul refus de
-     droit (payroll_rules exige l'accès aux salaires) faisait échouer le lot
-     entier et laissait les pages Équipes, Employés et Paramètres vides. */
+  /* Chaque appel est isolé : un refus de droit sur l'un ne doit pas vider les pages
+     Équipes, Employés et Paramètres, comme c'était le cas quand le lot partait d'un bloc. */
   /* La saison est transmise : sous référentiel club, le nom et la catégorie
      d'une équipe dépendent de la saison consultée. */
-  [STATE.teams, STATE.categories, STATE.postes, STATE.payrollRules] = await Promise.all([
+  [STATE.teams, STATE.categories, STATE.postes, STATE.rateSettings, STATE.insuranceProfiles] = await Promise.all([
     apiSoft('teams', [], true, { season_id: STATE.seasonId }),
     apiSoft('team_categories', []),
     apiSoft('postes', []),
-    apiSoft('payroll_rules', [], !!MFC.payrollView),
+    apiSoft('payroll_rate_settings', [], !!MFC.payrollView),
+    apiSoft('insurance_profiles', [], !!MFC.payrollView),
   ]);
 }
 
@@ -675,9 +694,7 @@ function catNode(cat, teams){
     <div onclick="toggleCat(${cat.id})" style="display:flex;align-items:center;gap:10px;padding:14px 18px;cursor:pointer;font-weight:700;font-size:14px;background:#FAFAF7;color:var(--noir)">
       <span style="display:inline-block;width:12px;transition:transform .15s;transform:rotate(${open?90:0}deg)">▸</span>
       ${esc(cat.name)}
-      <span class="pill" style="background:var(--jaune-soft);color:#7A6000">${chf(categoryTotal(teams, cat.id))} CHF/mois</span>
-      <span class="pill" style="background:var(--ligne-2);color:var(--noir-3)">${chf(categoryTotal(teams, cat.id)*12)} CHF/an</span>
-      ${categoryCotisationTotal(teams) > 0 ? `<span class="pill" style="background:var(--vert-bg);color:var(--vert)">${chf(categoryCotisationTotal(teams))} CHF cotis.</span>` : ''}
+      <span class="pill" style="background:var(--jaune-soft);color:#7A6000">${chf(categoryTotal(teams, cat.id)*12)} CHF/an</span>
       <span style="margin-left:auto;font-weight:500;font-size:12px;color:var(--gris)">${teams.length} équipe${teams.length>1?'s':''}</span>
     </div>
     ${open ? `<div>
@@ -928,7 +945,7 @@ async function importFile(action, file, onDone){
 
 /* ============================================================ EMPLOYÉS */
 
-let EMP_FILTER = { search: '', poste: '', team: '', season: '' };
+let EMP_FILTER = { search: '', poste: '', team: '', season: '', paiement: '' };
 
 async function renderEmployees(c){
   document.getElementById('topbar-actions').innerHTML = `
@@ -957,6 +974,11 @@ async function renderEmployees(c){
           <option value="">Tous les postes</option>
           ${STATE.postes.map(p=>`<option value="${p.id}" ${EMP_FILTER.poste==p.id?'selected':''}>${esc(p.label)}</option>`).join('')}
         </select>
+        <select id="emp-paiement-filter">
+          <option value="">Mensuel et semestriel</option>
+          <option value="mensuel" ${EMP_FILTER.paiement==='mensuel'?'selected':''}>Paiement mensuel</option>
+          <option value="semestriel" ${EMP_FILTER.paiement==='semestriel'?'selected':''}>Paiement semestriel</option>
+        </select>
       </div>
     </div>
     <div class="card"><div class="card-body pad0" id="emp-table"></div></div>
@@ -965,6 +987,7 @@ async function renderEmployees(c){
   document.getElementById('emp-season-filter').onchange = e => { EMP_FILTER.season = e.target.value; renderEmployeeTable(); };
   document.getElementById('emp-team-filter').onchange = e => { EMP_FILTER.team = e.target.value; renderEmployeeTable(); };
   document.getElementById('emp-poste-filter').onchange = e => { EMP_FILTER.poste = e.target.value; renderEmployeeTable(); };
+  document.getElementById('emp-paiement-filter').onchange = e => { EMP_FILTER.paiement = e.target.value; renderEmployeeTable(); };
   renderEmployeeTable();
 }
 
@@ -982,19 +1005,24 @@ function renderEmployeeTable(){
     if (EMP_FILTER.season && !asg.length) return false;
     if (EMP_FILTER.poste && !asg.some(a => String(a.poste_id) === String(EMP_FILTER.poste))) return false;
     if (EMP_FILTER.team && !asg.some(a => String(a.team_id) === String(EMP_FILTER.team))) return false;
+    if (EMP_FILTER.paiement && (e.paiement || 'mensuel') !== EMP_FILTER.paiement) return false;
     if (!q) return true;
     const hay = normalizeFr(`${e.first_name} ${e.last_name} ${e.email}`);
     return hay.includes(q);
   });
   list.sort((a, b) => normalizeFr(a.last_name).localeCompare(normalizeFr(b.last_name)) || normalizeFr(a.first_name).localeCompare(normalizeFr(b.first_name)));
-  el.innerHTML = list.length ? `<table><thead><tr><th>Nom</th><th>Affectation${EMP_FILTER.season?'':' (toutes saisons)'}</th><th>E-mail</th><th>Téléphone</th><th>Indemnités / mois${currentSeason?' ('+esc(currentSeason.label)+')':''}</th><th></th></tr></thead><tbody>
-    ${list.map(ee => { const asg = empFilterAssignments(ee); return `<tr>
-      <td><a href="javascript:void(0)" data-obj="${esc(JSON.stringify(ee))}" onclick="employeeDetailModal(JSON.parse(this.dataset.obj))" style="font-weight:700;color:var(--noir)">${esc(ee.first_name)} ${esc(ee.last_name)}</a>${ee.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactif</span>':''}${(ee.annuaire && ee.annuaire.other_qualities.length)?ee.annuaire.other_qualities.map(q=>` <span class="pill" style="background:var(--gris-bg,#f1f1f1);color:var(--gris)" title="Aussi ${esc(q)} dans l'annuaire du club">${esc(q)}</span>`).join(''):''}${(ee.annuaire && ee.annuaire.a_verifier)?' <span class="pill" style="background:var(--orange-bg,#fff3e0);color:var(--orange,#b26a00)" title="Fiche annuaire à vérifier (doublon probable)">à vérifier</span>':''}</td>
-      <td>${asg.length ? asg.map(a=>`<span class="pill" style="background:var(--bleu-bg);color:var(--bleu);margin:0 4px 4px 0;display:inline-flex;align-items:center;gap:4px">${esc(a.poste_label)}${a.team_name?' · '+esc(a.team_name):(a.category_name?' · '+esc(a.category_name)+' (catégorie)':'')}${!EMP_FILTER.season?' · '+esc(a.season_label||''):''}</span>`).join('') : '<span style="color:var(--gris-2)">—</span>'}
-      </td>
+  /* Ligne volontairement fine : les affectations (équipe, poste, saison) restent à un clic,
+     dans la fiche détaillée, plutôt qu'étalées ici en pills. */
+  el.innerHTML = list.length ? `<table><thead><tr><th>Nom</th><th>E-mail</th><th>Téléphone</th><th>Indemnité${currentSeason?' ('+esc(currentSeason.label)+')':''}</th><th></th></tr></thead><tbody>
+    ${list.map(ee => {
+      const isSemestriel = (ee.paiement || 'mensuel') === 'semestriel';
+      const periodValue = isSemestriel ? Number(ee.total_indemnites) / 2 : Number(ee.total_indemnites) / 12;
+      const periodSuffix = isSemestriel ? 'CHF/sem.' : 'CHF/mois';
+      return `<tr>
+      <td><a href="javascript:void(0)" data-obj="${esc(JSON.stringify(ee))}" onclick="employeeDetailModal(JSON.parse(this.dataset.obj))" style="color:var(--noir)"><strong>${esc(ee.last_name)}</strong>${ee.first_name?' '+esc(ee.first_name):''}</a>${ee.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactif</span>':''}${(ee.annuaire && ee.annuaire.other_qualities.length)?ee.annuaire.other_qualities.map(q=>` <span class="pill" style="background:var(--gris-bg,#f1f1f1);color:var(--gris)" title="Aussi ${esc(q)} dans l'annuaire du club">${esc(q)}</span>`).join(''):''}${(ee.annuaire && ee.annuaire.a_verifier)?' <span class="pill" style="background:var(--orange-bg,#fff3e0);color:var(--orange,#b26a00)" title="Fiche annuaire à vérifier (doublon probable)">à vérifier</span>':''}</td>
       <td style="font-size:12.5px;color:var(--gris)">${esc(ee.email)}</td>
       <td style="font-size:12.5px;color:var(--gris)">${esc(ee.phone)}</td>
-      <td><strong>${chf(ee.total_indemnites)} CHF</strong></td>
+      <td><strong>${chf(periodValue)} ${periodSuffix}</strong></td>
       <td><div class="tbl-actions">
         <button class="icon-btn" data-obj="${esc(JSON.stringify(ee))}" onclick="employeeModal(JSON.parse(this.dataset.obj))">✎</button>
         <button class="icon-btn" onclick="indemniteModal(${ee.id})" title="Indemnité personnalisée">CHF</button>
@@ -1013,20 +1041,26 @@ async function employeeDetailModal(ee, seasonId){
   const periodValue = isSemestriel ? totalAnnuel / 2 : totalAnnuel / 12;
   const periodSuffix = isSemestriel ? 'CHF/semestre' : 'CHF/mois';
   const currentSeason = STATE.seasons.find(sn => sn.id === seasonId);
-  const enabledRuleIds = await api('employee_payroll_rules', { params: { employee_id: ee.id } });
-  const rulesBlock = PAYROLL_CATEGORIES.map(cat => {
-    const rules = (STATE.payrollRules || []).filter(r => r.category === cat.id && r.active == 1);
-    if (!rules.length) return '';
-    return `
-      <div style="margin-bottom:10px">
-        <div style="font-size:11.5px;font-weight:700;color:var(--noir-3);margin-bottom:4px">${esc(cat.label)}</div>
-        ${rules.map(r => `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer">
-          <input type="checkbox" data-rule-id="${r.id}" class="pr-toggle" ${enabledRuleIds.includes(r.id)?'checked':''} onchange="togglePayrollRule(${ee.id})">
-          <span>${esc(r.label)} <span style="color:var(--gris)">(${r.type==='percent'?chf(r.valeur)+' %':chf(r.valeur)+' CHF'})</span></span>
-        </label>`).join('')}
-      </div>
-    `;
-  }).join('');
+  /* Récapitulatif en lecture seule des affiliations portées par la fiche. Les lignes à taux
+     partagé se lisent depuis le réglage global de l'année en cours (Paramètres > Paie), les
+     lignes personnelles (LPP, impôt source) depuis la fiche elle-même. */
+  const rs = currentRateSettings();
+  const socialBlock = MFC.payrollView ? SOCIAL_LINES.filter(l => Number(ee[l.k + '_subject']) === 1).map(l => {
+    const shared = SHARED_SOCIAL_LINES.some(s => s.k === l.k);
+    const rate = shared ? (Number(rs[l.k + '_rate']) || 0) : (Number(ee[l.k + '_rate']) || 0);
+    const amt = shared ? 0 : (Number(ee[l.k + '_amount']) || 0);
+    const val = rate > 0 ? chf(rate) + ' %' : (amt > 0 ? chf(amt) + ' CHF' : 'à chiffrer');
+    return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
+      <span>${esc(l.label)}</span><span style="color:${rate>0||amt>0?'var(--noir)':'var(--orange,#b26a00)'}">${val}</span></div>`;
+  }).join('') : '';
+  const missingDocs = DOC_TYPES.filter(t => t.required &&
+    Number(((ee.documents || []).find(d => d.doc_type === t.k) || {}).received) !== 1);
+  // person_link exige payroll.view côté serveur : sans ce droit, inutile de tenter l'appel.
+  let personLinkUrl = null;
+  if (MFC.payrollView) {
+    try { personLinkUrl = (await api('person_link', { params: { person_type: 'employee', person_id: ee.id } })).url; }
+    catch (e) { /* lien non affiché si l'appel échoue, le reste de la fiche reste utilisable */ }
+  }
   openModal(`
     <h3>${esc(ee.first_name)} ${esc(ee.last_name)}</h3>
     <p class="hint" style="margin:0 0 2px">${esc(ee.phone) || '—'}</p>
@@ -1060,26 +1094,28 @@ async function employeeDetailModal(ee, seasonId){
         <span style="font-weight:700">${periodLabel}</span>
         <strong>${chf(periodValue)} ${periodSuffix} <span style="font-weight:500;color:var(--gris)">(${chf(totalAnnuel)} CHF/an)</span></strong>
       </div>` : ''}
-    <details style="margin:16px 0 8px">
-      <summary style="font-size:13px;font-weight:700;cursor:pointer">Règles de paie activées</summary>
-      <div id="pr-rules-${ee.id}" style="margin-top:8px">${rulesBlock || `<div class="empty" style="padding:10px 0">Aucune règle configurée (Paramètres &gt; Paie).</div>`}</div>
-    </details>
-    <h4 style="font-size:13px;font-weight:700;margin:16px 0 8px">Décomptes</h4>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0">
-      <span class="hint" style="margin:0">Génère la fiche de paie ${isSemestriel?'semestrielle':'mensuelle'} de cet employé (indemnités et retenues ajustables avant impression).</span>
-      <button class="btn btn-dark btn-sm" data-obj="${esc(JSON.stringify(ee))}" onclick="openPayslip(${ee.id}, ${seasonId})" style="white-space:nowrap">Générer un décompte</button>
+    ${missingDocs.length ? `<div style="display:flex;gap:10px;padding:11px 13px;border-radius:10px;background:var(--orange-bg,#fff3e0);margin:16px 0 8px;font-size:12.5px;line-height:1.45">
+      <span>⚠</span><span><strong>Dossier d'engagement incomplet</strong><br>Pièce${missingDocs.length>1?'s':''} manquante${missingDocs.length>1?'s':''} : ${missingDocs.map(t=>esc(t.label)).join(', ')}.</span>
+    </div>` : ''}
+    ${MFC.payrollView ? `<details style="margin:16px 0 8px">
+      <summary style="font-size:13px;font-weight:700;cursor:pointer">Assurances sociales retenues</summary>
+      <div style="margin-top:8px">${socialBlock || `<div class="empty" style="padding:10px 0">Aucune affiliation renseignée (fiche employé &gt; Assurances sociales).</div>`}</div>
+    </details>` : ''}
+    <h4 style="font-size:13px;font-weight:700;margin:16px 0 8px">Dossier personnel</h4>
+    <div style="padding:4px 0">
+      ${personLinkUrl
+        ? `<div style="display:flex;align-items:center;gap:10px">
+             <a href="${esc(personLinkUrl)}" target="_blank" style="font-size:12.5px;color:var(--bleu);word-break:break-all;flex:1">${esc(personLinkUrl)}</a>
+             <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(personLinkUrl)}');this.textContent='Copié'" style="white-space:nowrap">Copier</button>
+           </div>
+           <p class="hint" style="margin-top:6px">Fiches de paie, pièces d'engagement et documents de ${esc(ee.first_name)}. La génération d'un décompte se fait depuis l'onglet Paiements.</p>`
+        : `<div class="empty" style="padding:10px 0">Lien indisponible.</div>`}
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
       <button class="btn btn-primary" data-obj="${esc(JSON.stringify(ee))}" onclick="closeModal(); employeeModal(JSON.parse(this.dataset.obj))">Modifier la fiche</button>
     </div>
   `, true);
-}
-async function togglePayrollRule(employeeId){
-  const container = document.getElementById(`pr-rules-${employeeId}`);
-  const ruleIds = Array.from(container.querySelectorAll('.pr-toggle:checked')).map(el => Number(el.dataset.ruleId));
-  try { await api('employee_payroll_rules', { method: 'POST', body: { employee_id: employeeId, rule_ids: ruleIds } }); }
-  catch (e) { alert(e.message); }
 }
 function openPayslip(employeeId, seasonId){
   window.open(location.pathname + '#payslip-' + employeeId + '-' + seasonId, '_blank');
@@ -1095,35 +1131,601 @@ async function updateEmployeePaiement(id, paiement, seasonId){
 }
 function normalizeFr(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
 
+/* ============================================================ FICHE EMPLOYÉ
+ *
+ * Dossier RH complet, organisé en onglets qui suivent l'ordre réel d'un engagement :
+ * on identifie la personne, on vérifie son droit de travailler, on signe un contrat,
+ * on l'affilie aux assurances, puis on réunit les pièces.
+ *
+ * Les valeurs saisies vivent dans EMP_FORM et non dans le DOM : changer d'onglet
+ * redessine le contenu, et lire les champs seulement au moment d'enregistrer perdrait
+ * tout ce qui a été tapé dans les autres onglets.
+ */
+
+const CIVIL_STATUS = [
+  ['celibataire', 'Célibataire'], ['marie', 'Marié·e'], ['partenariat', 'Partenariat enregistré'],
+  ['separe', 'Séparé·e'], ['divorce', 'Divorcé·e'], ['veuf', 'Veuf·ve'],
+];
+const PERMIT_TYPES = [
+  ['', 'Aucun (ressortissant·e suisse)'], ['B', 'B — séjour'], ['C', 'C — établissement'],
+  ['G', 'G — frontalier'], ['L', 'L — courte durée'], ['Ci', 'Ci — conjoint diplomate'],
+  ['F', 'F — admission provisoire'], ['S', 'S — protection'],
+];
+const CONTRACT_TYPES = [
+  ['cdi', 'CDI — durée indéterminée'], ['cdd', 'CDD — durée déterminée'], ['stage', 'Stage'],
+  ['apprentissage', 'Apprentissage'], ['sur_appel', 'Travail sur appel / à l\'heure'],
+  ['mandat', 'Mandat'], ['benevole_indemnise', 'Bénévole indemnisé'],
+];
+/* Deux régimes de retenue (revu le 2026-08-14, suite au retour de Valentino) :
+   - Lignes à taux PARTAGÉ (avs, ac, amat, aanp, laac, ijm) : même taux pour tout le monde
+     un mois donné, révisé une fois par année civile (Paramètres > Paie). L'employé ne
+     porte que l'assujettissement.
+   - Lignes PERSONNELLES (lpp, is) : taux ou montant propres à la personne (âge/plan,
+     situation familiale), toujours saisis sur sa fiche.
+   SOCIAL_LINES reste la liste complète, utile partout où seul le k/label importe
+   (construction des booléens, résumé, décompte). */
+const SHARED_SOCIAL_LINES = [
+  { k: 'avs',  label: 'AVS / AI / APG' },
+  { k: 'ac',   label: 'Assurance chômage (AC)' },
+  { k: 'amat', label: 'Assurance maternité (AMat GE)' },
+  { k: 'aanp', label: 'Accidents non professionnels (AANP)' },
+  { k: 'laac', label: 'Accidents complémentaire (LAAC)' },
+  { k: 'ijm',  label: 'Indemnités journalières maladie' },
+];
+const PERSONAL_SOCIAL_LINES = [
+  { k: 'lpp', label: 'Prévoyance professionnelle (LPP)' },
+  { k: 'is',  label: 'Impôt à la source' },
+];
+const SOCIAL_LINES = [...SHARED_SOCIAL_LINES, ...PERSONAL_SOCIAL_LINES];
+
+/** Formate un taux en %, jusqu'à 3 décimales (contrairement à chfSmart, pensé pour des
+ * montants CHF à 2 décimales). Nécessaire pour l'AMat genevois, 0,029 % : arrondi à 2
+ * décimales il s'afficherait "0,03", un écart trompeur sur un taux, pas sur un montant. */
+function pctSmart(n){
+  const v = Math.round((Number(n)||0) * 1000) / 1000;
+  const isWhole = Math.abs(v - Math.round(v)) < 0.0001;
+  return v.toLocaleString('fr-CH', { minimumFractionDigits: isWhole ? 0 : 1, maximumFractionDigits: 3 });
+}
+
+/** Taux partagés de l'année civile en cours, ou des zéros si l'année n'a pas encore
+ * été paramétrée (plutôt que de faire planter l'affichage). */
+function currentRateSettings(){
+  const y = new Date().getFullYear();
+  return (STATE.rateSettings || []).find(r => r.year === y)
+    || { year: y, avs_rate: 0, ac_rate: 0, amat_rate: 0, aanp_rate: 0, laac_rate: 0, ijm_rate: 0 };
+}
+/* Liste FIXE et volontairement courte : les seules pièces qu'on attend systématiquement de
+ * chaque engagement, avec upload dédié. Tout le reste (certificat, diplôme, échange avec une
+ * assurance...) va dans le dossier libre juste en dessous, alimenté au fil du temps. */
+const DOC_TYPES = [
+  { k: 'casier_special',        label: 'Extrait spécial du casier judiciaire', required: true, expires: true,
+    hint: 'Pièce qui conditionne l\'encadrement de mineurs. À renouveler périodiquement.' },
+  { k: 'contrat_signe',         label: 'Contrat de travail signé',   required: true },
+  { k: 'piece_identite',        label: 'Copie pièce d\'identité',    required: true },
+  { k: 'permis_sejour',         label: 'Permis de séjour / travail', required: false, expires: true,
+    hint: 'Uniquement pour les personnes non suisses.' },
+  { k: 'attestation_avs',       label: 'Attestation AVS',            required: true },
+  { k: 'coordonnees_bancaires', label: 'Coordonnées bancaires',      required: true },
+];
+
+let EMP_FORM = {};
+let EMP_TAB = 'perso';
+
+const EMP_TABS = [
+  ['perso',      'Données personnelles'],
+  ['sejour',     'Séjour & impôt'],
+  ['contrat',    'Contrat'],
+  ['assurances', 'Assurances sociales'],
+  ['enfants',    'Enfants'],
+  ['onboarding', 'Pièces d\'engagement'],
+];
+
+/** Recopie dans EMP_FORM les champs actuellement à l'écran, avant de redessiner. */
+function captureEmployeeForm(){
+  document.querySelectorAll('#emp-form-body [data-ef]').forEach(el => {
+    EMP_FORM[el.dataset.ef] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+}
+function switchEmployeeTab(t){
+  captureEmployeeForm();
+  EMP_TAB = t;
+  document.querySelectorAll('#emp-tabs [data-et]').forEach(el => el.classList.toggle('active', el.dataset.et === t));
+  renderEmployeeFormBody();
+}
+
+function efText(field, label, opts = {}){
+  let v = EMP_FORM[field] ?? '';
+  // Un champ numérique jamais rempli vaut 0 en base : l'afficher mettrait un « 0 » dans
+  // chaque case vide de la fiche. Une case vide se réenregistre de toute façon en 0.
+  if (opts.type === 'number' && Number(v) === 0) v = '';
+  return `<div class="field"><label>${esc(label)}</label>
+    <input data-ef="${field}" type="${opts.type || 'text'}" ${opts.step?`step="${opts.step}"`:''} value="${esc(v)}" placeholder="${esc(opts.ph || '')}">
+    ${opts.hint ? `<div class="hint">${esc(opts.hint)}</div>` : ''}</div>`;
+}
+function efSelect(field, label, options, opts = {}){
+  const v = String(EMP_FORM[field] ?? '');
+  return `<div class="field"><label>${esc(label)}</label>
+    <select data-ef="${field}">
+      ${opts.empty !== false && !options.some(o => o[0] === '') ? `<option value="" ${v===''?'selected':''}>—</option>` : ''}
+      ${options.map(o => `<option value="${esc(o[0])}" ${v===String(o[0])?'selected':''}>${esc(o[1])}</option>`).join('')}
+    </select>
+    ${opts.hint ? `<div class="hint">${esc(opts.hint)}</div>` : ''}</div>`;
+}
+function efCheck(field, label){
+  return `<div class="field check-row"><input type="checkbox" data-ef="${field}" id="ef-${field}" ${EMP_FORM[field]?'checked':''}><label style="margin:0" for="ef-${field}">${esc(label)}</label></div>`;
+}
+function efSection(title, sub){
+  return `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin:20px 0 10px;padding-top:14px;border-top:1px solid var(--ligne-2)">${esc(title)}</div>
+    ${sub ? `<p class="hint" style="margin:-6px 0 12px">${esc(sub)}</p>` : ''}`;
+}
+
 function employeeModal(ee){
+  EMP_TAB = 'perso';
+  // Copie de travail : la fiche d'origine n'est modifiée qu'après un enregistrement réussi.
+  EMP_FORM = {};
+  const bools = ['active','is_frontalier','tax_at_source','tax_church','spouse_works',
+                 ...SOCIAL_LINES.map(l => l.k + '_subject')];
+  // Clés attachées par le serveur qui ne sont pas des champs de formulaire — jamais recopiées
+  // telles quelles dans EMP_FORM, sous peine d'écraser insurance_profile_id (un id) par l'objet
+  // insurance_profile résolu, ou d'envoyer ces blocs au serveur au moment d'enregistrer.
+  const NON_FIELD_KEYS = ['assignments', 'indemnites_custom', 'annuaire', 'children', 'documents',
+                           'files', 'insurance_profile', 'rate_settings'];
+  if (ee) {
+    Object.keys(ee).forEach(k => {
+      if (NON_FIELD_KEYS.includes(k)) return;
+      EMP_FORM[k] = bools.includes(k) ? Number(ee[k]) === 1 : ee[k];
+    });
+  } else {
+    EMP_FORM = { active: true, country: 'CH', lang: 'fr', paiement: 'mensuel', payments_per_year: 12, contract_type: 'cdi' };
+  }
+  EMP_FORM.__id = ee ? ee.id : null;
+  EMP_FORM.__assignments = ee ? ee.assignments : [];
+  EMP_FORM.__children = ee ? (ee.children || []) : [];
+  EMP_FORM.__documents = ee ? (ee.documents || []) : [];
+  EMP_FORM.__files = ee ? (ee.files || []) : [];
+
   openModal(`
-    <h3>${ee ? 'Modifier' : 'Nouvel'} employé</h3>
+    <h3>${ee ? `${esc(ee.first_name)} ${esc(ee.last_name)} — fiche employé` : 'Nouvel employé'}</h3>
     <div class="modal-error"></div>
-    <div class="field-row">
-      <div class="field"><label>Prénom</label><input id="em-first" value="${ee?esc(ee.first_name):''}"></div>
-      <div class="field"><label>Nom</label><input id="em-last" value="${ee?esc(ee.last_name):''}"></div>
+    <div class="tabs" id="emp-tabs" style="margin-bottom:14px">
+      ${EMP_TABS.map(([k, l]) => `<div class="tab ${k==='perso'?'active':''}" data-et="${k}" onclick="switchEmployeeTab('${k}')">${esc(l)}</div>`).join('')}
     </div>
-    <div class="field"><label>E-mail</label><input id="em-email" value="${ee?esc(ee.email):''}"></div>
-    <div class="field-row">
-      <div class="field"><label>Téléphone</label><input id="em-phone" value="${ee?esc(ee.phone):''}"></div>
-      <div class="field"><label>IBAN</label><input id="em-iban" value="${ee?esc(ee.iban):''}"></div>
-    </div>
-    ${ee ? `<div class="field check-row"><input type="checkbox" id="em-active" ${ee.active==1?'checked':''}><label style="margin:0" for="em-active">Employé actif</label></div>` : ''}
+    <div id="emp-form-body"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-      <button class="btn btn-primary" onclick="saveEmployee(${ee?ee.id:'null'})">Enregistrer</button>
+      <button class="btn btn-primary" onclick="saveEmployee()">Enregistrer</button>
     </div>
-  `);
+  `, true);
+  renderEmployeeFormBody();
 }
-async function saveEmployee(id){
-  const first_name = document.getElementById('em-first').value.trim();
-  const last_name = document.getElementById('em-last').value.trim();
-  if (!last_name) return modalErr('Le nom est requis.');
-  const payload = { first_name, last_name, email: document.getElementById('em-email').value.trim(),
-    phone: document.getElementById('em-phone').value.trim(), iban: document.getElementById('em-iban').value.trim() };
+
+function renderEmployeeFormBody(){
+  const el = document.getElementById('emp-form-body');
+  if (!el) return;
+  const canPayroll = !!MFC.payrollView;
+  if (EMP_TAB === 'perso')            el.innerHTML = empTabPerso(canPayroll);
+  else if (EMP_TAB === 'sejour')      el.innerHTML = empTabSejour(canPayroll);
+  else if (EMP_TAB === 'contrat')     el.innerHTML = empTabContrat(canPayroll);
+  else if (EMP_TAB === 'assurances')  el.innerHTML = empTabAssurances(canPayroll);
+  else if (EMP_TAB === 'enfants')     el.innerHTML = empTabEnfants(canPayroll);
+  else                                el.innerHTML = empTabOnboarding();
+}
+
+function empNeedsSaveFirst(what){
+  return `<div class="empty" style="padding:30px 20px">Enregistre d'abord la fiche pour pouvoir y ajouter ${esc(what)}.</div>`;
+}
+function empNoRight(){
+  return `<div class="empty" style="padding:30px 20px">Tu n'as pas le droit de consulter les données de paie.</div>`;
+}
+
+function empTabPerso(canPayroll){
+  return `
+    <div class="field-row">
+      ${efText('first_name', 'Prénom')}
+      ${efText('last_name', 'Nom')}
+    </div>
+    <div class="field-row">
+      ${efText('birth_name', 'Nom de naissance', { hint: 'À renseigner seulement s\'il diffère du nom actuel (exigé par l\'AVS).' })}
+      ${canPayroll ? efText('avs_number', 'N° AVS', { ph: '756.0000.0000.00' }) : ''}
+    </div>
+    <div class="field-row">
+      ${efText('birth_date', 'Date de naissance', { type: 'date' })}
+      ${efSelect('gender', 'Genre', [['f','Féminin'],['m','Masculin'],['autre','Autre']])}
+    </div>
+    <div class="field-row">
+      ${efText('nationality', 'Nationalité', { ph: 'Suisse' })}
+      ${efSelect('lang', 'Langue de correspondance', [['fr','Français'],['de','Allemand'],['it','Italien'],['en','Anglais']], { empty: false })}
+    </div>
+    <div class="field-row">
+      ${efSelect('civil_status', 'État civil', CIVIL_STATUS)}
+      ${efText('civil_status_since', 'Depuis le', { type: 'date', hint: 'Un changement d\'état civil modifie le barème d\'impôt source dès le mois suivant.' })}
+    </div>
+
+    ${efSection('Coordonnées')}
+    ${efText('email', 'E-mail')}
+    <div class="field-row">
+      ${efText('phone', 'Téléphone')}
+      ${efText('mobile', 'Mobile')}
+    </div>
+    ${efText('street', 'Rue et numéro')}
+    <div class="field-row">
+      ${efText('zip', 'NPA')}
+      ${efText('city', 'Localité')}
+    </div>
+    <div class="field-row">
+      ${efText('canton', 'Canton de domicile', { ph: 'GE', hint: 'Détermine le barème d\'impôt à la source.' })}
+      ${efText('country', 'Pays', { ph: 'CH' })}
+    </div>
+
+    ${efSection('Personne à contacter en cas d\'urgence')}
+    <div class="field-row">
+      ${efText('emergency_name', 'Nom')}
+      ${efText('emergency_phone', 'Téléphone')}
+    </div>
+
+    ${efSection('Statut')}
+    ${efCheck('active', 'Employé actif')}
+  `;
+}
+
+function empTabSejour(canPayroll){
+  return `
+    <p class="hint" style="margin-bottom:14px">Laisse le permis vide pour une personne de nationalité suisse.</p>
+    <div class="field-row">
+      ${efSelect('permit_type', 'Permis de séjour / travail', PERMIT_TYPES, { empty: false })}
+      ${efText('permit_expiry', 'Échéance du permis', { type: 'date', hint: 'Suivie dans les pièces d\'engagement.' })}
+    </div>
+    ${efCheck('is_frontalier', 'Travailleur frontalier')}
+    <div class="field-row">
+      ${efText('residence_country', 'Pays de résidence', { ph: 'France', hint: 'Frontaliers uniquement.' })}
+      ${efText('arrival_ch_date', 'Date d\'arrivée en Suisse', { type: 'date' })}
+    </div>
+
+    ${efSection('Imposition à la source', canPayroll ? 'Un frontalier est imposé dans le canton de travail, les autres dans leur canton de domicile.' : '')}
+    ${!canPayroll ? empNoRight() : `
+      ${efCheck('tax_at_source', 'Assujetti à l\'impôt à la source')}
+      <div class="field-row">
+        ${efText('tax_canton', 'Canton d\'imposition', { ph: 'GE' })}
+        ${efText('tax_bareme', 'Code de barème', { ph: 'A0N', hint: 'Lettre du tarif, nombre de charges, puis Y ou N pour l\'impôt ecclésiastique.' })}
+      </div>
+      ${efCheck('tax_church', 'Soumis à l\'impôt ecclésiastique')}
+      ${efCheck('spouse_works', 'Le conjoint exerce une activité lucrative')}
+      ${efText('tax_children', 'Nombre de charges reconnues', { type: 'number', hint: 'Se recoupe avec l\'onglet Enfants, qui sert lui aux allocations familiales.' })}
+    `}
+  `;
+}
+
+function empTabContrat(canPayroll){
+  /* La rémunération n'est pas saisie ici : elle vient des affectations (poste × équipe),
+     seule source de vérité. La montrer en lecture seule évite qu'on la ressaisisse. */
+  const rows = (EMP_FORM.__assignments || []).filter(a => Number(a.season_id) === Number(STATE.seasonId));
+  const totalAnnuel = rows.reduce((s, a) => s + Number(a.montant), 0);
+  const season = STATE.seasons.find(sn => sn.id === STATE.seasonId);
+  return `
+    <div class="field-row">
+      ${efText('contract_start', 'Date de début', { type: 'date' })}
+      ${efText('contract_end', 'Date de fin', { type: 'date', hint: 'CDD, stage et apprentissage uniquement.' })}
+    </div>
+    <div class="field-row">
+      ${efSelect('contract_type', 'Type de contrat', CONTRACT_TYPES, { empty: false })}
+      ${efText('activity_rate', 'Taux d\'activité (%)', { type: 'number', step: '1', ph: '60' })}
+    </div>
+    <div class="field-row">
+      ${efText('job_title', 'Poste / fonction')}
+      ${efText('department', 'Département / service')}
+    </div>
+    <div class="field-row">
+      ${efText('workplace', 'Lieu de travail', { ph: 'Stade des Vergers, Meyrin' })}
+      ${efText('manager_name', 'Supérieur hiérarchique')}
+    </div>
+    <div class="field-row">
+      ${efText('trial_months', 'Période d\'essai (mois)', { type: 'number', step: '1' })}
+      ${efText('notice_period', 'Délai de congé', { ph: '1 mois pour la fin d\'un mois' })}
+    </div>
+    <div class="field-row">
+      ${efText('vacation_days', 'Vacances (jours/an)', { type: 'number', step: '0.5' })}
+      ${canPayroll ? efText('payments_per_year', 'Versements par an', { type: 'number', step: '1', hint: '13 si un 13e salaire est prévu.' }) : ''}
+    </div>
+    ${efText('cct', 'Convention collective applicable', { ph: 'Aucune' })}
+
+    ${efSection('Rémunération', 'Définie par les affectations (poste × équipe), dans l\'onglet Équipes. Affichée ici pour référence.')}
+    ${rows.length ? `
+      ${rows.map(a => `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
+        <span>${esc(a.poste_label)}${a.team_name?' — '+esc(a.team_name):(a.category_name?' — '+esc(a.category_name)+' (catégorie)':'')}</span>
+        <strong>${chf(a.montant)} CHF/an</strong></div>`).join('')}
+      <div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:700;font-size:13.5px">
+        <span>Total ${season?esc(season.label):''}</span><strong>${chf(totalAnnuel)} CHF/an</strong></div>
+    ` : `<div class="empty" style="padding:14px 0">Aucune affectation pour la saison affichée.</div>`}
+
+    ${efSection('Versement')}
+    ${efSelect('paiement', 'Échéance de versement', [['mensuel','Mensuel'],['semestriel','Semestriel']], { empty: false })}
+    ${efText('iban', 'IBAN')}
+    <div class="field-row">
+      ${efText('bank_name', 'Banque')}
+      ${efText('account_holder', 'Titulaire du compte', { hint: 'Seulement si différent de l\'employé.' })}
+    </div>
+
+    ${efSection('Notes internes')}
+    <div class="field"><textarea data-ef="notes" rows="3" placeholder="Remarques RH">${esc(EMP_FORM.notes ?? '')}</textarea></div>
+  `;
+}
+
+/** Recopie l'écran avant de le redessiner : nécessaire ici parce que le choix du profil
+ * d'assurance doit survivre au redessin qui affiche ses valeurs résolues juste en dessous. */
+function empRefreshAssurances(){ captureEmployeeForm(); renderEmployeeFormBody(); }
+
+function empTabAssurances(canPayroll){
+  if (!canPayroll) return empNoRight();
+  const rs = currentRateSettings();
+  const profile = (STATE.insuranceProfiles || []).find(p => p.id === Number(EMP_FORM.insurance_profile_id));
+  return `
+    <p class="hint" style="margin-bottom:14px">Les six premières lignes ont le même taux pour tout le monde, révisé une fois par année civile (Paramètres &gt; Paie) : coche seulement si la personne y est assujettie. LPP et impôt à la source restent propres à chacun.</p>
+
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin-bottom:6px">Taux partagés — année ${rs.year}</div>
+    ${SHARED_SOCIAL_LINES.map(l => `
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--ligne-2);font-size:13px;cursor:pointer;margin:0">
+        <span style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-ef="${l.k}_subject" ${EMP_FORM[l.k+'_subject']?'checked':''}>${esc(l.label)}</span>
+        <span style="color:var(--gris)">${pctSmart(rs[l.k+'_rate'] || 0)} %</span>
+      </label>
+    `).join('')}
+    ${SHARED_SOCIAL_LINES.every(l => !Number(rs[l.k+'_rate'])) ? `<p class="hint" style="margin-top:8px;color:var(--orange,#b26a00)">Aucun taux saisi pour ${rs.year} — va les paramétrer dans Paramètres &gt; Paie.</p>` : ''}
+
+    ${efSection('LPP et impôt à la source', 'Personnels : taux ou montant propres à cette personne. Le taux l\'emporte si les deux sont remplis.')}
+    <div style="display:grid;grid-template-columns:1fr 110px 130px;gap:10px;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);padding-bottom:6px;border-bottom:1px solid var(--ligne-2)">
+      <span>Affiliation</span><span>Taux (%)</span><span>ou montant (CHF)</span>
+    </div>
+    ${PERSONAL_SOCIAL_LINES.map(l => `
+      <div style="display:grid;grid-template-columns:1fr 110px 130px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--ligne-2)">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
+          <input type="checkbox" data-ef="${l.k}_subject" ${EMP_FORM[l.k+'_subject']?'checked':''}>
+          <span>${esc(l.label)}</span>
+        </label>
+        <input data-ef="${l.k}_rate" type="number" step="0.01" value="${esc(EMP_FORM[l.k+'_rate'] || '')}" placeholder="0.00" style="padding:8px 10px;border:1.5px solid var(--ligne);border-radius:9px;text-align:right">
+        <input data-ef="${l.k}_amount" type="number" step="0.05" value="${esc(EMP_FORM[l.k+'_amount'] || '')}" placeholder="0.00" style="padding:8px 10px;border:1.5px solid var(--ligne);border-radius:9px;text-align:right">
+      </div>
+    `).join('')}
+
+    ${efSection('Profil d\'assurance', 'Assureur LAA, institution LPP, caisse d\'allocations... paramétrés une fois pour tout le club (Paramètres > Paie).')}
+    <div class="field">
+      <label>Profil</label>
+      <select data-ef="insurance_profile_id" onchange="empRefreshAssurances()">
+        <option value="">— Aucun —</option>
+        ${(STATE.insuranceProfiles || []).map(p => `<option value="${p.id}" ${Number(EMP_FORM.insurance_profile_id)===p.id?'selected':''}>${esc(p.label)}</option>`).join('')}
+      </select>
+      ${!(STATE.insuranceProfiles || []).length ? `<div class="hint">Aucun profil configuré pour l'instant.</div>` : ''}
+    </div>
+    ${profile ? `<div style="font-size:12.5px;color:var(--gris);line-height:1.7;padding:10px 12px;background:var(--bg);border-radius:8px;margin-bottom:14px">
+      ${profile.laa_insurer || profile.laa_policy || profile.laa_group ? `LAA : ${esc(profile.laa_insurer)}${profile.laa_policy?' · police '+esc(profile.laa_policy):''}${profile.laa_group?' · groupe '+esc(profile.laa_group):''}<br>` : ''}
+      ${profile.lpp_institution || profile.lpp_plan ? `LPP : ${esc(profile.lpp_institution)}${profile.lpp_plan?' · '+esc(profile.lpp_plan):''}<br>` : ''}
+      ${profile.caf_fund || profile.caf_number ? `Allocations : ${esc(profile.caf_fund)}${profile.caf_number?' · '+esc(profile.caf_number):''}` : ''}
+    </div>` : ''}
+    <div class="field-row">
+      ${efText('lpp_member_number', 'N° d\'affilié LPP (personnel)')}
+      ${efText('lpp_employer_amount', 'Cotisation employeur (CHF)', { type: 'number', step: '0.05', hint: 'Jamais retenue à l\'employé, sert au coût employeur.' })}
+    </div>
+  `;
+}
+
+function empTabEnfants(canPayroll){
+  if (!canPayroll) return empNoRight();
+  if (!EMP_FORM.__id) return empNeedsSaveFirst('des enfants');
+  const list = EMP_FORM.__children || [];
+  return `
+    <p class="hint" style="margin-bottom:14px">Chaque enfant est enregistré séparément : les allocations familiales se justifient enfant par enfant, et le droit se prolonge jusqu'à 25 ans en cas de formation en cours.</p>
+    ${list.length ? list.map(c => `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
+        <div style="flex:1">
+          <strong>${esc(c.first_name)} ${esc(c.last_name)}</strong>
+          <div style="font-size:11.5px;color:var(--gris)">${c.birth_date?esc(c.birth_date):'date inconnue'}${Number(c.in_education)===1?' · en formation':''}</div>
+        </div>
+        <span style="font-weight:700">${chf(c.allocation)} CHF</span>
+        <button class="icon-btn" onclick="childModal(${c.id})" title="Modifier">✎</button>
+        <button class="icon-btn" onclick="deleteChild(${c.id})" title="Supprimer" style="color:var(--rouge)">✕</button>
+      </div>`).join('') : `<div class="empty" style="padding:20px 0">Aucun enfant enregistré.</div>`}
+    <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="childModal(null)">+ Ajouter un enfant</button>
+  `;
+}
+
+function empFileSize(bytes){
+  bytes = Number(bytes) || 0;
+  if (bytes < 1024) return bytes + ' o';
+  if (bytes < 1024*1024) return Math.round(bytes/1024) + ' Ko';
+  return (bytes/1024/1024).toFixed(1) + ' Mo';
+}
+
+function empTabOnboarding(){
+  if (!EMP_FORM.__id) return empNeedsSaveFirst('les pièces reçues');
+  const byType = {};
+  (EMP_FORM.__documents || []).forEach(d => { byType[d.doc_type] = d; });
+  const today = new Date().toISOString().slice(0, 10);
+  const done = DOC_TYPES.filter(t => t.required && Number((byType[t.k]||{}).received) === 1).length;
+  const requiredTotal = DOC_TYPES.filter(t => t.required).length;
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg);border:1px solid var(--ligne);border-radius:10px;margin-bottom:16px">
+      <span style="font-size:13px;font-weight:600">Pièces obligatoires réunies</span>
+      <strong style="font-size:15px;color:${done===requiredTotal?'var(--vert)':'var(--orange,#b26a00)'}">${done} / ${requiredTotal}</strong>
+    </div>
+    ${DOC_TYPES.map(t => {
+      const d = byType[t.k] || {};
+      const received = Number(d.received) === 1;
+      const expired = d.expiry_date && d.expiry_date < today;
+      const fileUrl = `api.php?action=employee_document_file&employee_id=${EMP_FORM.__id}&doc_type=${t.k}`;
+      return `
+      <div style="padding:10px 0;border-bottom:1px solid var(--ligne-2)">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
+          <input type="checkbox" ${received?'checked':''} onchange="saveDocument('${t.k}', this.checked)">
+          <span style="flex:1">${esc(t.label)}${t.required?' <span style="color:var(--rouge)">*</span>':''}
+            ${expired?` <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">échu</span>`:''}
+            ${t.hint?`<br><span style="font-size:11px;color:var(--gris)">${esc(t.hint)}</span>`:''}</span>
+        </label>
+        ${received ? `<div style="margin:8px 0 0 26px">
+          <div style="display:flex;gap:10px">
+            <div style="flex:1"><label style="display:block;font-size:11px;color:var(--gris);margin-bottom:3px">Reçu le</label>
+              <input type="date" value="${esc(d.received_date||'')}" onchange="saveDocumentField('${t.k}','received_date',this.value)" style="width:100%;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px"></div>
+            ${t.expires ? `<div style="flex:1"><label style="display:block;font-size:11px;color:var(--gris);margin-bottom:3px">Échéance</label>
+              <input type="date" value="${esc(d.expiry_date||'')}" onchange="saveDocumentField('${t.k}','expiry_date',this.value)" style="width:100%;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px"></div>` : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            ${d.file_name ? `
+              <a href="${fileUrl}" target="_blank" style="font-size:12px;color:var(--bleu);flex:1;word-break:break-all">${esc(d.file_name)}</a>
+              <a href="${fileUrl}&download=1" class="icon-btn" title="Télécharger">⬇</a>
+              <button type="button" class="icon-btn" onclick="removeEmployeeDocFile('${t.k}')" title="Retirer le fichier" style="color:var(--rouge)">✕</button>
+            ` : `<label class="btn btn-ghost btn-sm" style="cursor:pointer">+ Joindre le fichier
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadEmployeeDocFile('${t.k}', this)"></label>`}
+          </div>
+        </div>` : ''}
+      </div>`;
+    }).join('')}
+    <p class="hint" style="margin-top:14px"><span style="color:var(--rouge)">*</span> pièce obligatoire.</p>
+
+    ${efSection('Autres documents', 'Dossier libre, alimenté au fil du temps : justificatif ponctuel, échange avec une assurance, diplôme, certificat...')}
+    ${(EMP_FORM.__files || []).length ? (EMP_FORM.__files || []).map(f => `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
+        <a href="api.php?action=employee_files_file&id=${f.id}" target="_blank" style="flex:1;color:var(--bleu);word-break:break-all">${esc(f.label || f.file_name)}</a>
+        <span style="font-size:11px;color:var(--gris);white-space:nowrap">${esc((f.uploaded_at||'').slice(0,10))} · ${empFileSize(f.file_size)}</span>
+        <a href="api.php?action=employee_files_file&id=${f.id}&download=1" class="icon-btn" title="Télécharger">⬇</a>
+        <button type="button" class="icon-btn" onclick="deleteEmployeeFile(${f.id})" title="Supprimer" style="color:var(--rouge)">✕</button>
+      </div>`).join('') : `<div class="empty" style="padding:14px 0">Aucun document dans le dossier libre.</div>`}
+    <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin-top:12px">+ Ajouter un document
+      <input type="file" style="display:none" onchange="uploadEmployeeFile(this)"></label>
+  `;
+}
+
+/* Les pièces (checklist ou dossier libre) s'enregistrent au clic/dépôt, sans attendre le
+ * bouton Enregistrer : chaque action est complète en soi et ne doit pas se perdre si la
+ * fiche est fermée sans clic sur Enregistrer. */
+async function uploadEmployeeDocFile(docType, input){
+  const file = input.files[0]; if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file); fd.append('employee_id', EMP_FORM.__id); fd.append('doc_type', docType);
   try {
-    if (id) { payload.id = id; payload.active = document.getElementById('em-active').checked; await api('employees', { method: 'PUT', body: payload }); }
-    else { await api('employees', { method: 'POST', body: payload }); }
+    await api('employee_document_upload', { method: 'POST', form: fd });
+    EMP_FORM.__documents = await api('employee_documents', { params: { employee_id: EMP_FORM.__id } });
+    renderEmployeeFormBody();
+  } catch (e) { modalErr(e.message); }
+}
+async function removeEmployeeDocFile(docType){
+  if (!confirm('Retirer le fichier attaché à cette pièce ? La case "reçu" reste cochée.')) return;
+  try {
+    await api('employee_document_remove_file', { method: 'POST', body: { employee_id: EMP_FORM.__id, doc_type: docType } });
+    EMP_FORM.__documents = await api('employee_documents', { params: { employee_id: EMP_FORM.__id } });
+    renderEmployeeFormBody();
+  } catch (e) { modalErr(e.message); }
+}
+async function uploadEmployeeFile(input){
+  const file = input.files[0]; if (!file) return;
+  const label = (prompt('Nom de ce document :', file.name) || '').trim() || file.name;
+  const fd = new FormData();
+  fd.append('file', file); fd.append('employee_id', EMP_FORM.__id); fd.append('label', label);
+  try {
+    await api('employee_files', { method: 'POST', form: fd });
+    EMP_FORM.__files = await api('employee_files', { params: { employee_id: EMP_FORM.__id } });
+    renderEmployeeFormBody();
+  } catch (e) { modalErr(e.message); }
+  input.value = '';
+}
+async function deleteEmployeeFile(id){
+  if (!confirm('Supprimer ce document ?')) return;
+  try {
+    await api('employee_files', { method: 'DELETE', params: { id } });
+    EMP_FORM.__files = await api('employee_files', { params: { employee_id: EMP_FORM.__id } });
+    renderEmployeeFormBody();
+  } catch (e) { modalErr(e.message); }
+}
+
+/* Les pièces s'enregistrent au clic, sans attendre le bouton Enregistrer : cocher une case
+   est une action complète en soi, et l'onglet se redessine juste après pour faire apparaître
+   les champs de date. */
+async function saveDocument(docType, received){
+  if (!EMP_FORM.__id) return;
+  const existing = (EMP_FORM.__documents || []).find(d => d.doc_type === docType) || {};
+  const body = { employee_id: EMP_FORM.__id, doc_type: docType, received,
+    received_date: received ? (existing.received_date || new Date().toISOString().slice(0,10)) : '',
+    expiry_date: existing.expiry_date || '', notes: existing.notes || '' };
+  try {
+    await api('employee_documents', { method: 'POST', body });
+    EMP_FORM.__documents = await api('employee_documents', { params: { employee_id: EMP_FORM.__id } });
+    renderEmployeeFormBody();
+  } catch (e) { modalErr(e.message); }
+}
+async function saveDocumentField(docType, field, value){
+  if (!EMP_FORM.__id) return;
+  const existing = (EMP_FORM.__documents || []).find(d => d.doc_type === docType) || {};
+  const body = { employee_id: EMP_FORM.__id, doc_type: docType, received: true,
+    received_date: existing.received_date || '', expiry_date: existing.expiry_date || '',
+    notes: existing.notes || '' };
+  body[field] = value;
+  try {
+    await api('employee_documents', { method: 'POST', body });
+    EMP_FORM.__documents = await api('employee_documents', { params: { employee_id: EMP_FORM.__id } });
+    renderEmployeeFormBody();
+  } catch (e) { modalErr(e.message); }
+}
+
+/* Les enfants sont édités dans une petite fenêtre imbriquée. La fiche employé est
+   redessinée à la fermeture plutôt que rouverte, pour ne pas perdre la saisie en cours
+   des autres onglets. */
+function childModal(childId){
+  const c = (EMP_FORM.__children || []).find(x => x.id === childId) || {};
+  const body = document.getElementById('emp-form-body');
+  body.innerHTML = `
+    <div style="border:1px solid var(--ligne);border-radius:12px;padding:16px">
+      <h4 style="font-size:13.5px;font-weight:700;margin-bottom:14px">${childId?'Modifier':'Ajouter'} un enfant</h4>
+      <div class="field-row">
+        <div class="field"><label>Prénom</label><input id="ch-first" value="${esc(c.first_name||'')}"></div>
+        <div class="field"><label>Nom</label><input id="ch-last" value="${esc(c.last_name || EMP_FORM.last_name || '')}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Date de naissance</label><input id="ch-birth" type="date" value="${esc(c.birth_date||'')}"></div>
+        <div class="field"><label>Allocation mensuelle (CHF)</label><input id="ch-alloc" type="number" step="0.05" value="${esc(c.allocation||'')}"></div>
+      </div>
+      <div class="field check-row"><input type="checkbox" id="ch-edu" ${Number(c.in_education)===1?'checked':''}><label style="margin:0" for="ch-edu">En formation (droit prolongé jusqu'à 25 ans)</label></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost btn-sm" onclick="renderEmployeeFormBody()">Annuler</button>
+        <button class="btn btn-primary btn-sm" onclick="saveChild(${childId ?? 'null'})">Enregistrer</button>
+      </div>
+    </div>`;
+}
+async function saveChild(childId){
+  const payload = {
+    employee_id: EMP_FORM.__id,
+    first_name: document.getElementById('ch-first').value.trim(),
+    last_name: document.getElementById('ch-last').value.trim(),
+    birth_date: document.getElementById('ch-birth').value,
+    allocation: Number(document.getElementById('ch-alloc').value) || 0,
+    in_education: document.getElementById('ch-edu').checked,
+  };
+  try {
+    if (childId) { payload.id = childId; await api('employee_children', { method: 'PUT', body: payload }); }
+    else await api('employee_children', { method: 'POST', body: payload });
+    EMP_FORM.__children = await api('employee_children', { params: { employee_id: EMP_FORM.__id } });
+    renderEmployeeFormBody();
+  } catch (e) { modalErr(e.message); }
+}
+async function deleteChild(childId){
+  if (!confirm('Retirer cet enfant de la fiche ?')) return;
+  try {
+    await api('employee_children', { method: 'DELETE', params: { id: childId } });
+    EMP_FORM.__children = await api('employee_children', { params: { employee_id: EMP_FORM.__id } });
+    renderEmployeeFormBody();
+  } catch (e) { modalErr(e.message); }
+}
+
+async function saveEmployee(){
+  captureEmployeeForm();
+  const last_name = String(EMP_FORM.last_name || '').trim();
+  if (!last_name) { EMP_TAB = 'perso'; renderEmployeeFormBody(); return modalErr('Le nom est requis.'); }
+
+  const payload = {};
+  // Les clés internes (__id, __children…) et les blocs rattachés ne partent jamais au serveur.
+  Object.keys(EMP_FORM).forEach(k => { if (!k.startsWith('__')) payload[k] = EMP_FORM[k]; });
+  payload.last_name = last_name;
+  delete payload.id; delete payload.created_at; delete payload.access_token;
+  delete payload.total_indemnites;
+
+  try {
+    if (EMP_FORM.__id) { payload.id = EMP_FORM.__id; await api('employees', { method: 'PUT', body: payload }); }
+    else await api('employees', { method: 'POST', body: payload });
     closeModal(); renderPage();
   } catch (e) { modalErr(e.message); }
 }
@@ -1480,7 +2082,9 @@ async function validateImport(import_id){
 /* Premier onglet réellement accessible, plutôt que « categories » en dur :
    sinon quelqu'un qui n'a que le droit sur la paie ouvrirait Paramètres sur
    un onglet vide. */
-let SETTINGS_TAB = MFC.teamsEdit ? 'categories' : (MFC.indemnites ? 'roles' : 'paie');
+/* L'onglet Paie a disparu : les retenues sont désormais portées par chaque fiche employé.
+   'roles' sert donc de dernier repli, et son écran se dégrade tout seul faute de droit. */
+let SETTINGS_TAB = MFC.teamsEdit ? 'categories' : (MFC.payrollEdit ? 'paie' : 'roles');
 
 async function renderSettings(c){
   const y = window.scrollY;
@@ -1489,7 +2093,7 @@ async function renderSettings(c){
     <div class="tabs">
       ${MFC.teamsEdit ? `<div class="tab ${SETTINGS_TAB==='categories'?'active':''}" data-st="categories" onclick="switchSettingsTab('categories')">Catégories &amp; Équipes</div>` : ''}
       ${MFC.indemnites ? `<div class="tab ${SETTINGS_TAB==='roles'?'active':''}" data-st="roles" onclick="switchSettingsTab('roles')">Rôles</div>` : ''}
-      ${MFC.payrollView ? `<div class="tab ${SETTINGS_TAB==='paie'?'active':''}" data-st="paie" onclick="switchSettingsTab('paie')">Paie</div>` : ''}
+      ${MFC.payrollEdit ? `<div class="tab ${SETTINGS_TAB==='paie'?'active':''}" data-st="paie" onclick="switchSettingsTab('paie')">Paie</div>` : ''}
     </div>
     <div id="settings-body"><div class="empty"><span class="spinner"></span></div></div>
   `;
@@ -1740,6 +2344,141 @@ async function deleteCategory(id){
   catch (e) { alert(e.message); }
 }
 
+/* ============================================================ PARAMÈTRES > PAIE
+ *
+ * Deux blocs indépendants, saisis une fois pour tout le club :
+ * - les taux d'assurances sociales partagés, un jeu par année civile ;
+ * - les profils d'assurance (assureur LAA, institution LPP...), choisis ensuite
+ *   sur chaque fiche employé plutôt que ressaisis.
+ */
+
+const PAIE_RATE_FIELDS = [
+  ['avs_rate',  'AVS / AI / APG'], ['ac_rate', 'Assurance chômage (AC)'],
+  ['amat_rate', 'Assurance maternité (AMat GE)'], ['aanp_rate', 'Accidents non professionnels (AANP)'],
+  ['laac_rate', 'Accidents complémentaire (LAAC)'], ['ijm_rate', 'Indemnités journalières maladie'],
+];
+let PAIE_RATE_YEAR_EDITING = null;
+
+function renderPaieTab(el){
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-head"><h3>Taux d'assurances sociales</h3></div>
+      <div class="card-body">
+        <p class="hint" style="margin-bottom:14px">Même taux pour tout le monde, un jeu par année civile. Chaque fiche employé n'y coche plus que l'assujettissement.</p>
+        ${paieRateYearForm()}
+        ${(STATE.rateSettings||[]).length ? `<table style="margin-top:16px"><thead><tr><th>Année</th>${PAIE_RATE_FIELDS.map(f=>`<th>${esc(f[1])}</th>`).join('')}<th></th></tr></thead><tbody>
+          ${(STATE.rateSettings||[]).map(r => `<tr>
+            <td style="font-weight:700">${r.year}</td>
+            ${PAIE_RATE_FIELDS.map(f => `<td>${pctSmart(r[f[0]]||0)} %</td>`).join('')}
+            <td><button class="icon-btn" onclick="editPaieRateYear(${r.year})" title="Modifier">✎</button></td>
+          </tr>`).join('')}
+        </tbody></table>` : `<div class="empty" style="margin-top:10px">Aucune année paramétrée.</div>`}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Profils d'assurance (LAA / LPP)</h3></div>
+      <div class="card-body pad0">
+        ${(STATE.insuranceProfiles||[]).length ? `<table><thead><tr><th>Profil</th><th>LAA</th><th>LPP</th><th>Allocations</th><th></th></tr></thead><tbody>
+          ${(STATE.insuranceProfiles||[]).map(p => `<tr>
+            <td style="font-weight:600">${esc(p.label)}${p.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactif</span>':''}</td>
+            <td style="font-size:12.5px;color:var(--gris)">${esc(p.laa_insurer)}${p.laa_policy?' · '+esc(p.laa_policy):''}${p.laa_group?' · '+esc(p.laa_group):''}</td>
+            <td style="font-size:12.5px;color:var(--gris)">${esc(p.lpp_institution)}${p.lpp_plan?' · '+esc(p.lpp_plan):''}</td>
+            <td style="font-size:12.5px;color:var(--gris)">${esc(p.caf_fund)}</td>
+            <td><div class="tbl-actions">
+              <button class="icon-btn" data-obj="${esc(JSON.stringify(p))}" onclick="insuranceProfileModal(JSON.parse(this.dataset.obj))">✎</button>
+              <button class="icon-btn" onclick="deleteInsuranceProfile(${p.id})">✕</button>
+            </div></td>
+          </tr>`).join('')}
+        </tbody></table>` : `<div class="empty">Aucun profil configuré.</div>`}
+        <div style="padding:14px 18px"><button class="btn btn-primary btn-sm" onclick="insuranceProfileModal(null)">+ Ajouter un profil</button></div>
+      </div>
+    </div>
+  `;
+}
+
+function paieRateYearForm(){
+  const editing = PAIE_RATE_YEAR_EDITING !== null;
+  const year = editing ? PAIE_RATE_YEAR_EDITING : (new Date().getFullYear());
+  const existing = (STATE.rateSettings||[]).find(r => r.year === year) || {};
+  return `
+    <div style="border:1px solid var(--ligne);border-radius:10px;padding:14px">
+      <div class="field-row">
+        <div class="field"><label>Année civile</label><input id="paie-year" type="number" step="1" value="${year}" ${editing?'readonly':''}></div>
+      </div>
+      <div class="field-row" style="grid-template-columns:repeat(3,1fr)">
+        ${PAIE_RATE_FIELDS.map(f => `<div class="field"><label>${esc(f[1])} (%)</label><input id="paie-${f[0]}" type="number" step="0.001" value="${existing[f[0]] ?? ''}" placeholder="0.000"></div>`).join('')}
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px">
+        ${editing ? `<button class="btn btn-ghost btn-sm" onclick="PAIE_RATE_YEAR_EDITING=null; renderSettingsBody()">Annuler</button>` : ''}
+        <button class="btn btn-primary btn-sm" onclick="savePaieRateYear()">Enregistrer ${editing?'':'cette année'}</button>
+      </div>
+    </div>
+  `;
+}
+function editPaieRateYear(year){ PAIE_RATE_YEAR_EDITING = year; renderSettingsBody(); }
+async function savePaieRateYear(){
+  const year = Number(document.getElementById('paie-year').value);
+  if (!year) return alert('Année requise.');
+  const body = { year };
+  PAIE_RATE_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
+  try {
+    await api('payroll_rate_settings', { method: 'POST', body });
+    PAIE_RATE_YEAR_EDITING = null;
+    await refreshSettings();
+  } catch (e) { alert(e.message); }
+}
+
+function insuranceProfileModal(p){
+  openModal(`
+    <h3>${p?'Modifier':'Nouveau'} profil d'assurance</h3>
+    <div class="modal-error"></div>
+    <div class="field"><label>Libellé</label><input id="ip-label" value="${p?esc(p.label):''}" placeholder="Ex : Staff, Joueurs…"></div>
+    <div class="field-row">
+      <div class="field"><label>Assureur LAA</label><input id="ip-laa-insurer" value="${p?esc(p.laa_insurer):''}"></div>
+      <div class="field"><label>N° de police</label><input id="ip-laa-policy" value="${p?esc(p.laa_policy):''}"></div>
+    </div>
+    <div class="field"><label>Groupe LAA</label><input id="ip-laa-group" value="${p?esc(p.laa_group):''}"></div>
+    <div class="field-row">
+      <div class="field"><label>Institution de prévoyance</label><input id="ip-lpp-institution" value="${p?esc(p.lpp_institution):''}"></div>
+      <div class="field"><label>Plan de prévoyance</label><input id="ip-lpp-plan" value="${p?esc(p.lpp_plan):''}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Caisse d'allocations familiales</label><input id="ip-caf-fund" value="${p?esc(p.caf_fund):''}"></div>
+      <div class="field"><label>N° d'affiliation</label><input id="ip-caf-number" value="${p?esc(p.caf_number):''}"></div>
+    </div>
+    ${p ? `<div class="field check-row"><input type="checkbox" id="ip-active" ${p.active==1?'checked':''}><label style="margin:0" for="ip-active">Profil actif</label></div>` : ''}
+    <div class="modal-actions">
+      ${p ? `<button class="btn btn-ghost" onclick="deleteInsuranceProfile(${p.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveInsuranceProfile(${p?p.id:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveInsuranceProfile(id){
+  const label = document.getElementById('ip-label').value.trim();
+  if (!label) return modalErr('Le libellé est requis.');
+  const body = { label,
+    laa_insurer: document.getElementById('ip-laa-insurer').value.trim(),
+    laa_policy: document.getElementById('ip-laa-policy').value.trim(),
+    laa_group: document.getElementById('ip-laa-group').value.trim(),
+    lpp_institution: document.getElementById('ip-lpp-institution').value.trim(),
+    lpp_plan: document.getElementById('ip-lpp-plan').value.trim(),
+    caf_fund: document.getElementById('ip-caf-fund').value.trim(),
+    caf_number: document.getElementById('ip-caf-number').value.trim(),
+  };
+  try {
+    if (id) { body.id = id; body.active = document.getElementById('ip-active').checked; await api('insurance_profiles', { method: 'PUT', body }); }
+    else await api('insurance_profiles', { method: 'POST', body });
+    closeModal(); await refreshSettings();
+  } catch (e) { modalErr(e.message); }
+}
+async function deleteInsuranceProfile(id){
+  if (!confirm("Supprimer ce profil d'assurance ? Les fiches employés qui l'utilisaient repasseront à \"aucun profil\".")) return;
+  try { await api('insurance_profiles', { method: 'DELETE', params: { id } }); closeModal(); await refreshSettings(); }
+  catch (e) { alert(e.message); }
+}
+
 function renderRolesTab(el){
   el.innerHTML = `
     <div class="card">
@@ -1777,82 +2516,6 @@ async function savePoste(id){
 async function deletePoste(id){
   if (!confirm('Supprimer définitivement ce rôle ? Il sera retiré de toutes les équipes où il est utilisé.')) return;
   await api('postes', { method: 'DELETE', params: { id } }); closeModal(); await refreshSettings();
-}
-
-/* ============================================================ PARAMÈTRES > PAIE */
-
-const PAYROLL_CATEGORIES = [
-  { id: 'impot_source', label: 'Impôt à la source' },
-  { id: 'charge_sociale', label: 'Charges sociales' },
-  { id: 'assurance_accident', label: 'Assurance accident (AA/AANP)' },
-  { id: 'lpp', label: 'Prévoyance professionnelle (LPP)' },
-];
-function payrollCategoryLabel(id){ return (PAYROLL_CATEGORIES.find(c => c.id === id) || {}).label || id; }
-
-function renderPaieTab(el){
-  el.innerHTML = `
-    <p class="hint" style="margin-bottom:16px">Définis ici tes propres règles (libellé + taux en % du brut, ou montant fixe en CHF). Elles seront activables individuellement sur chaque fiche employé pour le calcul de ses décomptes.</p>
-    ${PAYROLL_CATEGORIES.map(cat => payrollCategoryCard(cat)).join('')}
-  `;
-}
-function payrollCategoryCard(cat){
-  const rules = (STATE.payrollRules || []).filter(r => r.category === cat.id);
-  return `
-    <div class="card">
-      <div class="card-head"><h3>${esc(cat.label)}</h3></div>
-      <div class="card-body pad0">
-        ${rules.length ? `<table><thead><tr><th>Libellé</th><th>Type</th><th>Valeur</th><th></th></tr></thead><tbody>
-          ${rules.map(r => `<tr>
-            <td>${esc(r.label)}${r.active==0?' <span class="pill" style="background:var(--rouge-bg);color:var(--rouge)">inactive</span>':''}</td>
-            <td>${r.type==='percent'?'% du brut':'Montant fixe'}</td>
-            <td>${r.type==='percent'?chf(r.valeur)+' %':chf(r.valeur)+' CHF'}</td>
-            <td><div class="tbl-actions">
-              <button class="icon-btn" data-obj="${esc(JSON.stringify(r))}" onclick="payrollRuleModal(JSON.parse(this.dataset.obj))">✎</button>
-              <button class="icon-btn" onclick="deletePayrollRule(${r.id})">✕</button>
-            </div></td>
-          </tr>`).join('')}
-        </tbody></table>` : `<div class="empty">Aucune règle dans cette catégorie.</div>`}
-        <div style="padding:14px 18px"><button class="btn btn-primary btn-sm" onclick="payrollRuleModal(null,'${cat.id}')">+ Ajouter une règle</button></div>
-      </div>
-    </div>
-  `;
-}
-function payrollRuleModal(r, category){
-  const cat = r ? r.category : category;
-  openModal(`
-    <h3>${r?'Modifier':'Nouvelle'} règle — ${esc(payrollCategoryLabel(cat))}</h3>
-    <div class="modal-error"></div>
-    <div class="field"><label>Libellé</label><input id="pr-label" value="${r?esc(r.label):''}" placeholder="Ex: AVS/AI/APG"></div>
-    <div class="field-row">
-      <div class="field"><label>Type</label><select id="pr-type">
-        <option value="percent" ${(!r||r.type==='percent')?'selected':''}>% du brut</option>
-        <option value="fixe" ${r&&r.type==='fixe'?'selected':''}>Montant fixe CHF</option>
-      </select></div>
-      <div class="field"><label>Valeur</label><input id="pr-valeur" type="number" step="0.01" value="${r?r.valeur:''}"></div>
-    </div>
-    ${r ? `<div class="field check-row"><input type="checkbox" id="pr-active" ${r.active==1?'checked':''}><label style="margin:0" for="pr-active">Règle active</label></div>` : ''}
-    <div class="modal-actions">
-      ${r ? `<button class="btn btn-ghost" onclick="deletePayrollRule(${r.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
-      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-      <button class="btn btn-primary" onclick="savePayrollRule(${r?r.id:'null'},'${cat}')">Enregistrer</button>
-    </div>
-  `);
-}
-async function savePayrollRule(id, category){
-  const label = document.getElementById('pr-label').value.trim();
-  const type = document.getElementById('pr-type').value;
-  const valeur = Number(document.getElementById('pr-valeur').value) || 0;
-  if (!label) return modalErr('Le libellé est requis.');
-  try {
-    if (id) { const active = document.getElementById('pr-active').checked; await api('payroll_rules', { method: 'PUT', body: { id, category, label, type, valeur, active } }); }
-    else { await api('payroll_rules', { method: 'POST', body: { category, label, type, valeur } }); }
-    closeModal(); await refreshSettings();
-  } catch (e) { modalErr(e.message); }
-}
-async function deletePayrollRule(id){
-  if (!confirm('Supprimer cette règle de paie ? Elle sera retirée des fiches employés où elle est activée.')) return;
-  try { await api('payroll_rules', { method: 'DELETE', params: { id } }); closeModal(); await refreshSettings(); }
-  catch (e) { alert(e.message); }
 }
 
 /* ============================================================ PAIEMENTS (suivi mensuel employés + joueurs) */
@@ -1940,10 +2603,16 @@ function paymentSlipCell(r){
     ? `<a href="${fileUrl}" target="_blank" style="font-size:12px;color:var(--bleu);display:block;margin-bottom:4px;word-break:break-all">${esc(r.payslip_filename)}</a>`
     : `<div style="font-size:12px;color:var(--gris-2);margin-bottom:4px">Aucun fichier</div>`;
   const sentInfo = r.sent_at ? `<div style="font-size:11px;color:var(--gris)">Envoyé le ${esc(r.sent_at.slice(0,10))}</div>` : '';
+  /* Le décompte imprimable n'existe que pour les employés (postes/affectations) : un
+     joueur n'a qu'un salaire et des primes, sans équivalent de fiche calculée ici. */
+  const genBtn = r.person_type === 'employee'
+    ? `<button class="btn btn-ghost btn-sm" onclick="openPayslip(${r.person_id}, ${STATE.seasonId})" title="Ouvre le décompte pré-rempli, à imprimer en PDF puis déposer ci-dessous">Générer</button>`
+    : '';
   return `
     <div style="min-width:180px">
       ${viewLink}
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        ${genBtn}
         <label class="btn btn-ghost btn-sm" style="cursor:pointer">
           ${r.payslip_filename ? 'Remplacer' : '+ Fichier'}
           <input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadPayslip('${r.person_type}',${r.person_id},this)">
@@ -1951,6 +2620,7 @@ function paymentSlipCell(r){
         ${r.payslip_filename ? `<button class="btn btn-primary btn-sm" onclick="sendPayslipEmail('${r.person_type}',${r.person_id})">Envoyer</button>` : ''}
       </div>
       ${sentInfo}
+      ${r.payslip_filename ? `<div style="font-size:11px;color:var(--gris);margin-top:2px">Disponible sur le dossier personnel</div>` : ''}
     </div>
   `;
 }
@@ -1998,19 +2668,23 @@ async function updatePaymentNote(personType, personId, note){
 
 /* ============================================================ DÉCOMPTE DE PAIE (page autonome, nouvel onglet) */
 
-let PS = { employee: null, season: null, seasonId: null, isSemestriel: false, baseRows: [], rules: [], indemnites: [], retenues: [], month: new Date().toISOString().slice(0,7) };
+let PS = { employee: null, fiche: null, children: [], season: null, seasonId: null, isSemestriel: false,
+           baseRows: [], autoLines: [], indemnites: [], retenues: [], month: new Date().toISOString().slice(0,7) };
 
 async function renderPayslipPage(employeeId, seasonId){
   const app = document.getElementById('app');
   app.innerHTML = `<div style="padding:80px;text-align:center;color:#6E6C61">Chargement…</div>`;
   /* Cette page EST la fiche de paie : sans le droit sur les salaires, il n'y a
      rien à dégrader, on le dit franchement au lieu de rester sur « Chargement ». */
-  let employees, seasons, rules;
+  let employees, seasons, ctx;
   try {
-    [employees, seasons, rules] = await Promise.all([
+    /* payslip_context exige le droit sur les salaires côté serveur. C'est lui qui garde
+       cette page : sans cet appel, la liste des employés seule (droit employees.view,
+       accordé bien plus largement) suffirait à ouvrir un décompte. */
+    [employees, seasons, ctx] = await Promise.all([
       api('employees', { params: { season_id: seasonId } }),
       api('seasons'),
-      api('payroll_rules'),
+      api('payslip_context', { params: { employee_id: employeeId, month: PS.month } }),
     ]);
   } catch (e) {
     app.innerHTML = `<div style="padding:80px;text-align:center;max-width:520px;margin:0 auto;line-height:1.6">`
@@ -2021,20 +2695,58 @@ async function renderPayslipPage(employeeId, seasonId){
   }
   const ee = employees.find(e => e.id === employeeId);
   if (!ee) { app.innerHTML = `<div style="padding:80px;text-align:center">Employé introuvable.</div>`; return; }
-  const enabledRuleIds = await api('employee_payroll_rules', { params: { employee_id: employeeId } });
+  PS.employeeId = employeeId; PS.seasonId0 = seasonId; // pour rafraîchir au changement de mois
   PS.employee = ee;
+  PS.fiche = ctx.employee;
+  PS.children = ctx.children || [];
+  PS.insuranceProfile = ctx.insurance_profile;
   PS.season = seasons.find(s => s.id === seasonId) || null;
   PS.seasonId = seasonId;
   PS.isSemestriel = ee.paiement === 'semestriel';
   PS.baseRows = ee.assignments.filter(a => Number(a.season_id) === seasonId);
-  PS.rules = rules.filter(r => enabledRuleIds.includes(r.id) && r.active == 1);
+  buildAutoLines(ctx.rate_settings);
   PS.indemnites = [];
   PS.retenues = [];
-  document.title = `Décompte — ${ee.first_name} ${ee.last_name}`;
+  renderPayslipDoc(); // fixe aussi document.title (nom de fichier suggéré à l'impression)
+}
+
+/* Retenues issues des affiliations de la fiche : taux partagé de l'année du mois décompté
+ * pour les six lignes communes, taux/montant personnel pour LPP et impôt à la source. Chaque
+ * ligne garde son taux pour se recalculer si une indemnité est ajoutée, et porte un
+ * `override` qui prend le dessus dès que le montant est corrigé à la main sur le décompte. */
+function buildAutoLines(rateSettings){
+  const shared = SHARED_SOCIAL_LINES
+    .filter(l => Number(PS.fiche[l.k + '_subject']) === 1)
+    .map(l => ({ key: l.k, label: l.label, rate: Number(rateSettings[l.k + '_rate']) || 0, fixed: 0, override: null, removed: false }));
+  const personal = PERSONAL_SOCIAL_LINES
+    .filter(l => Number(PS.fiche[l.k + '_subject']) === 1)
+    .map(l => ({ key: l.k, label: l.label, rate: Number(PS.fiche[l.k + '_rate']) || 0,
+                 fixed: Number(PS.fiche[l.k + '_amount']) || 0, override: null, removed: false }));
+  PS.autoLines = [...shared, ...personal];
+}
+
+/* Changer le mois peut faire changer l'année civile (ex: décembre → janvier), donc le taux
+ * des lignes partagées : on redemande le contexte plutôt que de se fier à un taux mis en
+ * cache pour l'ancienne année. */
+async function changePayslipMonth(value){
+  PS.month = value;
+  try {
+    const ctx = await api('payslip_context', { params: { employee_id: PS.employeeId, month: PS.month } });
+    buildAutoLines(ctx.rate_settings);
+  } catch (e) { /* affichage inchangé si l'appel échoue, le mois reste modifiable */ }
   renderPayslipDoc();
 }
 
 function addPayslipLine(type){ PS[type].push({ label: '', montant: 0 }); renderPayslipDoc(); }
+
+/* Corriger un montant calculé le fige : c'est une décision de l'utilisateur, elle ne doit
+   pas être écrasée au prochain recalcul. Vider le champ rend la ligne à son taux. */
+function overrideAutoLine(i, value){
+  const v = String(value).trim();
+  PS.autoLines[i].override = v === '' ? null : (Number(v) || 0);
+  renderPayslipDoc();
+}
+function removeAutoLine(i){ PS.autoLines[i].removed = true; renderPayslipDoc(); }
 
 function removePayslipLine(type, i){ PS[type].splice(i, 1); renderPayslipDoc(); }
 function updatePayslipLine(type, i, field, el){
@@ -2042,78 +2754,178 @@ function updatePayslipLine(type, i, field, el){
   renderPayslipDoc();
 }
 
+const PAYSLIP_MONTH_LABELS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+
 function renderPayslipDoc(){
   const app = document.getElementById('app');
   const ee = PS.employee;
-  const periodWord = PS.isSemestriel ? 'semestrielle' : 'mensuelle';
+  const f = PS.fiche || {};
   const periodDiv = PS.isSemestriel ? 2 : 12;
   const grossBase = PS.baseRows.reduce((s, a) => s + Number(a.montant), 0) / periodDiv;
   const extraTotal = PS.indemnites.reduce((s, l) => s + (Number(l.montant) || 0), 0);
   const grossTotal = grossBase + extraTotal;
-  const ruleDeductions = PS.rules.map(r => ({
-    label: r.label,
-    montant: r.type === 'percent' ? grossTotal * (Number(r.valeur) || 0) / 100 : (Number(r.valeur) || 0),
-  }));
-  const ruleTotal = ruleDeductions.reduce((s, d) => s + d.montant, 0);
+  const autoLines = (PS.autoLines || []).filter(l => !l.removed);
+  autoLines.forEach(l => {
+    l.montant = l.override !== null ? l.override
+              : (l.rate > 0 ? grossTotal * l.rate / 100 : l.fixed);
+  });
+  const ruleTotal = autoLines.reduce((s, d) => s + d.montant, 0);
   const manualRetenuesTotal = PS.retenues.reduce((s, l) => s + (Number(l.montant) || 0), 0);
   const totalDeductions = ruleTotal + manualRetenuesTotal;
   const net = grossTotal - totalDeductions;
 
-  const editableLine = (type, i) => {
-    const l = PS[type][i];
-    return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0">
-      <input class="ps-input" value="${esc(l.label)}" placeholder="Libellé" style="flex:1;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:7px;font-size:13px" onchange="updatePayslipLine('${type}',${i},'label',this)">
-      <input class="ps-input" type="number" step="0.05" value="${l.montant||''}" placeholder="Montant CHF" style="width:120px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:7px;font-size:13px" onchange="updatePayslipLine('${type}',${i},'montant',this)">
-      <span class="no-print"><button onclick="removePayslipLine('${type}',${i})" style="color:var(--rouge)" title="Retirer">✕</button></span>
-    </div>`;
-  };
+  const [y, m] = String(PS.month || '').split('-');
+  const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
+
+  /* Titre de l'onglet = nom de fichier suggéré par le navigateur pour "Enregistrer en PDF" :
+     AAAA-MM_Décompte_Nom_Prénom. Recalculé à chaque rendu pour suivre un changement de mois. */
+  document.title = `${y}-${m}_Décompte_${ee.last_name}_${ee.first_name}`;
+
+  /* Deux rendus distincts à partir des mêmes données calculées ci-dessus, et non un seul
+     formulaire maquillé pour l'impression : un <input> gardait son rendu de champ de saisie
+     au print (espacement, police, parfois les flèches du type number) même bordure masquée.
+     - editable=true  : version écran, avec champs de saisie et boutons ✕ (jamais imprimée).
+     - editable=false : version document, texte pur, aucun <input> — c'est elle qui s'imprime,
+       et donc celle que l'employé reçoit. */
+  function payslipCardHTML(editable){
+    // Colonnes Base/Taux : remplies seulement quand elles ont un sens (une ligne calculée à
+    // partir d'un taux). Une indemnité ou une retenue fixe/manuelle les laisse vides, comme
+    // sur un décompte imprimé classique — ce n'est pas un champ oublié.
+    const row = (label, base, taux, montant, opts = {}) => `<tr${opts.topBorder?' style="border-top:1.5px solid var(--noir)"':''}>
+      <td style="padding:${opts.pad||'7px'} 10px 7px 0;${opts.bold?'font-weight:700':''}">${label}</td>
+      <td style="padding:${opts.pad||'7px'} 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums">${base ?? ''}</td>
+      <td style="padding:${opts.pad||'7px'} 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums">${taux ?? ''}</td>
+      <td style="padding:${opts.pad||'7px'} 0 7px;text-align:right;font-variant-numeric:tabular-nums;${opts.bold?'font-weight:700':''}">${montant}</td>
+    </tr>`;
+
+    const customRow = (type, i) => {
+      const l = PS[type][i];
+      if (!editable) return row(esc(l.label) || '—', '', '', chf(Number(l.montant) || 0));
+      return `<tr>
+        <td style="padding:5px 10px 5px 0" colspan="3">
+          <input class="ps-input" value="${esc(l.label)}" placeholder="Libellé" style="width:100%;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px" onchange="updatePayslipLine('${type}',${i},'label',this)">
+        </td>
+        <td style="padding:5px 0;text-align:right">
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <input class="ps-input" type="number" step="0.05" value="${l.montant||''}" placeholder="0.00" style="width:90px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right" onchange="updatePayslipLine('${type}',${i},'montant',this)">
+            <button onclick="removePayslipLine('${type}',${i})" style="color:var(--rouge)" title="Retirer">✕</button>
+          </div>
+        </td>
+      </tr>`;
+    };
+
+    const autoLineRow = (l) => {
+      const idx = PS.autoLines.indexOf(l);
+      const hasRate = l.rate > 0 && l.override === null;
+      const base = hasRate ? chf(grossTotal) : '';
+      const taux = hasRate ? pctSmart(l.rate)+' %' : '';
+      if (!editable) return row(esc(l.label), base, taux, '− ' + chf(l.montant));
+      return `<tr>
+        <td style="padding:7px 10px 7px 0">${esc(l.label)}</td>
+        <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums">${base}</td>
+        <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums">${taux}</td>
+        <td style="padding:5px 0;text-align:right">
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <span style="color:var(--gris)">−</span>
+            <input class="ps-input" type="number" step="0.05" value="${l.montant.toFixed(2)}" style="width:80px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums" onchange="overrideAutoLine(${idx}, this.value)">
+            <button onclick="removeAutoLine(${idx})" style="color:var(--rouge)" title="Retirer cette retenue">✕</button>
+          </div>
+        </td>
+      </tr>`;
+    };
+
+    return `
+      <div style="background:#fff;${editable?'border:1px solid var(--ligne);border-radius:16px;box-shadow:var(--ombre);':''}overflow:hidden;font-size:12.5px;line-height:1.5">
+        <div style="background:var(--noir);color:#fff;padding:22px 30px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <div>
+            <div class="sora" style="font-size:16px;font-weight:800;color:var(--jaune);letter-spacing:.3px">MEYRIN FC</div>
+            <div style="font-size:12px;color:#C9C7BD;margin-top:2px">Décompte de salaire</div>
+          </div>
+          <div style="text-align:right">
+            <div class="sora" style="font-size:15px;font-weight:700;text-transform:capitalize">${esc(moisLabel)} ${esc(y||'')}</div>
+            <div style="font-size:11px;color:#C9C7BD;margin-top:2px">${PS.isSemestriel?'Période semestrielle':'Période mensuelle'}</div>
+          </div>
+        </div>
+
+        <div style="padding:28px 30px 6px;display:grid;grid-template-columns:1fr 1fr;gap:24px">
+          <div>
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin-bottom:3px">N° collaborateur</div>
+            <div style="font-weight:600;margin-bottom:14px">${ee.id}</div>
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin-bottom:3px">N° AVS</div>
+            <div style="font-weight:600">${f.avs_number?esc(f.avs_number):'—'}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700;font-size:13.5px">${esc(ee.first_name)} ${esc(ee.last_name)}</div>
+            ${f.street ? `<div style="color:var(--gris);margin-top:2px">${esc(f.street)}</div>` : ''}
+            ${(f.zip || f.city) ? `<div style="color:var(--gris)">${esc(f.zip)} ${esc(f.city)}</div>` : ''}
+            ${f.country ? `<div style="color:var(--gris)">${esc(f.country === 'CH' ? 'Suisse' : f.country)}</div>` : ''}
+          </div>
+        </div>
+
+        <div style="padding:18px 30px 0">
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="border-bottom:1.5px solid var(--noir)">
+              <th style="text-align:left;padding-bottom:7px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Rubrique et genres de salaires</th>
+              <th style="text-align:right;padding-bottom:7px;width:85px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Base</th>
+              <th style="text-align:right;padding-bottom:7px;width:65px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Taux</th>
+              <th style="text-align:right;padding-bottom:7px;width:95px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Montant</th>
+            </tr></thead>
+            <tbody>
+              ${row('Salaire brut', '', '', '', { bold: true, pad: '16px' })}
+              ${PS.baseRows.map(a => row(`${esc(a.poste_label)}${a.team_name?' — '+esc(a.team_name):(a.category_name?' — '+esc(a.category_name):'')}`, '', '', chf(Number(a.montant)/periodDiv))).join('')}
+              ${PS.indemnites.map((l,i) => customRow('indemnites', i)).join('')}
+              ${row('', '', '', chf(grossTotal), { bold: true, topBorder: true })}
+
+              ${row('Charges sociales', '', '', '', { bold: true, pad: '22px' })}
+              ${autoLines.map(autoLineRow).join('')}
+              ${PS.retenues.map((l,i) => customRow('retenues', i)).join('')}
+              ${row('', '', '', '− ' + chf(totalDeductions), { bold: true, topBorder: true })}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display:flex;margin:26px 30px 30px;border-radius:10px;overflow:hidden;border:1px solid var(--ligne)">
+          <div style="flex:1;padding:14px 18px;background:var(--bg)">
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin-bottom:3px">Paiement</div>
+            <div style="font-weight:600;font-variant-numeric:tabular-nums">${ee.iban ? esc(ee.iban) : '—'}</div>
+          </div>
+          <div style="padding:14px 22px;background:var(--noir);color:#fff;display:flex;align-items:center;gap:16px;justify-content:flex-end;min-width:210px">
+            <span style="font-size:12px;color:#C9C7BD">Salaire net</span>
+            <span class="sora" style="font-size:19px;font-weight:800;color:var(--jaune);font-variant-numeric:tabular-nums">${chf(net)}</span>
+          </div>
+        </div>
+      </div>`;
+  }
 
   app.innerHTML = `
     <style>
-      @media print { .no-print{display:none !important} .ps-input{border-color:transparent !important;padding:6px 0 !important} body{background:#fff} }
+      @page { size: A4; margin: 16mm 14mm; }
+      /* Écran : la version éditable est visible, la version document reste hors champ.
+         Impression : bascule inverse, et tout le chrome de l'appli (barre d'outils,
+         encadré, coins arrondis) disparaît pour ne laisser que le document lui-même. */
+      #ps-print{ display:none; }
+      @media print {
+        .no-print{ display:none !important; }
+        #ps-edit{ display:none !important; }
+        #ps-print{ display:block !important; }
+        body{ background:#fff; }
+      }
+      /* Chrome ne conserve pas les couleurs de fond à l'impression sans ces deux lignes :
+         sans elles, le bandeau du club et l'encadré "Salaire net" ressortent en blanc. */
+      #ps-edit, #ps-edit *, #ps-print, #ps-print *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     </style>
-    <div style="max-width:820px;margin:0 auto;padding:26px 20px 60px">
+    <div style="max-width:760px;margin:0 auto;padding:26px 20px 60px">
       <div class="no-print" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:20px;padding:14px 18px;background:#fff;border:1px solid var(--ligne);border-radius:12px;box-shadow:var(--ombre-s)">
         <button class="btn btn-ghost btn-sm" onclick="window.close()">← Fermer l'onglet</button>
-        <div class="month-picker"><input type="month" value="${esc(PS.month)}" onchange="PS.month=this.value; renderPayslipDoc()"></div>
+        <div class="month-picker"><input type="month" value="${esc(PS.month)}" onchange="changePayslipMonth(this.value)"></div>
         <button class="btn btn-ghost btn-sm" onclick="addPayslipLine('indemnites')">+ Indemnité</button>
         <button class="btn btn-ghost btn-sm" onclick="addPayslipLine('retenues')">+ Retenue</button>
         <button class="btn btn-primary" style="margin-left:auto" onclick="window.print()">Générer le PDF</button>
       </div>
-      <div style="background:#fff;border:1px solid var(--ligne);border-radius:14px;padding:36px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:26px;border-bottom:2px solid var(--noir);padding-bottom:16px">
-          <div><div class="sora" style="font-size:19px;font-weight:800">Meyrin FC</div><div style="font-size:12.5px;color:var(--gris)">Décompte de paie ${periodWord}</div></div>
-          <div style="text-align:right;font-size:12.5px;color:var(--gris)">${esc(PS.month)}${PS.season?' · Saison '+esc(PS.season.label):''}</div>
-        </div>
-        <div style="margin-bottom:22px">
-          <div style="font-weight:700;font-size:15px">${esc(ee.first_name)} ${esc(ee.last_name)}</div>
-          <div style="font-size:12.5px;color:var(--gris)">${esc(ee.phone)||''}${ee.phone&&ee.email?' · ':''}${esc(ee.email)||''}</div>
-        </div>
+      <p class="no-print hint" style="margin:-10px 0 16px">Cet encadré sert à ajuster le décompte. Le PDF généré (bouton ci-dessus) est un document propre et professionnel, sans champs de saisie — c'est lui qui part à l'employé.</p>
 
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin-bottom:6px">Indemnités (${periodWord === 'semestrielle' ? 'par semestre' : 'par mois'})</div>
-        ${PS.baseRows.length ? PS.baseRows.map(a => `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
-          <span>${esc(a.poste_label)}${a.team_name?' — '+esc(a.team_name):(a.category_name?' — '+esc(a.category_name):'')}</span>
-          <span>${chf(Number(a.montant)/periodDiv)} CHF</span>
-        </div>`).join('') : `<div style="padding:5px 0;font-size:13px;color:var(--gris-2)">Aucune affectation pour cette saison.</div>`}
-        ${PS.indemnites.map((l,i) => editableLine('indemnites', i)).join('')}
-        <div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:700;font-size:13.5px;border-top:1px solid var(--ligne-2);margin-top:4px">
-          <span>Total brut</span><span>${chf(grossTotal)} CHF</span>
-        </div>
-
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin:22px 0 6px">Retenues</div>
-        ${ruleDeductions.length ? ruleDeductions.map(d => `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
-          <span>${esc(d.label)}</span><span>− ${chf(d.montant)} CHF</span>
-        </div>`).join('') : ''}
-        ${PS.retenues.map((l,i) => editableLine('retenues', i)).join('')}
-        ${!ruleDeductions.length && !PS.retenues.length ? `<div style="padding:5px 0;font-size:13px;color:var(--gris-2)">Aucune retenue.</div>` : ''}
-        <div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:700;font-size:13.5px;border-top:1px solid var(--ligne-2);margin-top:4px">
-          <span>Total retenues</span><span>− ${chf(totalDeductions)} CHF</span>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;padding:14px 0 0;margin-top:14px;border-top:2px solid var(--noir);font-weight:800;font-size:17px">
-          <span>Net à payer</span><span>${chf(net)} CHF</span>
-        </div>
-      </div>
+      <div id="ps-edit">${payslipCardHTML(true)}</div>
+      <div id="ps-print">${payslipCardHTML(false)}</div>
     </div>
   `;
 }

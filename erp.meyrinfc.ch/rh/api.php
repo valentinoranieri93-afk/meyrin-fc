@@ -188,6 +188,300 @@ function init_schema(PDO $pdo): void {
   // Token d'accès à l'espace documents personnel (fiches de paie), généré à la demande depuis l'onglet Paiements.
   ensure_column($pdo, 'employees', 'access_token', "TEXT NOT NULL DEFAULT ''");
 
+  /* ---- Fiche employé complète (2026-08-14) ----------------------------------
+     Tout ce qu'un dossier RH suisse doit porter pour un engagement : identité au
+     sens AVS, statut de séjour, imposition à la source, contrat, et affiliations
+     aux assurances sociales.
+
+     Ces colonnes vivent dans RH et pas dans l'annuaire partagé (lib/mfc_contacts.php)
+     parce qu'elles ne décrivent pas la PERSONNE mais son EMPLOI : un bénévole ou un
+     contact sponsor présent dans le même annuaire n'a ni numéro AVS d'employeur, ni
+     barème d'impôt source, ni groupe LAA. Ce qui relève bien de l'identité (adresse,
+     date de naissance, mobile, langue) est en revanche reversé à l'annuaire par
+     sync_employee_to_contacts(), pour rester saisi une seule fois.
+
+     Volontairement pas de barème officiel suisse en dur (taux AVS, AC, LPP) :
+     décision déjà prise le 2026-07-15 pour les règles de paie, elle vaut ici aussi.
+     Les taux usuels sont seulement suggérés en placeholder dans l'interface. */
+
+  // Identité (au sens des assurances sociales)
+  ensure_column($pdo, 'employees', 'birth_name',        "TEXT NOT NULL DEFAULT ''"); // nom de naissance, exigé par l'AVS quand il diffère
+  ensure_column($pdo, 'employees', 'avs_number',        "TEXT NOT NULL DEFAULT ''"); // 756.XXXX.XXXX.XX
+  ensure_column($pdo, 'employees', 'birth_date',        "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'gender',            "TEXT NOT NULL DEFAULT ''"); // f | m | autre
+  ensure_column($pdo, 'employees', 'nationality',       "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'lang',              "TEXT NOT NULL DEFAULT 'fr'");
+  ensure_column($pdo, 'employees', 'civil_status',      "TEXT NOT NULL DEFAULT ''"); // celibataire | marie | partenariat | separe | divorce | veuf
+  ensure_column($pdo, 'employees', 'civil_status_since',"TEXT NOT NULL DEFAULT ''"); // date d'effet : change le barème d'impôt source
+  ensure_column($pdo, 'employees', 'mobile',            "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'street',            "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'zip',               "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'city',              "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'country',           "TEXT NOT NULL DEFAULT 'CH'");
+  ensure_column($pdo, 'employees', 'canton',            "TEXT NOT NULL DEFAULT ''"); // canton de domicile : détermine le barème d'impôt source
+  ensure_column($pdo, 'employees', 'emergency_name',    "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'emergency_phone',   "TEXT NOT NULL DEFAULT ''");
+
+  // Statut de séjour
+  ensure_column($pdo, 'employees', 'permit_type',       "TEXT NOT NULL DEFAULT ''"); // B, C, G, L, Ci, F, S… vide = ressortissant suisse
+  ensure_column($pdo, 'employees', 'permit_expiry',     "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'is_frontalier',     'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'employees', 'residence_country', "TEXT NOT NULL DEFAULT ''"); // pays de résidence du frontalier
+  ensure_column($pdo, 'employees', 'arrival_ch_date',   "TEXT NOT NULL DEFAULT ''");
+
+  // Imposition à la source
+  ensure_column($pdo, 'employees', 'tax_at_source',     'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'employees', 'tax_canton',        "TEXT NOT NULL DEFAULT ''"); // canton de travail pour un frontalier, de domicile sinon
+  ensure_column($pdo, 'employees', 'tax_bareme',        "TEXT NOT NULL DEFAULT ''"); // code de tarif : A0N, B1Y, C2N…
+  ensure_column($pdo, 'employees', 'tax_church',        'INTEGER NOT NULL DEFAULT 0'); // impôt ecclésiastique (Y/N du code de tarif)
+  ensure_column($pdo, 'employees', 'spouse_works',      'INTEGER NOT NULL DEFAULT 0'); // départage les barèmes B et C
+  ensure_column($pdo, 'employees', 'tax_children',      'INTEGER NOT NULL DEFAULT 0'); // nombre de charges reconnues
+
+  // Contrat de travail
+  ensure_column($pdo, 'employees', 'contract_start',    "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'contract_end',      "TEXT NOT NULL DEFAULT ''"); // CDD uniquement
+  ensure_column($pdo, 'employees', 'contract_type',     "TEXT NOT NULL DEFAULT ''"); // cdi | cdd | stage | apprentissage | sur_appel | mandat | benevole_indemnise
+  ensure_column($pdo, 'employees', 'activity_rate',     'REAL NOT NULL DEFAULT 0');  // taux d'activité en %
+  ensure_column($pdo, 'employees', 'workplace',         "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'department',        "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'job_title',         "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'manager_name',      "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'trial_months',      'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'employees', 'notice_period',     "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'vacation_days',     'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'employees', 'cct',               "TEXT NOT NULL DEFAULT ''"); // convention collective applicable
+  ensure_column($pdo, 'employees', 'payments_per_year', 'INTEGER NOT NULL DEFAULT 12'); // 12 ou 13 (13e salaire)
+  ensure_column($pdo, 'employees', 'bank_name',         "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'account_holder',    "TEXT NOT NULL DEFAULT ''"); // si le titulaire du compte diffère de l'employé
+  ensure_column($pdo, 'employees', 'notes',             "TEXT NOT NULL DEFAULT ''");
+
+  /* Assurances sociales et prévoyance (2026-08-14, revu) : deux régimes distincts.
+     AVS/AC/AMat/AANP/LAAC/IJM ont le même taux pour tout le monde un mois donné, et ce
+     taux ne change que d'une année civile à l'autre (barème AVS, contrat AANP du club) :
+     leur valeur vit donc dans payroll_rate_settings (une ligne par année), pas sur
+     l'employé. L'employé garde seulement l'assujettissement (est-il concerné, oui/non).
+     LPP et impôt à la source restent personnels (âge, plan, situation familiale) :
+     taux/montant continuent de vivre sur la fiche. */
+  foreach (['avs', 'ac', 'amat', 'aanp', 'laac', 'ijm'] as $key) {
+    ensure_column($pdo, 'employees', $key . '_subject', 'INTEGER NOT NULL DEFAULT 0');
+  }
+  foreach (['lpp', 'is'] as $key) {
+    ensure_column($pdo, 'employees', $key . '_subject', 'INTEGER NOT NULL DEFAULT 0');
+    ensure_column($pdo, 'employees', $key . '_rate',    'REAL NOT NULL DEFAULT 0'); // part employé, en % du brut
+    ensure_column($pdo, 'employees', $key . '_amount',  'REAL NOT NULL DEFAULT 0'); // part employé, montant fixe par période
+  }
+  /* d'anciennes colonnes {avs,ac,amat,aanp,laac,ijm}_rate/_amount ont pu être créées et
+     remplies entre le 14 et le 14 août 2026 (une seule fenêtre de déploiement) : elles ne
+     sont plus lues nulle part, mais ne sont pas supprimées pour ne rien perdre. Reprises
+     ci-dessous vers payroll_rate_settings, voir plus bas. */
+
+  /* Taux d'assurances sociales, un jeu par année civile, saisi une fois dans les
+     Paramètres. Volontairement pas de barème officiel suisse en dur (décision du
+     2026-07-15) : les taux usuels ne sont que des indications côté interface. */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_rate_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    year INTEGER NOT NULL UNIQUE,
+    avs_rate REAL NOT NULL DEFAULT 0,
+    ac_rate REAL NOT NULL DEFAULT 0,
+    amat_rate REAL NOT NULL DEFAULT 0,
+    aanp_rate REAL NOT NULL DEFAULT 0,
+    laac_rate REAL NOT NULL DEFAULT 0,
+    ijm_rate REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )");
+
+  /* Références administratives des assureurs et de la prévoyance (assureur LAA, n° de
+     police, groupe LAA, institution et plan LPP, caisse d'allocations familiales) :
+     plusieurs profils possibles (ex. "Staff" / "Joueurs"), un employé en choisit un.
+     Ce sont des infos générales du club, pas de l'employé : les saisir une fois évite
+     de les ressaisir sur chaque fiche et garantit qu'elles restent cohérentes. */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_insurance_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL,
+    laa_insurer TEXT NOT NULL DEFAULT '',
+    laa_policy TEXT NOT NULL DEFAULT '',
+    laa_group TEXT NOT NULL DEFAULT '',
+    lpp_institution TEXT NOT NULL DEFAULT '',
+    lpp_plan TEXT NOT NULL DEFAULT '',
+    caf_fund TEXT NOT NULL DEFAULT '',
+    caf_number TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )");
+  ensure_column($pdo, 'employees', 'insurance_profile_id', 'INTEGER REFERENCES payroll_insurance_profiles(id) ON DELETE SET NULL');
+  // Ce qui reste personnel malgré le profil : le numéro d'affilié LPP de l'employé, et
+  // la part patronale (coût employeur, jamais retenue, dépend du salaire de la personne).
+  ensure_column($pdo, 'employees', 'lpp_member_number',   "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'lpp_employer_amount', 'REAL NOT NULL DEFAULT 0');
+
+  /* Reprise unique : si d'anciennes colonnes laa_insurer/laa_policy/laa_group/lpp_institution/
+     lpp_plan/caf_fund/caf_number existent encore sur employees (fenêtre du 2026-08-14) et
+     portent des valeurs, un profil est créé par combinaison distincte trouvée, et les
+     employés concernés y sont rattachés. Sans quoi une saisie faite dans l'intervalle
+     disparaîtrait sans avertissement. */
+  $legacyRefCols = ['laa_insurer', 'laa_policy', 'laa_group', 'lpp_institution', 'lpp_plan', 'caf_fund', 'caf_number'];
+  $hasLegacyRefCols = true;
+  foreach ($legacyRefCols as $c) { if (!column_exists($pdo, 'employees', $c)) { $hasLegacyRefCols = false; break; } }
+  $migratedProfiles = (bool) $pdo->query("SELECT 1 FROM schema_migrations WHERE name = 'insurance_profiles_2026_08'")->fetchColumn();
+  if (!$migratedProfiles && $hasLegacyRefCols) {
+    $rows = $pdo->query("SELECT id, laa_insurer, laa_policy, laa_group, lpp_institution, lpp_plan, caf_fund, caf_number
+                         FROM employees
+                         WHERE laa_insurer!='' OR laa_policy!='' OR laa_group!='' OR lpp_institution!=''
+                            OR lpp_plan!='' OR caf_fund!='' OR caf_number!=''")->fetchAll();
+    $profileByCombo = [];
+    foreach ($rows as $r) {
+      $combo = implode('|', array_map(fn($c) => $r[$c], $legacyRefCols));
+      if (!isset($profileByCombo[$combo])) {
+        $ins = $pdo->prepare('INSERT INTO payroll_insurance_profiles (label, laa_insurer, laa_policy, laa_group, lpp_institution, lpp_plan, caf_fund, caf_number) VALUES (?,?,?,?,?,?,?,?)');
+        $label = 'Profil repris ' . (count($profileByCombo) + 1);
+        $ins->execute([$label, $r['laa_insurer'], $r['laa_policy'], $r['laa_group'], $r['lpp_institution'], $r['lpp_plan'], $r['caf_fund'], $r['caf_number']]);
+        $profileByCombo[$combo] = (int)$pdo->lastInsertId();
+      }
+      $pdo->prepare('UPDATE employees SET insurance_profile_id = ? WHERE id = ?')->execute([$profileByCombo[$combo], $r['id']]);
+    }
+    $pdo->prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)')->execute(['insurance_profiles_2026_08']);
+  }
+
+  /* Si le passage à la fiche employé (2026-08-14, première mouture) a déjà été déployé et
+     utilisé avant cette révision, d'anciennes colonnes {avs,ac,amat,aanp,laac,ijm}_rate/_amount
+     ont pu être créées et remplies sur employees. Elles ne sont plus lues nulle part depuis
+     ce fichier, mais on en reprend la première valeur non nulle trouvée par ligne vers le
+     réglage global de l'année en cours, pour ne rien perdre d'un taux déjà saisi. */
+  $migratedRates = (bool) $pdo->query("SELECT 1 FROM schema_migrations WHERE name = 'shared_rates_2026_08'")->fetchColumn();
+  if (!$migratedRates) {
+    $sharedKeys = ['avs', 'ac', 'amat', 'aanp', 'laac', 'ijm'];
+    $found = [];
+    foreach ($sharedKeys as $k) {
+      if (!column_exists($pdo, 'employees', $k . '_rate')) continue;
+      $v = (float) $pdo->query("SELECT {$k}_rate FROM employees WHERE {$k}_rate != 0 LIMIT 1")->fetchColumn();
+      if ($v !== 0.0) $found[$k . '_rate'] = $v;
+    }
+    if ($found) {
+      $year = (int) date('Y');
+      $existsSt = $pdo->prepare('SELECT 1 FROM payroll_rate_settings WHERE year = ?');
+      $existsSt->execute([$year]);
+      if (!$existsSt->fetchColumn()) {
+        $cols = implode(',', array_keys($found));
+        $ph = implode(',', array_fill(0, count($found), '?'));
+        $pdo->prepare("INSERT INTO payroll_rate_settings (year, $cols) VALUES (?, $ph)")
+            ->execute([$year, ...array_values($found)]);
+      }
+    }
+    $pdo->prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)')->execute(['shared_rates_2026_08']);
+  }
+
+  /* Enfants : table à part et non un compteur, parce que les allocations familiales
+     se justifient enfant par enfant (âge, formation en cours jusqu'à 25 ans) et que
+     l'attestation demandée par la caisse porte sur chaque enfant. */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS employee_children (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    first_name TEXT NOT NULL DEFAULT '',
+    last_name TEXT NOT NULL DEFAULT '',
+    birth_date TEXT NOT NULL DEFAULT '',
+    in_education INTEGER NOT NULL DEFAULT 0,
+    allocation REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )");
+
+  /* Suivi des pièces d'engagement. Une ligne par type de document et par employé
+     (UNIQUE), remplie au fur et à mesure de l'onboarding. Les dates d'échéance
+     comptent autant que la réception : un permis de séjour et un extrait spécial
+     du casier judiciaire se périment, et l'extrait spécial est la pièce qui
+     conditionne l'encadrement de mineurs. */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS employee_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    doc_type TEXT NOT NULL,
+    received INTEGER NOT NULL DEFAULT 0,
+    received_date TEXT NOT NULL DEFAULT '',
+    expiry_date TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(employee_id, doc_type)
+  )");
+  // Le fichier numérique attaché à une pièce d'engagement (une par doc_type et par employé).
+  ensure_column($pdo, 'employee_documents', 'file_path', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employee_documents', 'file_name', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employee_documents', 'file_mime', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employee_documents', 'file_size', 'INTEGER NOT NULL DEFAULT 0');
+
+  /* Dossier libre : documents qui arrivent au fil du temps et ne correspondent à aucune
+     case de la checklist fixe (justificatif ponctuel, échange avec une assurance...).
+     Une ligne par fichier, pas de type imposé — juste un libellé donné à l'upload. */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS employee_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    label TEXT NOT NULL DEFAULT '',
+    file_path TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    file_mime TEXT NOT NULL DEFAULT '',
+    file_size INTEGER NOT NULL DEFAULT 0,
+    uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )");
+
+  /* Reprise unique des anciennes règles de paie vers la fiche employé. Les règles
+     étaient globales et cochées par employé ; elles deviennent des colonnes de
+     l'employé. Sans cette reprise, les taux déjà saisis (AANP, AVS, LPP, impôt
+     source) disparaîtraient des décomptes sans avertissement.
+
+     Les tables payroll_rules / employee_payroll_rules ne sont volontairement PAS
+     supprimées : la reprise est un aplatissement de données, et garder la source
+     permet de vérifier après coup ce qui a été repris. Elles ne sont plus lues
+     nulle part ailleurs. */
+  $migratedRules = (bool) $pdo->query("SELECT 1 FROM schema_migrations WHERE name = 'payroll_rules_to_fiche_2026_08'")->fetchColumn();
+  if (!$migratedRules && table_exists($pdo, 'payroll_rules') && table_exists($pdo, 'employee_payroll_rules')) {
+    // Une catégorie de règle par ligne de la fiche. charge_sociale/assurance_accident visent
+    // des lignes désormais À TAUX PARTAGÉ (avs/aanp) : seul l'assujettissement est repris sur
+    // l'employé, un taux en % trouvé alimente le réglage global de l'année en cours (la
+    // première valeur non nulle rencontrée ; un montant fixe pour ces catégories n'a pas
+    // d'équivalent dans le nouveau modèle et est donc ignoré). lpp/impot_source restent
+    // personnels : accumulés comme avant, plusieurs règles actives d'une même catégorie sur
+    // un employé s'additionnent, ce qui reproduit le total qu'il voyait.
+    $map = ['charge_sociale' => 'avs', 'assurance_accident' => 'aanp', 'lpp' => 'lpp', 'impot_source' => 'is'];
+    $sharedKeys = ['avs', 'ac', 'amat', 'aanp', 'laac', 'ijm'];
+    $rows = $pdo->query("SELECT epr.employee_id, pr.category, pr.type, pr.valeur
+                         FROM employee_payroll_rules epr
+                         JOIN payroll_rules pr ON pr.id = epr.rule_id
+                         WHERE pr.active = 1")->fetchAll();
+    $acc = [];
+    $sharedRateFound = [];
+    foreach ($rows as $r) {
+      $key = $map[$r['category']] ?? null;
+      if ($key === null) continue;
+      $eid = (int)$r['employee_id'];
+      if (in_array($key, $sharedKeys, true)) {
+        $pdo->prepare("UPDATE employees SET {$key}_subject = 1 WHERE id = ?")->execute([$eid]);
+        if ($r['type'] === 'percent' && (float)$r['valeur'] > 0 && !isset($sharedRateFound[$key])) {
+          $sharedRateFound[$key] = (float)$r['valeur'];
+        }
+        continue;
+      }
+      $acc[$eid][$key] ??= ['rate' => 0.0, 'amount' => 0.0];
+      if ($r['type'] === 'percent') $acc[$eid][$key]['rate']   += (float)$r['valeur'];
+      else                          $acc[$eid][$key]['amount'] += (float)$r['valeur'];
+    }
+    foreach ($acc as $eid => $lines) {
+      foreach ($lines as $key => $v) {
+        $pdo->prepare("UPDATE employees SET {$key}_subject = 1, {$key}_rate = ?, {$key}_amount = ? WHERE id = ?")
+            ->execute([$v['rate'], $v['amount'], $eid]);
+      }
+    }
+    if ($sharedRateFound) {
+      $year = (int) date('Y');
+      $existsSt = $pdo->prepare('SELECT 1 FROM payroll_rate_settings WHERE year = ?');
+      $existsSt->execute([$year]);
+      if (!$existsSt->fetchColumn()) {
+        $cols = implode(',', array_map(fn($k) => "{$k}_rate", array_keys($sharedRateFound)));
+        $ph = implode(',', array_fill(0, count($sharedRateFound), '?'));
+        $pdo->prepare("INSERT INTO payroll_rate_settings (year, $cols) VALUES (?, $ph)")
+            ->execute([$year, ...array_values($sharedRateFound)]);
+      }
+    }
+    $pdo->prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)')->execute(['payroll_rules_to_fiche_2026_08']);
+  }
+
   // employee_assignments = un "poste" au sein d'une équipe (rôle + employé optionnel + sa propre indemnité).
   // L'ancien barème séparé (indemnite_bareme, poste x équipe) est abandonné : le montant/périodicité vit
   // directement sur chaque poste d'équipe. Reconstruction complète dès qu'un ancien schéma est détecté
@@ -1013,15 +1307,154 @@ function club_active(): bool {
  */
 
 /** Pousse un employé créé/modifié vers l'annuaire partagé. Jamais bloquant : une panne du
- * référentiel contacts (base absente, verrou) ne doit pas empêcher d'enregistrer un employé. */
-function sync_employee_to_contacts(int $employeeId, string $first, string $last, string $email, string $phone, string $iban, bool $active): void {
+ * référentiel contacts (base absente, verrou) ne doit pas empêcher d'enregistrer un employé.
+ * $identity porte les champs d'identité de la fiche (adresse, naissance, mobile, langue) qui
+ * appartiennent à la personne et non à son emploi : ils sont donc reversés à l'annuaire, où
+ * mfc_contacts_ingest() ne remplit que ce qui y est encore vide. */
+function sync_employee_to_contacts(int $employeeId, string $first, string $last, string $email, string $phone, string $iban, bool $active, array $identity = []): void {
   try {
-    mfc_contacts_ingest(mfc_contacts_db(), [
+    $payload = [
       'first_name' => $first, 'last_name' => $last, 'email' => $email,
       'phone' => $phone, 'iban' => $iban, 'active' => $active ? 1 : 0,
       'qualities' => ['salarie'],
-    ], 'rh', 'employee:' . $employeeId);
+    ];
+    foreach (['mobile', 'street', 'zip', 'city', 'country', 'birth_date', 'lang', 'job_title'] as $k) {
+      if (($identity[$k] ?? '') !== '') $payload[$k] = $identity[$k];
+    }
+    mfc_contacts_ingest(mfc_contacts_db(), $payload, 'rh', 'employee:' . $employeeId);
   } catch (Throwable $e) { /* l'annuaire n'est pas critique pour la RH elle-même */ }
+}
+
+/* --------------------------------------------------- Fiche employé complète
+ *
+ * Une fonction plutôt qu'une constante de premier niveau : sous le switch du
+ * routeur, une const déclarée après coup serait introuvable à l'exécution.
+ */
+
+/** Champs de la fiche employé acceptés en écriture, avec leur type de conversion.
+ * first_name/last_name/email/phone/iban/active/paiement restent traités à part
+ * (validation propre, synchro annuaire), ils ne figurent donc pas ici. */
+function employee_fiche_fields(): array {
+  return [
+    // Identité
+    'birth_name' => 'str', 'avs_number' => 'str', 'birth_date' => 'str', 'gender' => 'str',
+    'nationality' => 'str', 'lang' => 'str', 'civil_status' => 'str', 'civil_status_since' => 'str',
+    'mobile' => 'str', 'street' => 'str', 'zip' => 'str', 'city' => 'str', 'country' => 'str',
+    'canton' => 'str', 'emergency_name' => 'str', 'emergency_phone' => 'str',
+    // Séjour
+    'permit_type' => 'str', 'permit_expiry' => 'str', 'is_frontalier' => 'bool',
+    'residence_country' => 'str', 'arrival_ch_date' => 'str',
+    // Impôt à la source
+    'tax_at_source' => 'bool', 'tax_canton' => 'str', 'tax_bareme' => 'str',
+    'tax_church' => 'bool', 'spouse_works' => 'bool', 'tax_children' => 'int',
+    // Contrat
+    'contract_start' => 'str', 'contract_end' => 'str', 'contract_type' => 'str',
+    'activity_rate' => 'float', 'workplace' => 'str', 'department' => 'str', 'job_title' => 'str',
+    'manager_name' => 'str', 'trial_months' => 'int', 'notice_period' => 'str',
+    'vacation_days' => 'float', 'cct' => 'str', 'payments_per_year' => 'int',
+    'bank_name' => 'str', 'account_holder' => 'str', 'notes' => 'str',
+    // Assurances sociales à taux partagé (voir Paramètres > Paie) : seul l'assujettissement
+    // est propre à l'employé, le taux vient de payroll_rate_settings.
+    'avs_subject' => 'bool', 'ac_subject' => 'bool', 'amat_subject' => 'bool',
+    'aanp_subject' => 'bool', 'laac_subject' => 'bool', 'ijm_subject' => 'bool',
+    // LPP et impôt à la source : personnels (âge/plan, situation familiale)
+    'lpp_subject' => 'bool',  'lpp_rate' => 'float',  'lpp_amount' => 'float',
+    'is_subject' => 'bool',   'is_rate' => 'float',   'is_amount' => 'float',
+    // Profil d'assurance (assureur LAA, institution LPP...) choisi dans une liste
+    // paramétrée une fois pour tout le club ; seuls le n° d'affilié et la part
+    // employeur restent propres à la personne. 'nullint' et non 'int' : la colonne est
+    // une clé étrangère avec ON DELETE SET NULL, y écrire 0 la ferait échouer (pragma
+    // foreign_keys=ON, et aucun profil n'a l'id 0).
+    'insurance_profile_id' => 'nullint',
+    'lpp_member_number' => 'str', 'lpp_employer_amount' => 'float',
+  ];
+}
+
+/** Construit le fragment SET d'un UPDATE à partir des seuls champs réellement transmis.
+ * Un formulaire partiel (le bandeau "Paiement" de la fiche détaillée, par exemple) ne doit
+ * jamais remettre à zéro les champs qu'il n'affiche pas. */
+function employee_fiche_assignments(array $b): array {
+  $set = []; $vals = [];
+  // Symétrique de la redaction en lecture : sans droit sur les salaires, un champ de
+  // rémunération transmis à la main est ignoré, pas seulement masqué à l'affichage.
+  $blocked = mfc_can('rh.payroll.edit') ? [] : array_flip(employee_payroll_only_fields());
+  foreach (employee_fiche_fields() as $col => $type) {
+    if (!array_key_exists($col, $b)) continue;
+    if (isset($blocked[$col])) continue;
+    $set[] = "$col = ?";
+    $vals[] = match ($type) {
+      'int'     => i($b, $col),
+      'nullint' => ni($b, $col), // NULL si vide/0, jamais 0 : la colonne est une clé étrangère
+      'float'   => f($b, $col),
+      'bool'    => bo($b, $col) ? 1 : 0,
+      default   => s($b, $col),
+    };
+  }
+  return [$set, $vals];
+}
+
+/** Catalogue des pièces d'engagement. L'extrait spécial du casier judiciaire figure
+ * en tête des pièces obligatoires : c'est celle qui conditionne l'encadrement de mineurs. */
+function employee_document_types(): array {
+  return ['contrat_signe', 'piece_identite', 'permis_sejour', 'attestation_avs',
+          'casier_special', 'coordonnees_bancaires'];
+}
+
+/** Champs de la fiche réservés à qui détient le droit sur les salaires : ce qui décrit
+ * la rémunération et les retenues, plus le numéro AVS, qui est un identifiant d'État. */
+function employee_payroll_only_fields(): array {
+  return ['avs_number', 'tax_at_source', 'tax_canton', 'tax_bareme', 'tax_church',
+          'spouse_works', 'tax_children', 'payments_per_year',
+          'insurance_profile_id', 'lpp_member_number', 'lpp_employer_amount',
+          'avs_subject', 'ac_subject', 'amat_subject', 'aanp_subject', 'laac_subject', 'ijm_subject',
+          'lpp_subject', 'lpp_rate', 'lpp_amount',
+          'is_subject', 'is_rate', 'is_amount'];
+}
+
+/** Taux d'assurances sociales partagés d'une année civile. Retombe sur des zéros si
+ * l'année n'a pas encore été paramétrée, plutôt que d'échouer : mieux vaut un décompte
+ * à retenues nulles et visibles qu'une page qui casse. */
+function payroll_rate_settings_for_year(PDO $pdo, int $year): array {
+  $st = $pdo->prepare('SELECT * FROM payroll_rate_settings WHERE year = ?');
+  $st->execute([$year]);
+  $row = $st->fetch();
+  return $row ?: ['year' => $year, 'avs_rate' => 0.0, 'ac_rate' => 0.0, 'amat_rate' => 0.0,
+                   'aanp_rate' => 0.0, 'laac_rate' => 0.0, 'ijm_rate' => 0.0];
+}
+
+/** Attache enfants, pièces d'engagement, dossier libre et profil d'assurance résolu à une
+ * liste d'employés, en requêtes groupées (pas de requête dans la boucle).
+ *
+ * Sans le droit sur les salaires, les champs de rémunération sont retirés de la réponse :
+ * la liste des employés est accessible bien plus largement (un coach y consulte les
+ * effectifs), et masquer un onglet côté navigateur n'est pas une protection. */
+function attach_employee_fiche(PDO $pdo, array &$employees): void {
+  if (!$employees) return;
+  $canPayroll = mfc_can('rh.payroll.view');
+  if ($canPayroll) {
+    $children = $pdo->query('SELECT * FROM employee_children ORDER BY birth_date')->fetchAll();
+    $byChild = []; foreach ($children as $c) $byChild[(int)$c['employee_id']][] = $c;
+    $profiles = $pdo->query('SELECT * FROM payroll_insurance_profiles')->fetchAll();
+    $byProfile = []; foreach ($profiles as $p) $byProfile[(int)$p['id']] = $p;
+    $rateSettings = payroll_rate_settings_for_year($pdo, (int) date('Y'));
+  }
+  $docs   = $pdo->query('SELECT * FROM employee_documents')->fetchAll();
+  $byDoc  = []; foreach ($docs as $d) $byDoc[(int)$d['employee_id']][] = $d;
+  $files  = $pdo->query('SELECT * FROM employee_files ORDER BY uploaded_at DESC')->fetchAll();
+  $byFile = []; foreach ($files as $f) $byFile[(int)$f['employee_id']][] = $f;
+  $hidden = $canPayroll ? [] : array_flip(employee_payroll_only_fields());
+  foreach ($employees as &$e) {
+    if ($hidden) foreach ($hidden as $col => $_) unset($e[$col]);
+    $e['children']  = $canPayroll ? ($byChild[(int)$e['id']] ?? []) : [];
+    $e['documents'] = $byDoc[(int)$e['id']] ?? [];
+    $e['files']     = $byFile[(int)$e['id']] ?? [];
+    if ($canPayroll) {
+      $pid = (int)($e['insurance_profile_id'] ?? 0);
+      $e['insurance_profile'] = $byProfile[$pid] ?? null;
+      $e['rate_settings'] = $rateSettings;
+    }
+  }
+  unset($e);
 }
 
 /** Enrichit une liste d'employés avec ce que l'annuaire partagé sait en plus des champs propres à
@@ -1286,6 +1719,20 @@ const RH_PERMS = [
   'dashboard'              => 'teams.view',
   'employees'              => ['GET' => 'employees.view',  'write' => 'employees.edit'],
   'employee_assignments'   => ['GET' => 'employees.view',  'write' => 'employees.edit'],
+  /* Les enfants servent aux allocations familiales et au barème d'impôt source :
+     donnée de paie, et donnée personnelle de mineurs. D'où payroll.view et non
+     employees.view, contrairement aux pièces d'engagement, qui relèvent du suivi
+     administratif courant de l'employé. */
+  'employee_children'      => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
+  'employee_documents'     => ['GET' => 'employees.view',  'write' => 'employees.edit'],
+  'employee_document_upload'      => 'employees.edit',
+  'employee_document_remove_file' => 'employees.edit',
+  'employee_document_file'        => 'employees.view',
+  'employee_files'         => ['GET' => 'employees.view',  'write' => 'employees.edit'],
+  'employee_files_file'    => 'employees.view',
+  'payroll_rate_settings'  => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
+  'insurance_profiles'     => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
+  'payslip_context'        => 'payroll.view',
   'indemnites_custom'      => ['GET' => 'employees.view',  'write' => 'indemnites.edit'],
   'payroll_rules'          => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
   'employee_payroll_rules' => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
@@ -1531,6 +1978,7 @@ switch ($action) {
         $e['total_indemnites'] = round($totals[(int)$e['id']] ?? 0, 2);
       }
       unset($e);
+      attach_employee_fiche($pdo, $employees);
       attach_contacts_directory($employees);
       out($employees);
     }
@@ -1542,7 +1990,13 @@ switch ($action) {
       $st = db()->prepare('INSERT INTO employees (first_name,last_name,email,phone,iban,paiement) VALUES (?,?,?,?,?,?)');
       $st->execute([$first, $ln, $email, $phone, $iban, $paiement]);
       $newId = (int)db()->lastInsertId();
-      sync_employee_to_contacts($newId, $first, $ln, $email, $phone, $iban, true);
+      // Le reste de la fiche est écrit dans un second temps : la création peut n'avoir que le nom.
+      [$set, $vals] = employee_fiche_assignments($b);
+      if ($set) {
+        $vals[] = $newId;
+        db()->prepare('UPDATE employees SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($vals);
+      }
+      sync_employee_to_contacts($newId, $first, $ln, $email, $phone, $iban, true, $b);
       out(['id' => $newId]);
     }
     if ($method === 'PUT') {
@@ -1557,9 +2011,14 @@ switch ($action) {
       if (!in_array($paiement, ['mensuel', 'semestriel'], true)) fail('paiement invalide');
       $first = s($b,'first_name'); $last = s($b,'last_name'); $email = s($b,'email'); $phone = s($b,'phone'); $iban = s($b,'iban');
       $active = bo($b,'active',true);
-      $st = db()->prepare('UPDATE employees SET first_name=?,last_name=?,email=?,phone=?,iban=?,active=?,paiement=? WHERE id=?');
-      $st->execute([$first, $last, $email, $phone, $iban, $active?1:0, $paiement, $id]);
-      sync_employee_to_contacts($id, $first, $last, $email, $phone, $iban, $active);
+      // Les champs de la fiche complète ne sont écrits que s'ils sont transmis : le bandeau
+      // "Paiement" de la fiche détaillée n'envoie que l'identité et ne doit rien effacer d'autre.
+      [$set, $vals] = employee_fiche_assignments($b);
+      array_unshift($set, 'first_name=?', 'last_name=?', 'email=?', 'phone=?', 'iban=?', 'active=?', 'paiement=?');
+      array_unshift($vals, $first, $last, $email, $phone, $iban, $active?1:0, $paiement);
+      $vals[] = $id;
+      db()->prepare('UPDATE employees SET ' . implode(', ', $set) . ' WHERE id=?')->execute($vals);
+      sync_employee_to_contacts($id, $first, $last, $email, $phone, $iban, $active, $b);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
@@ -1568,6 +2027,274 @@ switch ($action) {
       out(['ok' => true]);
     }
     fail('Méthode non supportée', 405);
+  }
+
+  /* ============ ENFANTS DE L'EMPLOYÉ ============ */
+
+  case 'employee_children': {
+    if ($method === 'GET') {
+      $employee_id = i($_GET, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+      $st = db()->prepare('SELECT * FROM employee_children WHERE employee_id=? ORDER BY birth_date');
+      $st->execute([$employee_id]);
+      out($st->fetchAll());
+    }
+    if ($method === 'POST') {
+      $employee_id = i($b, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+      $st = db()->prepare('INSERT INTO employee_children (employee_id, first_name, last_name, birth_date, in_education, allocation) VALUES (?,?,?,?,?,?)');
+      $st->execute([$employee_id, s($b,'first_name'), s($b,'last_name'), s($b,'birth_date'), bo($b,'in_education')?1:0, f($b,'allocation')]);
+      out(['id' => (int)db()->lastInsertId()]);
+    }
+    if ($method === 'PUT') {
+      $id = i($b, 'id'); if (!$id) fail('id requis');
+      $st = db()->prepare('UPDATE employee_children SET first_name=?, last_name=?, birth_date=?, in_education=?, allocation=? WHERE id=?');
+      $st->execute([s($b,'first_name'), s($b,'last_name'), s($b,'birth_date'), bo($b,'in_education')?1:0, f($b,'allocation'), $id]);
+      out(['ok' => true]);
+    }
+    if ($method === 'DELETE') {
+      $id = i($_GET, 'id'); if (!$id) fail('id requis');
+      db()->prepare('DELETE FROM employee_children WHERE id=?')->execute([$id]);
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  /* ============ PIÈCES D'ENGAGEMENT ============ */
+
+  case 'employee_documents': {
+    if ($method === 'GET') {
+      $employee_id = i($_GET, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+      $st = db()->prepare('SELECT * FROM employee_documents WHERE employee_id=?');
+      $st->execute([$employee_id]);
+      out($st->fetchAll());
+    }
+    if ($method === 'POST') {
+      // Upsert par (employé, type) : la case à cocher de la checklist envoie toujours le même
+      // couple, qu'il s'agisse d'une première réception ou d'une correction de date.
+      $employee_id = i($b, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+      $doc_type = s($b, 'doc_type');
+      if (!in_array($doc_type, employee_document_types(), true)) fail('Type de document inconnu');
+      $st = db()->prepare("INSERT INTO employee_documents (employee_id, doc_type, received, received_date, expiry_date, notes, updated_at)
+        VALUES (?,?,?,?,?,?,datetime('now'))
+        ON CONFLICT(employee_id, doc_type) DO UPDATE SET
+          received=excluded.received, received_date=excluded.received_date,
+          expiry_date=excluded.expiry_date, notes=excluded.notes, updated_at=datetime('now')");
+      $st->execute([$employee_id, $doc_type, bo($b,'received')?1:0, s($b,'received_date'), s($b,'expiry_date'), s($b,'notes')]);
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  /* Dépôt du fichier numérique d'une pièce d'engagement. Marque automatiquement la pièce
+     "reçue" : un fichier attaché sans case cochée serait un état incohérent. */
+  case 'employee_document_upload': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $employee_id = i($b, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+    $doc_type = s($b, 'doc_type');
+    if (!in_array($doc_type, employee_document_types(), true)) fail('Type de document inconnu');
+    if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) fail('Fichier manquant ou invalide.');
+    $origName = $_FILES['file']['name'];
+    $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+    if (!in_array($ext, ['pdf', 'jpg', 'jpeg', 'png'], true)) fail('Format non supporté (PDF, JPG ou PNG uniquement).');
+
+    $dir = DB_DIR . '/employee_docs';
+    if (!is_dir($dir)) mkdir($dir, 0775, true);
+    $ht = $dir . '/.htaccess';
+    if (!file_exists($ht)) file_put_contents($ht, "Require all denied\n");
+
+    $st = $pdo->prepare('SELECT id, file_path FROM employee_documents WHERE employee_id=? AND doc_type=?');
+    $st->execute([$employee_id, $doc_type]);
+    $existing = $st->fetch();
+    $path = $dir . "/{$employee_id}_{$doc_type}.{$ext}";
+    if ($existing && $existing['file_path'] && $existing['file_path'] !== $path && is_file($existing['file_path'])) unlink($existing['file_path']);
+    if (!move_uploaded_file($_FILES['file']['tmp_name'], $path)) fail("Échec de l'enregistrement du fichier.");
+    $mime = ['pdf' => 'application/pdf', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png'][$ext];
+    $size = filesize($path);
+
+    $pdo->prepare("INSERT INTO employee_documents (employee_id, doc_type, received, received_date, file_path, file_name, file_mime, file_size, updated_at)
+      VALUES (?,?,1,?,?,?,?,?,datetime('now'))
+      ON CONFLICT(employee_id, doc_type) DO UPDATE SET
+        received=1, received_date=CASE WHEN received_date='' THEN excluded.received_date ELSE received_date END,
+        file_path=excluded.file_path, file_name=excluded.file_name, file_mime=excluded.file_mime,
+        file_size=excluded.file_size, updated_at=datetime('now')")
+      ->execute([$employee_id, $doc_type, date('Y-m-d'), $path, $origName, $mime, $size]);
+    out(['ok' => true, 'filename' => $origName]);
+  }
+
+  /* Retrait du fichier attaché à une pièce, sans toucher au statut "reçu" ni aux dates :
+     utile quand un mauvais fichier a été déposé et que la pièce reste physiquement reçue. */
+  case 'employee_document_remove_file': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $employee_id = i($b, 'employee_id'); $doc_type = s($b, 'doc_type');
+    if (!$employee_id || !$doc_type) fail('employee_id et doc_type requis');
+    $st = $pdo->prepare('SELECT file_path FROM employee_documents WHERE employee_id=? AND doc_type=?');
+    $st->execute([$employee_id, $doc_type]);
+    $path = $st->fetchColumn();
+    if ($path && is_file($path)) unlink($path);
+    $pdo->prepare("UPDATE employee_documents SET file_path='', file_name='', file_mime='', file_size=0, updated_at=datetime('now') WHERE employee_id=? AND doc_type=?")
+      ->execute([$employee_id, $doc_type]);
+    out(['ok' => true]);
+  }
+
+  /* Téléchargement/consultation du fichier d'une pièce d'engagement, depuis l'ERP (session,
+     pas de token). Le lien personnel de l'employé passe par mon-piece.php, gardé par token. */
+  case 'employee_document_file': {
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $employee_id = i($_GET, 'employee_id'); $doc_type = s($_GET, 'doc_type');
+    $st = db()->prepare('SELECT file_path, file_name, file_mime FROM employee_documents WHERE employee_id=? AND doc_type=?');
+    $st->execute([$employee_id, $doc_type]);
+    $row = $st->fetch();
+    if (!$row || !$row['file_path'] || !is_file($row['file_path'])) fail('Fichier introuvable.', 404);
+    if (ob_get_level() > 0) ob_clean();
+    $disposition = !empty($_GET['download']) ? 'attachment' : 'inline';
+    header('Content-Type: ' . $row['file_mime']);
+    header('Content-Disposition: ' . $disposition . '; filename="' . rawurlencode($row['file_name']) . '"');
+    header('Content-Length: ' . filesize($row['file_path']));
+    readfile($row['file_path']);
+    exit;
+  }
+
+  /* ============ DOSSIER LIBRE (documents qui arrivent au fil du temps) ============ */
+
+  case 'employee_files': {
+    $pdo = db();
+    if ($method === 'GET') {
+      $employee_id = i($_GET, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+      $st = $pdo->prepare('SELECT id, employee_id, label, file_name, file_mime, file_size, uploaded_at FROM employee_files WHERE employee_id=? ORDER BY uploaded_at DESC');
+      $st->execute([$employee_id]);
+      out($st->fetchAll());
+    }
+    if ($method === 'POST') {
+      $employee_id = i($b, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+      if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) fail('Fichier manquant ou invalide.');
+      $origName = $_FILES['file']['name'];
+      $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+      if (!in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx'], true)) fail('Format non supporté.');
+
+      $dir = DB_DIR . '/employee_docs';
+      if (!is_dir($dir)) mkdir($dir, 0775, true);
+      $ht = $dir . '/.htaccess';
+      if (!file_exists($ht)) file_put_contents($ht, "Require all denied\n");
+
+      $filename = "{$employee_id}_" . bin2hex(random_bytes(6)) . ".{$ext}";
+      $path = $dir . '/' . $filename;
+      if (!move_uploaded_file($_FILES['file']['tmp_name'], $path)) fail("Échec de l'enregistrement du fichier.");
+      $mime = ['pdf'=>'application/pdf','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','png'=>'image/png',
+               'doc'=>'application/msword','docx'=>'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+               'xls'=>'application/vnd.ms-excel','xlsx'=>'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'][$ext];
+      $label = s($b, 'label') ?: $origName;
+      $pdo->prepare('INSERT INTO employee_files (employee_id, label, file_path, file_name, file_mime, file_size) VALUES (?,?,?,?,?,?)')
+          ->execute([$employee_id, $label, $path, $origName, $mime, filesize($path)]);
+      out(['id' => (int)$pdo->lastInsertId()]);
+    }
+    if ($method === 'DELETE') {
+      $id = i($_GET, 'id'); if (!$id) fail('id requis');
+      $st = $pdo->prepare('SELECT file_path FROM employee_files WHERE id=?');
+      $st->execute([$id]);
+      $path = $st->fetchColumn();
+      if ($path && is_file($path)) unlink($path);
+      $pdo->prepare('DELETE FROM employee_files WHERE id=?')->execute([$id]);
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  case 'employee_files_file': {
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $id = i($_GET, 'id'); if (!$id) fail('id requis');
+    $st = db()->prepare('SELECT file_path, file_name, file_mime FROM employee_files WHERE id=?');
+    $st->execute([$id]);
+    $row = $st->fetch();
+    if (!$row || !is_file($row['file_path'])) fail('Fichier introuvable.', 404);
+    if (ob_get_level() > 0) ob_clean();
+    $disposition = !empty($_GET['download']) ? 'attachment' : 'inline';
+    header('Content-Type: ' . $row['file_mime']);
+    header('Content-Disposition: ' . $disposition . '; filename="' . rawurlencode($row['file_name']) . '"');
+    header('Content-Length: ' . filesize($row['file_path']));
+    readfile($row['file_path']);
+    exit;
+  }
+
+  /* ============ PARAMÈTRES > PAIE : taux partagés et profils d'assurance ============ */
+
+  case 'payroll_rate_settings': {
+    $pdo = db();
+    if ($method === 'GET') {
+      out($pdo->query('SELECT * FROM payroll_rate_settings ORDER BY year DESC')->fetchAll());
+    }
+    if ($method === 'POST' || $method === 'PUT') {
+      $year = i($b, 'year'); if (!$year) fail('year requis');
+      $cols = ['avs_rate','ac_rate','amat_rate','aanp_rate','laac_rate','ijm_rate'];
+      $vals = array_map(fn($c) => f($b, $c), $cols);
+      $pdo->prepare('INSERT INTO payroll_rate_settings (year, ' . implode(',', $cols) . ') VALUES (?,' . implode(',', array_fill(0, count($cols), '?')) . ')
+        ON CONFLICT(year) DO UPDATE SET ' . implode(', ', array_map(fn($c) => "$c=excluded.$c", $cols)))
+        ->execute([$year, ...$vals]);
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  case 'insurance_profiles': {
+    $pdo = db();
+    if ($method === 'GET') {
+      out($pdo->query('SELECT * FROM payroll_insurance_profiles ORDER BY active DESC, sort_order, label')->fetchAll());
+    }
+    if ($method === 'POST') {
+      $label = s($b, 'label'); if (!$label) fail('Libellé requis');
+      $st = $pdo->prepare('INSERT INTO payroll_insurance_profiles (label, laa_insurer, laa_policy, laa_group, lpp_institution, lpp_plan, caf_fund, caf_number) VALUES (?,?,?,?,?,?,?,?)');
+      $st->execute([$label, s($b,'laa_insurer'), s($b,'laa_policy'), s($b,'laa_group'), s($b,'lpp_institution'), s($b,'lpp_plan'), s($b,'caf_fund'), s($b,'caf_number')]);
+      out(['id' => (int)$pdo->lastInsertId()]);
+    }
+    if ($method === 'PUT') {
+      $id = i($b, 'id'); if (!$id) fail('id requis');
+      $label = s($b, 'label'); if (!$label) fail('Libellé requis');
+      $st = $pdo->prepare('UPDATE payroll_insurance_profiles SET label=?, laa_insurer=?, laa_policy=?, laa_group=?, lpp_institution=?, lpp_plan=?, caf_fund=?, caf_number=?, active=? WHERE id=?');
+      $st->execute([$label, s($b,'laa_insurer'), s($b,'laa_policy'), s($b,'laa_group'), s($b,'lpp_institution'), s($b,'lpp_plan'), s($b,'caf_fund'), s($b,'caf_number'), bo($b,'active',true)?1:0, $id]);
+      out(['ok' => true]);
+    }
+    if ($method === 'DELETE') {
+      $id = i($_GET, 'id'); if (!$id) fail('id requis');
+      // ON DELETE SET NULL sur employees.insurance_profile_id : les fiches qui pointaient
+      // vers ce profil retombent à "aucun profil" plutôt que de casser.
+      $pdo->prepare('DELETE FROM payroll_insurance_profiles WHERE id=?')->execute([$id]);
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  /* ============ CONTEXTE D'UN DÉCOMPTE DE PAIE ============ */
+
+  /* Point d'entrée distinct de 'employees' pour que le droit sur les salaires soit exigé
+     explicitement par le serveur avant de composer un décompte. La page de décompte
+     s'appuyait jusqu'ici sur le 403 renvoyé par payroll_rules, un garde-fou hérité d'un
+     appel qui n'existe plus : le rendre volontaire évite qu'il disparaisse en silence. */
+  case 'payslip_context': {
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $employee_id = i($_GET, 'employee_id'); if (!$employee_id) fail('employee_id requis');
+    // Année civile du mois décompté (ex: "2026-01"), pas l'année en cours : un décompte de
+    // janvier doit utiliser le taux de janvier même généré après le nouvel an.
+    $month = s($_GET, 'month');
+    $year = preg_match('/^(\d{4})-\d{2}$/', $month, $mm) ? (int)$mm[1] : (int) date('Y');
+    $st = $pdo->prepare('SELECT * FROM employees WHERE id=?');
+    $st->execute([$employee_id]);
+    $emp = $st->fetch();
+    if (!$emp) fail('Employé introuvable', 404);
+    $ch = $pdo->prepare('SELECT * FROM employee_children WHERE employee_id=? ORDER BY birth_date');
+    $ch->execute([$employee_id]);
+    $profile = null;
+    if (!empty($emp['insurance_profile_id'])) {
+      $ps = $pdo->prepare('SELECT * FROM payroll_insurance_profiles WHERE id = ?');
+      $ps->execute([(int)$emp['insurance_profile_id']]);
+      $profile = $ps->fetch() ?: null;
+    }
+    out([
+      'employee' => $emp,
+      'children' => $ch->fetchAll(),
+      'rate_settings' => payroll_rate_settings_for_year($pdo, $year),
+      'insurance_profile' => $profile,
+    ]);
   }
 
   /* ============ AFFECTATIONS EMPLOYÉ ============ */
