@@ -245,7 +245,7 @@ async function api(action, opts = {}) {
   // payslip_pdf renvoie un PDF binaire côté succès, mais une erreur JSON classique côté échec
   // (droit manquant, Dompdf en échec) : il faut lire la réponse différemment selon le cas,
   // contrairement à export_compta ci-dessus qui ne vérifie jamais res.ok.
-  if (action === 'payslip_pdf') {
+  if (action === 'payslip_pdf' || action === 'player_payslip_pdf') {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       const err = new Error(data.error || 'Erreur serveur');
@@ -1150,6 +1150,9 @@ async function employeeDetailModal(ee, seasonId){
 function openPayslip(employeeId, seasonId){
   window.open(location.pathname + '#payslip-' + employeeId + '-' + seasonId, '_blank');
 }
+function openPlayerPayslip(playerId, month){
+  window.open(location.pathname + '#player-payslip-' + playerId + '-' + month, '_blank');
+}
 async function updateEmployeePaiement(id, paiement, seasonId){
   const ee = STATE.employees.find(e => e.id === id);
   if (!ee) return;
@@ -1891,6 +1894,21 @@ function playerModal(p){
         <div class="field"><label>Salaire mensuel brut CHF</label><input id="pm-salaire" type="number" step="0.05" value="${p?p.salaire_mensuel:''}"></div>
       </div>
     </div>
+    ${MFC.payrollView ? `
+    <div style="background:var(--bg);border:1px solid var(--ligne);border-radius:10px;padding:14px;margin-top:12px">
+      <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin-bottom:10px">Charges sociales (paie)</h4>
+      <p class="hint" style="margin-bottom:10px">Mêmes taux que les employés (Paramètres &gt; Paie) : coche seulement si le joueur y est assujetti.</p>
+      ${SHARED_SOCIAL_LINES.map(l => `
+        <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--ligne-2);font-size:13px;cursor:pointer;margin:0">
+          <span style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pm-${l.k}" ${p&&p[l.k+'_subject']?'checked':''}>${esc(l.label)}</span>
+          <span style="color:var(--gris)">${pctSmart(currentRateSettings()[l.k+'_rate'] || 0)} %</span>
+        </label>
+      `).join('')}
+      <label style="display:flex;align-items:center;gap:8px;padding:10px 0 0;font-size:13px;cursor:pointer;margin:0">
+        <input type="checkbox" id="pm-avs-abatement" ${p&&p.avs_abatement?'checked':''}>
+        <span>Abattement AVS (2500.-/semestre, réduit la base de calcul des charges ci-dessus)</span>
+      </label>
+    </div>` : ''}
     ${p ? `<div class="field check-row" style="margin-top:12px"><input type="checkbox" id="pm-active" ${p.active==1?'checked':''}><label style="margin:0" for="pm-active">Joueur actif</label></div>` : ''}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -1906,6 +1924,10 @@ async function savePlayer(id){
     email: document.getElementById('pm-email').value.trim(), phone: document.getElementById('pm-phone').value.trim(), iban: document.getElementById('pm-iban').value.trim(),
     poste: document.getElementById('pm-poste').value, date_naissance: document.getElementById('pm-naissance').value,
     adresse: document.getElementById('pm-adresse').value.trim(), npa: document.getElementById('pm-npa').value.trim(), ville: document.getElementById('pm-ville').value.trim() };
+  if (MFC.payrollView) {
+    SHARED_SOCIAL_LINES.forEach(l => { payload[l.k + '_subject'] = document.getElementById('pm-' + l.k).checked; });
+    payload.avs_abatement = document.getElementById('pm-avs-abatement').checked;
+  }
   try {
     if (id) { payload.id = id; payload.active = document.getElementById('pm-active').checked; await api('players', { method: 'PUT', body: payload }); }
     else { await api('players', { method: 'POST', body: payload }); }
@@ -2389,7 +2411,8 @@ const PAIE_RATE_FIELDS = [
 ];
 let PAIE_RATE_YEAR_EDITING = null;
 
-function renderPaieTab(el){
+async function renderPaieTab(el){
+  if (!STATE.comptaAccounts) STATE.comptaAccounts = await apiCompta('accounts');
   el.innerHTML = `
     <div class="card">
       <div class="card-head"><h3>Taux d'assurances sociales</h3></div>
@@ -2431,6 +2454,9 @@ function paieRateYearForm(){
   const editing = PAIE_RATE_YEAR_EDITING !== null;
   const year = editing ? PAIE_RATE_YEAR_EDITING : (new Date().getFullYear());
   const existing = (STATE.rateSettings||[]).find(r => r.year === year) || {};
+  const accounts = Array.isArray(STATE.comptaAccounts) ? STATE.comptaAccounts : [];
+  const lavageAccount = existing.lavage_account_number ? accounts.find(a => a.number === existing.lavage_account_number) : null;
+  const lavageAccountText = lavageAccount ? accountOptionText(lavageAccount) : (existing.lavage_account_label || '');
   return `
     <div style="border:1px solid var(--ligne);border-radius:10px;padding:14px">
       <div class="field-row">
@@ -2439,7 +2465,20 @@ function paieRateYearForm(){
       <div class="field-row" style="grid-template-columns:repeat(3,1fr)">
         ${PAIE_RATE_FIELDS.map(f => `<div class="field"><label>${esc(f[1])} (%)</label><input id="paie-${f[0]}" type="number" step="0.001" value="${existing[f[0]] ?? ''}" placeholder="0.000"></div>`).join('')}
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:10px">
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin:16px 0 8px">Retenue lavage (joueurs)</div>
+      <p class="hint" style="margin-bottom:10px">Prélevée automatiquement sur le décompte d'un joueur dont le salaire brut du mois dépasse le seuil — reste modifiable ou supprimable au cas par cas.</p>
+      <div class="field-row" style="grid-template-columns:repeat(3,1fr)">
+        <div class="field"><label>Seuil déclencheur (CHF)</label><input id="paie-lavage-threshold" type="number" step="0.05" value="${existing.lavage_threshold ?? 300}"></div>
+        <div class="field"><label>Montant prélevé (CHF)</label><input id="paie-lavage-amount" type="number" step="0.05" value="${existing.lavage_amount ?? 30}"></div>
+        <div class="field">
+          <label>Compte du plan comptable</label>
+          <input id="paie-lavage-account" list="paie-lavage-account-options" value="${esc(lavageAccountText)}" placeholder="Rechercher un compte" autocomplete="off">
+          ${comptaAccountsDatalist('paie-lavage-account-options')}
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px">
         ${editing ? `<button class="btn btn-ghost btn-sm" onclick="PAIE_RATE_YEAR_EDITING=null; renderSettingsBody()">Annuler</button>` : ''}
         <button class="btn btn-primary btn-sm" onclick="savePaieRateYear()">Enregistrer ${editing?'':'cette année'}</button>
       </div>
@@ -2452,6 +2491,11 @@ async function savePaieRateYear(){
   if (!year) return alert('Année requise.');
   const body = { year };
   PAIE_RATE_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
+  body.lavage_threshold = Number(document.getElementById('paie-lavage-threshold').value) || 0;
+  body.lavage_amount = Number(document.getElementById('paie-lavage-amount').value) || 0;
+  const lavageAcc = resolveComptaAccount(document.getElementById('paie-lavage-account').value);
+  body.lavage_account_number = lavageAcc ? lavageAcc.number : '';
+  body.lavage_account_label = lavageAcc ? lavageAcc.name : '';
   try {
     await api('payroll_rate_settings', { method: 'POST', body });
     PAIE_RATE_YEAR_EDITING = null;
@@ -2664,11 +2708,9 @@ function paymentSlipCell(r){
     ? `<a href="${fileUrl}" target="_blank" style="font-size:12px;color:var(--bleu);display:block;margin-bottom:4px;word-break:break-all">${esc(r.payslip_filename)}</a>`
     : `<div style="font-size:12px;color:var(--gris-2);margin-bottom:4px">Aucun fichier</div>`;
   const sentInfo = r.sent_at ? `<div style="font-size:11px;color:var(--gris)">Envoyé le ${esc(r.sent_at.slice(0,10))}</div>` : '';
-  /* Le décompte imprimable n'existe que pour les employés (postes/affectations) : un
-     joueur n'a qu'un salaire et des primes, sans équivalent de fiche calculée ici. */
   const genBtn = r.person_type === 'employee'
-    ? `<button class="btn btn-ghost btn-sm" onclick="openPayslip(${r.person_id}, ${STATE.seasonId})" title="Ouvre le décompte pré-rempli, à imprimer en PDF puis déposer ci-dessous">Générer</button>`
-    : '';
+    ? `<button class="btn btn-ghost btn-sm" onclick="openPayslip(${r.person_id}, ${STATE.seasonId})" title="Ouvre le décompte pré-rempli, à générer en PDF">Générer</button>`
+    : `<button class="btn btn-ghost btn-sm" onclick="openPlayerPayslip(${r.person_id}, '${PAYMENTS_DATA.month}')" title="Ouvre le décompte pré-rempli, à générer en PDF">Générer</button>`;
   return `
     <div style="min-width:180px">
       ${viewLink}
@@ -2880,14 +2922,17 @@ function buildPayslipPayload(){
     },
     revenue: groupedRevenueLines.map(l => ({ label: l.key || '—', montant: chf(l.montant) })),
     gross_total: chf(grossTotal),
-    charges: autoLines
-      .map(l => ({
-        label: l.label,
-        base: (l.rate > 0 && l.override === null) ? chf(grossTotal) : '',
-        taux: (l.rate > 0 && l.override === null) ? (pctSmart(l.rate) + ' %') : '',
-        montant: '− ' + chf(l.montant),
-      }))
-      .concat(PS.retenues.map(l => ({ label: l.label || '—', base: '', taux: '', montant: '− ' + chf(Number(l.montant) || 0) }))),
+    charges: autoLines.map(l => ({
+      label: l.label,
+      base: (l.rate > 0 && l.override === null) ? chf(grossTotal) : '',
+      taux: (l.rate > 0 && l.override === null) ? (pctSmart(l.rate) + ' %') : '',
+      montant: '− ' + chf(l.montant),
+    })),
+    charges_total: '− ' + chf(ruleTotal),
+    // Retenues ajoutées à la main sur le décompte : catégorie distincte "Divers", après
+    // Salaire brut et Charges sociales, plutôt que mélangées aux charges calculées par taux.
+    divers: PS.retenues.map(l => ({ label: l.label || '—', montant: '− ' + chf(Number(l.montant) || 0) })),
+    divers_total: '− ' + chf(manualRetenuesTotal),
     total_deductions: '− ' + chf(totalDeductions),
     net: chf(net),
   };
@@ -3067,8 +3112,13 @@ function renderPayslipDoc(){
 
               ${row('Charges sociales', '', '', '', { bold: true, pad: '22px' })}
               ${autoLines.map(autoLineRow).join('')}
-              ${PS.retenues.map((l,i) => customRow('retenues', i)).join('')}
-              ${row('', '', '', '− ' + chf(totalDeductions), { bold: true, topBorder: true })}
+              ${row('', '', '', '− ' + chf(ruleTotal), { bold: true, topBorder: true })}
+
+              ${PS.retenues.length ? `
+                ${row('Divers', '', '', '', { bold: true, pad: '22px' })}
+                ${editable ? PS.retenues.map((l,i) => customRow('retenues', i)).join('') : PS.retenues.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(Number(l.montant) || 0))).join('')}
+                ${row('', '', '', '− ' + chf(manualRetenuesTotal), { bold: true, topBorder: true })}
+              ` : ''}
             </tbody>
           </table>
         </div>
@@ -3120,6 +3170,317 @@ function renderPayslipDoc(){
   `;
 }
 
+/* ============================================================ DÉCOMPTE DE PAIE JOUEUR (page autonome, nouvel onglet)
+ *
+ * Même principe que le décompte employé (calcul à l'écran, PDF natif généré par le serveur),
+ * en plus simple : pas de postes/équipes à regrouper, juste salaire fixe + primes du mois.
+ * Deux particularités propres aux joueurs (et non aux employés) :
+ * - l'abattement AVS (2500.-/semestre, 416.67 CHF/mois) qui réduit la base de calcul des
+ *   charges sociales sans toucher au salaire brut affiché ;
+ * - la retenue lavage, calculée automatiquement si le brut du mois dépasse un seuil réglé
+ *   dans Paramètres > Paie, mais qui reste modifiable/supprimable comme une charge sociale.
+ */
+const AVS_ABATEMENT_MONTHLY = 2500 / 6;
+
+let PSP = { player: null, primesMois: 0, rateSettings: null, playerId: null,
+            autoLines: [], autoDivers: [], retenues: [], month: new Date().toISOString().slice(0,7) };
+
+async function renderPlayerPayslipPage(playerId, month){
+  const app = document.getElementById('app');
+  app.innerHTML = `<div style="padding:80px;text-align:center;color:#6E6C61">Chargement…</div>`;
+  let ctx;
+  try {
+    ctx = await api('player_payslip_context', { params: { player_id: playerId, month } });
+  } catch (e) {
+    app.innerHTML = `<div style="padding:80px;text-align:center;max-width:520px;margin:0 auto;line-height:1.6">`
+      + `<h2 style="margin-bottom:10px">${e.status === 403 ? 'Accès refusé' : 'Erreur'}</h2>`
+      + `<p>${e.status === 403 ? "Vous n'avez pas le droit de consulter les décomptes de paie." : esc(e.message)}</p>`
+      + `<p style="margin-top:16px"><a href="index.php">Retour au module RH</a></p></div>`;
+    return;
+  }
+  PSP.playerId = playerId; PSP.month = month;
+  PSP.player = ctx.player; PSP.primesMois = Number(ctx.primes_mois) || 0; PSP.rateSettings = ctx.rate_settings;
+  buildPlayerAutoLines();
+  PSP.retenues = [];
+  renderPlayerPayslipDoc();
+}
+
+/** Base brute du mois (salaire + primes), et lignes automatiques recalculées depuis elle :
+ * charges sociales (assujettissements de la fiche joueur, taux partagés de l'année) et
+ * retenue lavage (seuil/montant/compte réglés dans Paramètres > Paie). Refait à chaque
+ * changement de mois, les primes et donc le brut en dépendant. */
+function buildPlayerAutoLines(){
+  const p = PSP.player;
+  const gross = Number(p.salaire_mensuel) + PSP.primesMois;
+  const abatementActive = Number(p.avs_abatement) === 1;
+  const chargeBase = abatementActive ? Math.max(0, gross - AVS_ABATEMENT_MONTHLY) : gross;
+  PSP.autoLines = SHARED_SOCIAL_LINES
+    .filter(l => Number(p[l.k + '_subject']) === 1)
+    .map(l => ({ label: l.label, rate: Number(PSP.rateSettings[l.k + '_rate']) || 0, base: chargeBase, fixed: 0, override: null, removed: false }));
+  const threshold = Number(PSP.rateSettings.lavage_threshold) || 0;
+  const amount = Number(PSP.rateSettings.lavage_amount) || 0;
+  PSP.autoDivers = (amount > 0 && gross > threshold)
+    ? [{ label: PSP.rateSettings.lavage_account_label || 'Retenue lavage', rate: 0, base: 0, fixed: amount, override: null, removed: false }]
+    : [];
+}
+
+async function changePlayerPayslipMonth(value){
+  PSP.month = value;
+  try {
+    const ctx = await api('player_payslip_context', { params: { player_id: PSP.playerId, month: PSP.month } });
+    PSP.primesMois = Number(ctx.primes_mois) || 0;
+    PSP.rateSettings = ctx.rate_settings;
+    buildPlayerAutoLines();
+  } catch (e) { /* affichage inchangé si l'appel échoue, le mois reste modifiable */ }
+  renderPlayerPayslipDoc();
+}
+
+function addPlayerPayslipLine(){ PSP.retenues.push({ label: '', montant: 0 }); renderPlayerPayslipDoc(); }
+function removePlayerPayslipLine(i){ PSP.retenues.splice(i, 1); renderPlayerPayslipDoc(); }
+function updatePlayerPayslipLine(i, field, el){
+  PSP.retenues[i][field] = field === 'montant' ? (Number(el.value) || 0) : el.value;
+  renderPlayerPayslipDoc();
+}
+/* Corriger une ligne automatique (charge ou retenue lavage) la fige, comme sur le décompte
+   employé : vider le champ lui rend son calcul normal. */
+function overridePlayerAutoLine(type, i, value){
+  const v = String(value).trim();
+  const arr = type === 'charges' ? PSP.autoLines : PSP.autoDivers;
+  arr[i].override = v === '' ? null : (Number(v) || 0);
+  renderPlayerPayslipDoc();
+}
+function removePlayerAutoLine(type, i){
+  const arr = type === 'charges' ? PSP.autoLines : PSP.autoDivers;
+  arr[i].removed = true;
+  renderPlayerPayslipDoc();
+}
+
+function buildPlayerPayslipPayload(){
+  const p = PSP.player;
+  const gross = Number(p.salaire_mensuel) + PSP.primesMois;
+  const abatementActive = Number(p.avs_abatement) === 1;
+  const chargeBase = abatementActive ? Math.max(0, gross - AVS_ABATEMENT_MONTHLY) : gross;
+  const autoLines = PSP.autoLines.filter(l => !l.removed).map(l => ({
+    ...l, montant: l.override !== null ? l.override : (chargeBase * l.rate / 100),
+  }));
+  const chargesTotal = autoLines.reduce((s, l) => s + l.montant, 0);
+  const autoDivers = PSP.autoDivers.filter(l => !l.removed).map(l => ({
+    ...l, montant: l.override !== null ? l.override : l.fixed,
+  }));
+  const manualRetenuesTotal = PSP.retenues.reduce((s, l) => s + (Number(l.montant) || 0), 0);
+  const diversTotal = autoDivers.reduce((s, l) => s + l.montant, 0) + manualRetenuesTotal;
+  const net = gross - chargesTotal - diversTotal;
+
+  const [y, m] = String(PSP.month || '').split('-');
+  const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
+
+  const revenue = [{ label: 'Salaire mensuel', montant: chf(Number(p.salaire_mensuel)) }];
+  if (PSP.primesMois > 0) revenue.push({ label: 'Primes de match', montant: chf(PSP.primesMois) });
+
+  return {
+    player_id: PSP.playerId,
+    month: PSP.month,
+    header: {
+      collab_id: p.id, avs: '',
+      first_name: p.first_name, last_name: p.last_name,
+      street: p.adresse || '', zip: p.npa || '', city: p.ville || '', country: '',
+      period_label: `${moisLabel} ${y || ''}`.trim(),
+      is_semestriel: false,
+      iban: p.iban || '',
+    },
+    revenue,
+    gross_total: chf(gross),
+    charges: autoLines.map(l => ({ label: l.label, base: chf(chargeBase), taux: pctSmart(l.rate) + ' %', montant: '− ' + chf(l.montant) })),
+    charges_total: '− ' + chf(chargesTotal),
+    charges_note: abatementActive ? `Base réduite de l'abattement AVS (${chf(AVS_ABATEMENT_MONTHLY)} CHF/mois)` : '',
+    divers: autoDivers.map(l => ({ label: l.label, montant: '− ' + chf(l.montant) }))
+      .concat(PSP.retenues.map(l => ({ label: l.label || '—', montant: '− ' + chf(Number(l.montant) || 0) }))),
+    divers_total: '− ' + chf(diversTotal),
+    net: chf(net),
+  };
+}
+
+async function generatePlayerPayslipPdf(btn){
+  const originalText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Génération…'; }
+  try {
+    const payload = buildPlayerPayslipPayload();
+    const blob = await api('player_payslip_pdf', { method: 'POST', body: payload });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${payload.month}_Décompte_${PSP.player.last_name}_${PSP.player.first_name}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) {
+    alert('Échec de la génération du PDF : ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+  }
+}
+
+function renderPlayerPayslipDoc(){
+  const app = document.getElementById('app');
+  const p = PSP.player;
+  const gross = Number(p.salaire_mensuel) + PSP.primesMois;
+  const abatementActive = Number(p.avs_abatement) === 1;
+  const chargeBase = abatementActive ? Math.max(0, gross - AVS_ABATEMENT_MONTHLY) : gross;
+  const autoLines = PSP.autoLines.filter(l => !l.removed);
+  autoLines.forEach(l => { l.montant = l.override !== null ? l.override : (chargeBase * l.rate / 100); });
+  const chargesTotal = autoLines.reduce((s, l) => s + l.montant, 0);
+  const autoDivers = PSP.autoDivers.filter(l => !l.removed);
+  autoDivers.forEach(l => { l.montant = l.override !== null ? l.override : l.fixed; });
+  const manualRetenuesTotal = PSP.retenues.reduce((s, l) => s + (Number(l.montant) || 0), 0);
+  const diversTotal = autoDivers.reduce((s, l) => s + l.montant, 0) + manualRetenuesTotal;
+  const net = gross - chargesTotal - diversTotal;
+
+  const [y, m] = String(PSP.month || '').split('-');
+  const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
+  document.title = `${y}-${m}_Décompte_${p.last_name}_${p.first_name}`;
+
+  function payslipCardHTML(editable){
+    const row = (label, base, taux, montant, opts = {}) => `<tr${opts.topBorder?' style="border-top:1.5px solid var(--noir)"':''}>
+      <td style="padding:${opts.pad||'7px'} 10px 7px 0;${opts.bold?'font-weight:700':''};overflow-wrap:anywhere">${label}</td>
+      <td style="padding:${opts.pad||'7px'} 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${base ?? ''}</td>
+      <td style="padding:${opts.pad||'7px'} 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${taux ?? ''}</td>
+      <td style="padding:${opts.pad||'7px'} 0 7px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;${opts.bold?'font-weight:700':''}">${montant}</td>
+    </tr>`;
+
+    const autoLineRow = (type, l) => {
+      const arr = type === 'charges' ? autoLines : autoDivers;
+      const idx = arr.indexOf(l);
+      const hasRate = l.rate > 0 && l.override === null;
+      const base = hasRate ? chf(chargeBase) : '';
+      const taux = hasRate ? pctSmart(l.rate) + ' %' : '';
+      if (!editable) return row(esc(l.label), base, taux, '− ' + chf(l.montant));
+      return `<tr>
+        <td style="padding:7px 10px 7px 0">${esc(l.label)}</td>
+        <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${base}</td>
+        <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${taux}</td>
+        <td style="padding:5px 0;text-align:right;white-space:nowrap">
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <span style="color:var(--gris)">−</span>
+            <input class="ps-input" type="number" step="0.05" value="${l.montant.toFixed(2)}" style="width:80px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums" onchange="overridePlayerAutoLine('${type}',${idx}, this.value)">
+            <button onclick="removePlayerAutoLine('${type}',${idx})" style="color:var(--rouge)" title="Retirer cette ligne">✕</button>
+          </div>
+        </td>
+      </tr>`;
+    };
+    const retenueRow = (i) => {
+      const l = PSP.retenues[i];
+      if (!editable) return row(esc(l.label) || '—', '', '', chf(Number(l.montant) || 0));
+      return `<tr>
+        <td style="padding:5px 10px 5px 0" colspan="3">
+          <input class="ps-input" value="${esc(l.label)}" placeholder="Libellé" style="width:100%;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px" onchange="updatePlayerPayslipLine(${i},'label',this)">
+        </td>
+        <td style="padding:5px 0;text-align:right">
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <input class="ps-input" type="number" step="0.05" value="${l.montant||''}" placeholder="0.00" style="width:90px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right" onchange="updatePlayerPayslipLine(${i},'montant',this)">
+            <button onclick="removePlayerPayslipLine(${i})" style="color:var(--rouge)" title="Retirer">✕</button>
+          </div>
+        </td>
+      </tr>`;
+    };
+
+    const chargesHeaderLabel = 'Charges sociales' + (abatementActive
+      ? ` <span style="font-weight:400;color:var(--gris);text-transform:none;font-size:11.5px">— base réduite de l'abattement AVS (${chf(AVS_ABATEMENT_MONTHLY)} CHF/mois)</span>`
+      : '');
+
+    return `
+      ${editable ? comptaAccountsDatalist('psp-account-options') : ''}
+      <div style="background:#fff;${editable?'border:1px solid var(--ligne);border-radius:16px;box-shadow:var(--ombre);':''}overflow:hidden;font-size:12.5px;line-height:1.5">
+        <div style="background:var(--noir);color:#fff;padding:22px 30px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <div>
+            <div class="sora" style="font-size:16px;font-weight:800;color:var(--jaune);letter-spacing:.3px">MEYRIN FC</div>
+            <div style="font-size:12px;color:#C9C7BD;margin-top:2px">Décompte de salaire — Joueur</div>
+          </div>
+          <div style="text-align:right">
+            <div class="sora" style="font-size:15px;font-weight:700;text-transform:capitalize">${esc(moisLabel)} ${esc(y||'')}</div>
+            <div style="font-size:11px;color:#C9C7BD;margin-top:2px">Période mensuelle</div>
+          </div>
+        </div>
+
+        <div style="padding:28px 30px 6px;display:grid;grid-template-columns:1fr 1fr;gap:24px">
+          <div>
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin-bottom:3px">N° joueur</div>
+            <div style="font-weight:600">${p.id}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700;font-size:13.5px">${esc(p.first_name)} ${esc(p.last_name)}</div>
+            ${p.adresse ? `<div style="color:var(--gris);margin-top:2px">${esc(p.adresse)}</div>` : ''}
+            ${(p.npa || p.ville) ? `<div style="color:var(--gris)">${esc(p.npa)} ${esc(p.ville)}</div>` : ''}
+          </div>
+        </div>
+
+        <div style="padding:18px 30px 0">
+          <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+            <thead><tr style="border-bottom:1.5px solid var(--noir)">
+              <th style="text-align:left;padding-bottom:7px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Rubrique et genres de salaires</th>
+              <th style="text-align:right;padding-bottom:7px;width:85px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Base</th>
+              <th style="text-align:right;padding-bottom:7px;width:95px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Taux</th>
+              <th style="text-align:right;padding-bottom:7px;width:100px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Montant</th>
+            </tr></thead>
+            <tbody>
+              ${row('Salaire brut', '', '', '', { bold: true, pad: '16px' })}
+              ${row('Salaire mensuel', '', '', chf(Number(p.salaire_mensuel)))}
+              ${PSP.primesMois > 0 ? row('Primes de match', '', '', chf(PSP.primesMois)) : ''}
+              ${row('', '', '', chf(gross), { bold: true, topBorder: true })}
+
+              ${row(chargesHeaderLabel, '', '', '', { bold: true, pad: '22px' })}
+              ${autoLines.length ? autoLines.map(l => autoLineRow('charges', l)).join('') : `<tr><td colspan="4" style="padding:8px 0;color:var(--gris)">Aucun assujettissement coché sur la fiche joueur.</td></tr>`}
+              ${row('', '', '', '− ' + chf(chargesTotal), { bold: true, topBorder: true })}
+
+              ${(autoDivers.length || PSP.retenues.length) ? `
+                ${row('Divers', '', '', '', { bold: true, pad: '22px' })}
+                ${autoDivers.map(l => autoLineRow('divers', l)).join('')}
+                ${PSP.retenues.map((l,i) => retenueRow(i)).join('')}
+                ${row('', '', '', '− ' + chf(diversTotal), { bold: true, topBorder: true })}
+              ` : ''}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display:flex;margin:26px 30px 30px;border-radius:10px;overflow:hidden;border:1px solid var(--ligne)">
+          <div style="flex:1;padding:14px 18px;background:var(--bg)">
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin-bottom:3px">Paiement</div>
+            <div style="font-weight:600;font-variant-numeric:tabular-nums">${p.iban ? esc(p.iban) : '—'}</div>
+          </div>
+          <div style="padding:14px 22px;background:var(--noir);color:#fff;display:flex;align-items:center;gap:16px;justify-content:flex-end;min-width:210px">
+            <span style="font-size:12px;color:#C9C7BD">Salaire net</span>
+            <span class="sora" style="font-size:19px;font-weight:800;color:var(--jaune);font-variant-numeric:tabular-nums">${chf(net)}</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  app.innerHTML = `
+    <style>
+      @page { size: A4; margin: 16mm 14mm; }
+      #psp-print{ display:none; }
+      @media print {
+        .no-print{ display:none !important; }
+        #psp-edit{ display:none !important; }
+        #psp-print{ display:block !important; }
+        body{ background:#fff; }
+      }
+      #psp-edit, #psp-edit *, #psp-print, #psp-print *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    </style>
+    <div style="max-width:760px;margin:0 auto;padding:26px 20px 60px">
+      <div class="no-print" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:20px;padding:14px 18px;background:#fff;border:1px solid var(--ligne);border-radius:12px;box-shadow:var(--ombre-s)">
+        <button class="btn btn-ghost btn-sm" onclick="window.close()">← Fermer l'onglet</button>
+        <div class="month-picker"><input type="month" value="${esc(PSP.month)}" onchange="changePlayerPayslipMonth(this.value)"></div>
+        <button class="btn btn-ghost btn-sm" onclick="addPlayerPayslipLine()">+ Retenue</button>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="window.print()" title="Aperçu à l'écran via l'impression du navigateur, dépannage seulement">Aperçu</button>
+        <button class="btn btn-primary" onclick="generatePlayerPayslipPdf(this)">Générer le PDF</button>
+      </div>
+      <p class="no-print hint" style="margin:-10px 0 16px">Cet encadré sert à ajuster le décompte. "Générer le PDF" produit un vrai fichier PDF et l'enregistre automatiquement pour cette période — c'est lui qui part au joueur.</p>
+
+      <div id="psp-edit">${payslipCardHTML(true)}</div>
+      <div id="psp-print">${payslipCardHTML(false)}</div>
+    </div>
+  `;
+}
+
 /* ============================================================ INIT */
 
 (async function init(){
@@ -3131,6 +3492,11 @@ function renderPayslipDoc(){
   const payslipMatch = (location.hash || '').match(/^#payslip-(\d+)-(\d+)/);
   if (payslipMatch) {
     await renderPayslipPage(Number(payslipMatch[1]), Number(payslipMatch[2]));
+    return;
+  }
+  const playerPayslipMatch = (location.hash || '').match(/^#player-payslip-(\d+)-(\d{4}-\d{2})/);
+  if (playerPayslipMatch) {
+    await renderPlayerPayslipPage(Number(playerPayslipMatch[1]), playerPayslipMatch[2]);
     return;
   }
   STATE.seasons = await api('seasons');

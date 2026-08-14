@@ -297,6 +297,14 @@ function init_schema(PDO $pdo): void {
     ijm_rate REAL NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )");
+  /* Retenue lavage (joueurs uniquement) : seuil de salaire mensuel brut au-delà duquel elle
+     s'applique automatiquement, montant prélevé, et compte du plan comptable (Comptabilité)
+     affiché comme référence sur le décompte — pas d'écriture comptable créée. Réglée une fois
+     par année civile, comme les taux d'assurances sociales. */
+  ensure_column($pdo, 'payroll_rate_settings', 'lavage_threshold', 'REAL NOT NULL DEFAULT 300');
+  ensure_column($pdo, 'payroll_rate_settings', 'lavage_amount', 'REAL NOT NULL DEFAULT 30');
+  ensure_column($pdo, 'payroll_rate_settings', 'lavage_account_number', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'payroll_rate_settings', 'lavage_account_label', "TEXT NOT NULL DEFAULT ''");
 
   /* Références administratives des assureurs et de la prévoyance (assureur LAA, n° de
      police, groupe LAA, institution et plan LPP, caisse d'allocations familiales) :
@@ -639,6 +647,18 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'players', 'npa', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'players', 'ville', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'players', 'access_token', "TEXT NOT NULL DEFAULT ''");
+  /* Charges sociales des joueurs payés : mêmes six lignes à taux partagé que les employés
+     (assujettissement à cocher, taux lu dans payroll_rate_settings), pas de LPP ni d'impôt à
+     la source (pas de contrat employé). Abattement AVS propre aux joueurs et entraîneurs :
+     2500.-/semestre (416.67 CHF/mois), réduit la base de calcul des charges, jamais le salaire
+     brut affiché. */
+  ensure_column($pdo, 'players', 'avs_subject',  'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'ac_subject',   'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'amat_subject', 'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'aanp_subject', 'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'laac_subject', 'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'ijm_subject',  'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'avs_abatement', 'INTEGER NOT NULL DEFAULT 0');
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS matches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1427,7 +1447,9 @@ function payroll_rate_settings_for_year(PDO $pdo, int $year): array {
   $st->execute([$year]);
   $row = $st->fetch();
   return $row ?: ['year' => $year, 'avs_rate' => 0.0, 'ac_rate' => 0.0, 'amat_rate' => 0.0,
-                   'aanp_rate' => 0.0, 'laac_rate' => 0.0, 'ijm_rate' => 0.0];
+                   'aanp_rate' => 0.0, 'laac_rate' => 0.0, 'ijm_rate' => 0.0,
+                   'lavage_threshold' => 300.0, 'lavage_amount' => 30.0,
+                   'lavage_account_number' => '', 'lavage_account_label' => ''];
 }
 
 /** Document PDF du décompte de paie (généré via Dompdf, voir case 'payslip_pdf').
@@ -1437,7 +1459,7 @@ function payroll_rate_settings_for_year(PDO $pdo, int $year): array {
  * exactement ce que le responsable a validé à l'écran avant de cliquer sur "Générer".
  * HTML volontairement en tableaux (pas de flex/grid) : c'est ce que Dompdf sait le mieux
  * mettre en page de façon fiable, comme dans un vrai logiciel de facturation. */
-function render_payslip_pdf_html(array $header, array $revenue, string $grossTotal, array $charges, string $totalDeductions, string $net): string {
+function render_payslip_pdf_html(array $header, array $revenue, string $grossTotal, array $charges, string $chargesTotal, array $divers, string $diversTotal, string $net, string $chargesNote = ''): string {
   $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   $row = function(string $label, string $base, string $taux, string $montant, bool $bold = false, bool $topBorder = false) use ($e) {
     $tb = $topBorder ? 'border-top:1.5px solid #15140F;' : '';
@@ -1454,6 +1476,11 @@ function render_payslip_pdf_html(array $header, array $revenue, string $grossTot
   foreach ($revenue as $l) $revenueRows .= $row((string)($l['label'] ?? '—'), '', '', (string)($l['montant'] ?? ''));
   $chargeRows = '';
   foreach ($charges as $l) $chargeRows .= $row((string)($l['label'] ?? '—'), (string)($l['base'] ?? ''), (string)($l['taux'] ?? ''), (string)($l['montant'] ?? ''));
+  // "Divers" : retenues ajoutées à la main sur le décompte, catégorie distincte après Charges
+  // sociales plutôt que mélangées aux charges calculées par taux. Absente du document si vide.
+  $diversRows = '';
+  foreach ($divers as $l) $diversRows .= $row((string)($l['label'] ?? '—'), '', '', (string)($l['montant'] ?? ''));
+  $diversBlock = $divers ? ($row('Divers', '', '', '', true) . $diversRows . $row('', '', '', $diversTotal, true, true)) : '';
 
   $periodeLabel = !empty($header['is_semestriel']) ? 'Période semestrielle' : 'Période mensuelle';
   $addressLines = array_filter([$header['street'] ?? '', trim(($header['zip'] ?? '') . ' ' . ($header['city'] ?? '')), $header['country'] ?? '']);
@@ -1505,7 +1532,10 @@ function render_payslip_pdf_html(array $header, array $revenue, string $grossTot
         <td style="width:85px;padding-bottom:6px;font-size:8.5px;font-weight:700;text-transform:uppercase;color:#9A988C;text-align:right">Montant</td>
       </tr>
       ' . $row('Salaire brut', '', '', '', true) . $revenueRows . $row('', '', '', $grossTotal, true, true) . '
-      ' . $row('Charges sociales', '', '', '', true) . $chargeRows . $row('', '', '', $totalDeductions, true, true) . '
+      ' . $row('Charges sociales', '', '', '', true) . '
+      ' . ($chargesNote ? '<tr><td colspan="4" style="padding:0 0 6px;font-size:9.5px;color:#6E6C61">' . $e($chargesNote) . '</td></tr>' : '') . '
+      ' . $chargeRows . $row('', '', '', $chargesTotal, true, true) . '
+      ' . $diversBlock . '
     </table>
 
     <table style="margin-top:22px;border:1px solid #E9E6DC"><tr>
@@ -1832,6 +1862,8 @@ const RH_PERMS = [
   'payroll_rate_settings'  => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
   'insurance_profiles'     => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
   'payslip_context'        => 'payroll.view',
+  'player_payslip_context' => 'payroll.view',
+  'player_payslip_pdf'     => 'payroll.edit',
   'indemnites_custom'      => ['GET' => 'employees.view',  'write' => 'indemnites.edit'],
   'payroll_rules'          => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
   'employee_payroll_rules' => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
@@ -2326,8 +2358,10 @@ switch ($action) {
     }
     if ($method === 'POST' || $method === 'PUT') {
       $year = i($b, 'year'); if (!$year) fail('year requis');
-      $cols = ['avs_rate','ac_rate','amat_rate','aanp_rate','laac_rate','ijm_rate'];
-      $vals = array_map(fn($c) => f($b, $c), $cols);
+      $rateCols = ['avs_rate','ac_rate','amat_rate','aanp_rate','laac_rate','ijm_rate','lavage_threshold','lavage_amount'];
+      $strCols = ['lavage_account_number','lavage_account_label'];
+      $cols = array_merge($rateCols, $strCols);
+      $vals = array_merge(array_map(fn($c) => f($b, $c), $rateCols), array_map(fn($c) => s($b, $c), $strCols));
       $pdo->prepare('INSERT INTO payroll_rate_settings (year, ' . implode(',', $cols) . ') VALUES (?,' . implode(',', array_fill(0, count($cols), '?')) . ')
         ON CONFLICT(year) DO UPDATE SET ' . implode(', ', array_map(fn($c) => "$c=excluded.$c", $cols)))
         ->execute([$year, ...$vals]);
@@ -2408,6 +2442,7 @@ switch ($action) {
     $header = is_array($b['header'] ?? null) ? $b['header'] : [];
     $revenue = is_array($b['revenue'] ?? null) ? $b['revenue'] : [];
     $charges = is_array($b['charges'] ?? null) ? $b['charges'] : [];
+    $divers = is_array($b['divers'] ?? null) ? $b['divers'] : [];
 
     $pdo = db();
     $st = $pdo->prepare('SELECT first_name, last_name FROM employees WHERE id = ?');
@@ -2416,7 +2451,7 @@ switch ($action) {
     if (!$emp) fail('Employé introuvable', 404);
 
     require_once __DIR__ . '/../lib/vendor/autoload.php';
-    $html = render_payslip_pdf_html($header, $revenue, s($b, 'gross_total'), $charges, s($b, 'total_deductions'), s($b, 'net'));
+    $html = render_payslip_pdf_html($header, $revenue, s($b, 'gross_total'), $charges, s($b, 'charges_total'), $divers, s($b, 'divers_total'), s($b, 'net'));
 
     $options = new \Dompdf\Options();
     $options->set('isRemoteEnabled', false);
@@ -2444,6 +2479,87 @@ switch ($action) {
     } else {
       $pdo->prepare('INSERT INTO payroll_payments (person_type, person_id, period, payslip_path, payslip_filename) VALUES (?,?,?,?,?)')
         ->execute(['employee', $employee_id, $month, $path, $origName]);
+    }
+
+    if (ob_get_level() > 0) ob_clean();
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="' . rawurlencode($origName) . '"');
+    header('Content-Length: ' . strlen($pdfContent));
+    echo $pdfContent;
+    exit;
+  }
+
+  /* Contexte du décompte d'un joueur payé : salaire fixe + primes du mois, assujettissements
+     et abattement AVS propres au joueur, taux partagés de l'année civile du mois décompté
+     (mêmes réglages que les employés, Paramètres > Paie). */
+  case 'player_payslip_context': {
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $player_id = i($_GET, 'player_id'); if (!$player_id) fail('player_id requis');
+    $month = s($_GET, 'month');
+    $year = preg_match('/^(\d{4})-\d{2}$/', $month, $mm) ? (int)$mm[1] : (int) date('Y');
+    $st = $pdo->prepare('SELECT * FROM players WHERE id=?');
+    $st->execute([$player_id]);
+    $player = $st->fetch();
+    if (!$player) fail('Joueur introuvable', 404);
+    $pr = $pdo->prepare("SELECT COALESCE(SUM(mp.montant),0) AS total FROM match_players mp
+      JOIN matches m ON m.id = mp.match_id WHERE mp.player_id = ? AND strftime('%Y-%m', m.date) = ?");
+    $pr->execute([$player_id, $month]);
+    $primes = (float) $pr->fetchColumn();
+    out([
+      'player' => $player,
+      'primes_mois' => $primes,
+      'rate_settings' => payroll_rate_settings_for_year($pdo, $year),
+    ]);
+  }
+
+  /* Même mécanique que payslip_pdf pour les employés : le calcul (charges, abattement,
+     retenue lavage) reste fait côté écran, cette route pose le résultat déjà mis en forme
+     dans un PDF et l'enregistre dans payroll_payments (person_type='player'). */
+  case 'player_payslip_pdf': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $player_id = i($b, 'player_id'); $month = s($b, 'month');
+    if (!$player_id || !preg_match('/^\d{4}-\d{2}$/', $month)) fail('player_id et month requis');
+    $header = is_array($b['header'] ?? null) ? $b['header'] : [];
+    $revenue = is_array($b['revenue'] ?? null) ? $b['revenue'] : [];
+    $charges = is_array($b['charges'] ?? null) ? $b['charges'] : [];
+    $divers = is_array($b['divers'] ?? null) ? $b['divers'] : [];
+
+    $pdo = db();
+    $st = $pdo->prepare('SELECT first_name, last_name FROM players WHERE id = ?');
+    $st->execute([$player_id]);
+    $player = $st->fetch();
+    if (!$player) fail('Joueur introuvable', 404);
+
+    require_once __DIR__ . '/../lib/vendor/autoload.php';
+    $html = render_payslip_pdf_html($header, $revenue, s($b, 'gross_total'), $charges, s($b, 'charges_total'), $divers, s($b, 'divers_total'), s($b, 'net'), s($b, 'charges_note'));
+
+    $options = new \Dompdf\Options();
+    $options->set('isRemoteEnabled', false);
+    $options->set('defaultFont', 'DejaVu Sans');
+    $dompdf = new \Dompdf\Dompdf($options);
+    $dompdf->loadHtml($html, 'UTF-8');
+    $dompdf->setPaper('A4', 'portrait');
+    $dompdf->render();
+    $pdfContent = $dompdf->output();
+
+    $dir = DB_DIR . '/payslips';
+    if (!is_dir($dir)) mkdir($dir, 0775, true);
+    $ht = $dir . '/.htaccess';
+    if (!file_exists($ht)) file_put_contents($ht, "Require all denied\n");
+    $filename = "player_{$player_id}_{$month}.pdf";
+    $path = $dir . '/' . $filename;
+    $origName = "{$month}_Décompte_{$player['last_name']}_{$player['first_name']}.pdf";
+    file_put_contents($path, $pdfContent);
+
+    $existing = $pdo->prepare('SELECT id, payslip_path FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
+    $existing->execute(['player', $player_id, $month]);
+    $exRow = $existing->fetch();
+    if ($exRow) {
+      $pdo->prepare('UPDATE payroll_payments SET payslip_path=?, payslip_filename=?, sent_at=NULL WHERE id=?')->execute([$path, $origName, $exRow['id']]);
+    } else {
+      $pdo->prepare('INSERT INTO payroll_payments (person_type, person_id, period, payslip_path, payslip_filename) VALUES (?,?,?,?,?)')
+        ->execute(['player', $player_id, $month, $path, $origName]);
     }
 
     if (ob_get_level() > 0) ob_clean();
@@ -2652,16 +2768,20 @@ switch ($action) {
       $ln = s($b, 'last_name'); if (!$ln) fail('Nom requis');
       $poste = s($b, 'poste');
       if ($poste !== '' && !in_array($poste, ['gardien', 'defenseur', 'milieu', 'attaquant'], true)) fail('poste invalide');
-      $st = db()->prepare('INSERT INTO players (first_name,last_name,email,phone,iban,salaire_mensuel,is_guest,poste,date_naissance,adresse,npa,ville) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-      $st->execute([s($b,'first_name'), $ln, s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'is_guest',false)?1:0, $poste, s($b,'date_naissance'), s($b,'adresse'), s($b,'npa'), s($b,'ville')]);
+      $st = db()->prepare('INSERT INTO players (first_name,last_name,email,phone,iban,salaire_mensuel,is_guest,poste,date_naissance,adresse,npa,ville,
+        avs_subject,ac_subject,amat_subject,aanp_subject,laac_subject,ijm_subject,avs_abatement) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+      $st->execute([s($b,'first_name'), $ln, s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'is_guest',false)?1:0, $poste, s($b,'date_naissance'), s($b,'adresse'), s($b,'npa'), s($b,'ville'),
+        bo($b,'avs_subject',false)?1:0, bo($b,'ac_subject',false)?1:0, bo($b,'amat_subject',false)?1:0, bo($b,'aanp_subject',false)?1:0, bo($b,'laac_subject',false)?1:0, bo($b,'ijm_subject',false)?1:0, bo($b,'avs_abatement',false)?1:0]);
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
       $id = i($b, 'id'); if (!$id) fail('id requis');
       $poste = s($b, 'poste');
       if ($poste !== '' && !in_array($poste, ['gardien', 'defenseur', 'milieu', 'attaquant'], true)) fail('poste invalide');
-      $st = db()->prepare('UPDATE players SET first_name=?,last_name=?,email=?,phone=?,iban=?,salaire_mensuel=?,active=?,poste=?,date_naissance=?,adresse=?,npa=?,ville=? WHERE id=?');
-      $st->execute([s($b,'first_name'), s($b,'last_name'), s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'active',true)?1:0, $poste, s($b,'date_naissance'), s($b,'adresse'), s($b,'npa'), s($b,'ville'), $id]);
+      $st = db()->prepare('UPDATE players SET first_name=?,last_name=?,email=?,phone=?,iban=?,salaire_mensuel=?,active=?,poste=?,date_naissance=?,adresse=?,npa=?,ville=?,
+        avs_subject=?,ac_subject=?,amat_subject=?,aanp_subject=?,laac_subject=?,ijm_subject=?,avs_abatement=? WHERE id=?');
+      $st->execute([s($b,'first_name'), s($b,'last_name'), s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'active',true)?1:0, $poste, s($b,'date_naissance'), s($b,'adresse'), s($b,'npa'), s($b,'ville'),
+        bo($b,'avs_subject',false)?1:0, bo($b,'ac_subject',false)?1:0, bo($b,'amat_subject',false)?1:0, bo($b,'aanp_subject',false)?1:0, bo($b,'laac_subject',false)?1:0, bo($b,'ijm_subject',false)?1:0, bo($b,'avs_abatement',false)?1:0, $id]);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
