@@ -110,6 +110,14 @@ function init_schema(PDO $pdo): void {
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )");
+  /* Compte du plan comptable (module Comptabilité) auquel rattacher ce rôle, pour regrouper
+     plusieurs rôles sous un même intitulé sur le décompte de paie (ex: "Entraîneur assistant"
+     et "Entraîneur gardiens" -> "Indemnité entraîneur"). Instantané (numéro + nom), pas une
+     clé étrangère : les deux modules ont chacun leur propre base SQLite, comme pour ref_id
+     ailleurs dans ce module. Paramétré à la main par un responsable (écran Paramètres > Rôles),
+     jamais déduit automatiquement. */
+  ensure_column($pdo, 'postes', 'account_number', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'postes', 'account_label',  "TEXT NOT NULL DEFAULT ''");
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS team_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1422,6 +1430,97 @@ function payroll_rate_settings_for_year(PDO $pdo, int $year): array {
                    'aanp_rate' => 0.0, 'laac_rate' => 0.0, 'ijm_rate' => 0.0];
 }
 
+/** Document PDF du décompte de paie (généré via Dompdf, voir case 'payslip_pdf').
+ * Le calcul et le formatage (regroupement par compte, taux, montants en fr-CH) restent faits
+ * côté écran (rh/index.html, buildPayslipPayload()) : cette fonction pose le résultat déjà
+ * mis en forme dans un document, elle ne recalcule rien. Ça garantit que le PDF affiche
+ * exactement ce que le responsable a validé à l'écran avant de cliquer sur "Générer".
+ * HTML volontairement en tableaux (pas de flex/grid) : c'est ce que Dompdf sait le mieux
+ * mettre en page de façon fiable, comme dans un vrai logiciel de facturation. */
+function render_payslip_pdf_html(array $header, array $revenue, string $grossTotal, array $charges, string $totalDeductions, string $net): string {
+  $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+  $row = function(string $label, string $base, string $taux, string $montant, bool $bold = false, bool $topBorder = false) use ($e) {
+    $tb = $topBorder ? 'border-top:1.5px solid #15140F;' : '';
+    $fw = $bold ? 'font-weight:700;' : '';
+    return '<tr>'
+      . "<td style=\"padding:6px 8px 6px 0;{$tb}{$fw}\">{$e($label)}</td>"
+      . "<td style=\"padding:6px 8px 6px 0;{$tb}text-align:right;color:#6E6C61\">{$e($base)}</td>"
+      . "<td style=\"padding:6px 8px 6px 0;{$tb}text-align:right;color:#6E6C61\">{$e($taux)}</td>"
+      . "<td style=\"padding:6px 0 6px;{$tb}text-align:right;{$fw}\">{$e($montant)}</td>"
+      . '</tr>';
+  };
+
+  $revenueRows = '';
+  foreach ($revenue as $l) $revenueRows .= $row((string)($l['label'] ?? '—'), '', '', (string)($l['montant'] ?? ''));
+  $chargeRows = '';
+  foreach ($charges as $l) $chargeRows .= $row((string)($l['label'] ?? '—'), (string)($l['base'] ?? ''), (string)($l['taux'] ?? ''), (string)($l['montant'] ?? ''));
+
+  $periodeLabel = !empty($header['is_semestriel']) ? 'Période semestrielle' : 'Période mensuelle';
+  $addressLines = array_filter([$header['street'] ?? '', trim(($header['zip'] ?? '') . ' ' . ($header['city'] ?? '')), $header['country'] ?? '']);
+
+  // Logo officiel du club (SVG, meyrinfc.ch), en data URI plutôt qu'un <img src="chemin"> :
+  // Dompdf lit le fichier une seule fois ici, sans avoir à résoudre un chemin relatif depuis
+  // son propre contexte de rendu. Vectoriel : net à cette taille comme en plus grand, et pas
+  // besoin de l'extension GD côté serveur (contrairement à un PNG intégré de la même façon).
+  $logoPath = __DIR__ . '/assets/logo-meyrinfc.svg';
+  $logoImg = is_file($logoPath)
+    ? '<img src="data:image/svg+xml;base64,' . base64_encode(file_get_contents($logoPath)) . '" style="width:78px;height:78px;display:block;margin:0 auto">'
+    : '';
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    @page { margin: 16mm 14mm; }
+    body { font-family: "DejaVu Sans", sans-serif; font-size: 10.5px; color:#15140F; }
+    table { width:100%; border-collapse:collapse; }
+  </style></head><body>
+    ' . ($logoImg ? '<div style="text-align:center;margin-bottom:14px">' . $logoImg . '</div>' : '') . '
+    <table style="border-bottom:1.5px solid #15140F;margin-bottom:26px"><tr>
+      <td style="padding:0 0 12px">
+        <div style="font-size:15px;font-weight:700;color:#15140F">MEYRIN FC</div>
+        <div style="font-size:10px;color:#6E6C61;margin-top:2px">Décompte de salaire</div>
+      </td>
+      <td style="padding:0 0 12px;text-align:right">
+        <div style="font-size:13px;font-weight:700;color:#15140F">' . $e($header['period_label'] ?? '') . '</div>
+        <div style="font-size:9.5px;color:#6E6C61;margin-top:2px">' . $e($periodeLabel) . '</div>
+      </td>
+    </tr></table>
+
+    <table style="margin-bottom:30px"><tr>
+      <td style="width:50%;vertical-align:top">
+        <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#9A988C;margin-bottom:2px">N° collaborateur</div>
+        <div style="font-weight:600;margin-bottom:10px">' . $e($header['collab_id'] ?? '') . '</div>
+        <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#9A988C;margin-bottom:2px">N° AVS</div>
+        <div style="font-weight:600">' . $e($header['avs'] ?: '—') . '</div>
+      </td>
+      <td style="width:50%;vertical-align:top;text-align:right">
+        <div style="font-weight:700;font-size:11.5px">' . $e(trim(($header['first_name'] ?? '') . ' ' . ($header['last_name'] ?? ''))) . '</div>
+        ' . implode('', array_map(fn($l) => '<div style="color:#6E6C61;margin-top:2px">' . $e($l) . '</div>', $addressLines)) . '
+      </td>
+    </tr></table>
+
+    <table>
+      <tr style="border-bottom:1.5px solid #15140F">
+        <td style="padding-bottom:6px;font-size:8.5px;font-weight:700;text-transform:uppercase;color:#9A988C">Rubrique et genres de salaires</td>
+        <td style="width:75px;padding-bottom:6px;font-size:8.5px;font-weight:700;text-transform:uppercase;color:#9A988C;text-align:right">Base</td>
+        <td style="width:65px;padding-bottom:6px;font-size:8.5px;font-weight:700;text-transform:uppercase;color:#9A988C;text-align:right">Taux</td>
+        <td style="width:85px;padding-bottom:6px;font-size:8.5px;font-weight:700;text-transform:uppercase;color:#9A988C;text-align:right">Montant</td>
+      </tr>
+      ' . $row('Salaire brut', '', '', '', true) . $revenueRows . $row('', '', '', $grossTotal, true, true) . '
+      ' . $row('Charges sociales', '', '', '', true) . $chargeRows . $row('', '', '', $totalDeductions, true, true) . '
+    </table>
+
+    <table style="margin-top:22px;border:1px solid #E9E6DC"><tr>
+      <td style="width:60%;padding:12px 16px;background:#F6F4ED">
+        <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#9A988C;margin-bottom:2px">Paiement</div>
+        <div style="font-weight:600">' . $e($header['iban'] ?: '—') . '</div>
+      </td>
+      <td style="width:40%;padding:12px 16px;background:#F6F4ED;border-left:1px solid #E9E6DC;text-align:right">
+        <span style="font-size:10px;color:#6E6C61">Salaire net&#160;&#160;</span>
+        <span style="font-size:15px;font-weight:700;color:#15140F">' . $e($net) . '</span>
+      </td>
+    </tr></table>
+  </body></html>';
+}
+
 /** Attache enfants, pièces d'engagement, dossier libre et profil d'assurance résolu à une
  * liste d'employés, en requêtes groupées (pas de requête dans la boucle).
  *
@@ -1757,6 +1856,7 @@ const RH_PERMS = [
   'payments_file'          => 'payroll.view',
   'payments_upload'        => 'payroll.edit',
   'payments_send_email'    => 'payroll.edit',
+  'payslip_pdf'            => 'payroll.edit',
   /* Le lien personnel donne acces aux fiches de paie de la personne sans
      compte : le consulter revient a pouvoir le transmettre, d'ou payroll.view.
      Le regenerer invalide l'ancien lien, c'est une modification. */
@@ -1793,14 +1893,14 @@ switch ($action) {
     if ($method === 'GET') out(db()->query('SELECT * FROM postes ORDER BY active DESC, label')->fetchAll());
     if ($method === 'POST') {
       $label = s($b, 'label'); if (!$label) fail('Libellé requis');
-      $st = db()->prepare('INSERT INTO postes (label) VALUES (?)');
-      try { $st->execute([$label]); } catch (Throwable $e) { fail('Ce poste existe déjà'); }
+      $st = db()->prepare('INSERT INTO postes (label, account_number, account_label) VALUES (?,?,?)');
+      try { $st->execute([$label, s($b, 'account_number'), s($b, 'account_label')]); } catch (Throwable $e) { fail('Ce poste existe déjà'); }
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
       $id = i($b, 'id'); if (!$id) fail('id requis');
-      $st = db()->prepare('UPDATE postes SET label=?, active=? WHERE id=?');
-      $st->execute([s($b, 'label'), bo($b, 'active', true) ? 1 : 0, $id]);
+      $st = db()->prepare('UPDATE postes SET label=?, active=?, account_number=?, account_label=? WHERE id=?');
+      $st->execute([s($b, 'label'), bo($b, 'active', true) ? 1 : 0, s($b, 'account_number'), s($b, 'account_label'), $id]);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
@@ -1959,7 +2059,8 @@ switch ($action) {
       $employees = $pdo->query('SELECT * FROM employees ORDER BY active DESC, last_name')->fetchAll();
       // Affectations sur toutes les saisons (pas seulement la courante) : la fiche employé doit pouvoir
       // montrer l'historique complet, et la liste Employés doit rester filtrable par n'importe quelle saison.
-      $asg = $pdo->query("SELECT ea.*, t.name AS team_name, tc.name AS category_name, po.label AS poste_label, s.label AS season_label
+      $asg = $pdo->query("SELECT ea.*, t.name AS team_name, tc.name AS category_name, po.label AS poste_label,
+               po.account_number AS account_number, po.account_label AS account_label, s.label AS season_label
         FROM employee_assignments ea
         JOIN postes po ON po.id = ea.poste_id
         LEFT JOIN teams t ON t.id = ea.team_id
@@ -2295,6 +2396,62 @@ switch ($action) {
       'rate_settings' => payroll_rate_settings_for_year($pdo, $year),
       'insurance_profile' => $profile,
     ]);
+  }
+
+  /* Génère le PDF natif du décompte (Dompdf), à la place de l'impression navigateur.
+     Enregistre aussi directement le fichier dans payroll_payments, comme un dépôt manuel
+     (payments_upload) : plus besoin d'imprimer puis de re-déposer le fichier à la main. */
+  case 'payslip_pdf': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $employee_id = i($b, 'employee_id'); $month = s($b, 'month');
+    if (!$employee_id || !preg_match('/^\d{4}-\d{2}$/', $month)) fail('employee_id et month requis');
+    $header = is_array($b['header'] ?? null) ? $b['header'] : [];
+    $revenue = is_array($b['revenue'] ?? null) ? $b['revenue'] : [];
+    $charges = is_array($b['charges'] ?? null) ? $b['charges'] : [];
+
+    $pdo = db();
+    $st = $pdo->prepare('SELECT first_name, last_name FROM employees WHERE id = ?');
+    $st->execute([$employee_id]);
+    $emp = $st->fetch();
+    if (!$emp) fail('Employé introuvable', 404);
+
+    require_once __DIR__ . '/../lib/vendor/autoload.php';
+    $html = render_payslip_pdf_html($header, $revenue, s($b, 'gross_total'), $charges, s($b, 'total_deductions'), s($b, 'net'));
+
+    $options = new \Dompdf\Options();
+    $options->set('isRemoteEnabled', false);
+    $options->set('defaultFont', 'DejaVu Sans');
+    $dompdf = new \Dompdf\Dompdf($options);
+    $dompdf->loadHtml($html, 'UTF-8');
+    $dompdf->setPaper('A4', 'portrait');
+    $dompdf->render();
+    $pdfContent = $dompdf->output();
+
+    $dir = DB_DIR . '/payslips';
+    if (!is_dir($dir)) mkdir($dir, 0775, true);
+    $ht = $dir . '/.htaccess';
+    if (!file_exists($ht)) file_put_contents($ht, "Require all denied\n");
+    $filename = "employee_{$employee_id}_{$month}.pdf";
+    $path = $dir . '/' . $filename;
+    $origName = "{$month}_Décompte_{$emp['last_name']}_{$emp['first_name']}.pdf";
+    file_put_contents($path, $pdfContent);
+
+    $existing = $pdo->prepare('SELECT id, payslip_path FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
+    $existing->execute(['employee', $employee_id, $month]);
+    $exRow = $existing->fetch();
+    if ($exRow) {
+      $pdo->prepare('UPDATE payroll_payments SET payslip_path=?, payslip_filename=?, sent_at=NULL WHERE id=?')->execute([$path, $origName, $exRow['id']]);
+    } else {
+      $pdo->prepare('INSERT INTO payroll_payments (person_type, person_id, period, payslip_path, payslip_filename) VALUES (?,?,?,?,?)')
+        ->execute(['employee', $employee_id, $month, $path, $origName]);
+    }
+
+    if (ob_get_level() > 0) ob_clean();
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="' . rawurlencode($origName) . '"');
+    header('Content-Length: ' . strlen($pdfContent));
+    echo $pdfContent;
+    exit;
   }
 
   /* ============ AFFECTATIONS EMPLOYÉ ============ */

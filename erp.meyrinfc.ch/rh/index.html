@@ -242,6 +242,19 @@ async function api(action, opts = {}) {
   else if (opts.body) { fetchOpts.headers['Content-Type'] = 'application/json'; fetchOpts.body = JSON.stringify(opts.body); }
   const res = await fetch(`${API}?action=${action}${params}`, fetchOpts);
   if (action === 'export_compta') return res.blob();
+  // payslip_pdf renvoie un PDF binaire côté succès, mais une erreur JSON classique côté échec
+  // (droit manquant, Dompdf en échec) : il faut lire la réponse différemment selon le cas,
+  // contrairement à export_compta ci-dessus qui ne vérifie jamais res.ok.
+  if (action === 'payslip_pdf') {
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const err = new Error(data.error || 'Erreur serveur');
+      err.status = res.status;
+      if (res.status === 401) location.href = 'https://erp.meyrinfc.ch/?redirect=' + encodeURIComponent(location.href);
+      throw err;
+    }
+    return res.blob();
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(data.error || 'Erreur serveur');
@@ -250,6 +263,19 @@ async function api(action, opts = {}) {
     throw err;
   }
   return data;
+}
+
+/* Appel cross-module vers Comptabilité (même domaine, même session ERP), pour peupler le
+   plan comptable dans les écrans de paramétrage RH. Volontairement tolérant : si l'utilisateur
+   n'a pas le droit compta (accounts.view), la liste revient vide plutôt que de casser l'écran RH,
+   le rattachement compte/rôle restant réservé à un responsable qui, lui, a ce droit. */
+async function apiCompta(action, params = null) {
+  try {
+    const qs = params ? '&' + new URLSearchParams(params).toString() : '';
+    const res = await fetch(`../compta/api.php?action=${action}${qs}`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (e) { return []; }
 }
 
 const ICONS = {
@@ -2484,19 +2510,47 @@ function renderRolesTab(el){
     <div class="card">
       <div class="card-head"><h3>Rôles</h3><button class="btn btn-primary btn-sm" onclick="posteModal()">+ Nouveau rôle</button></div>
       <div class="card-body pad0">
-        ${STATE.postes.length ? `<table><thead><tr><th>Libellé</th><th></th></tr></thead><tbody>
-          ${STATE.postes.map(p => `<tr><td>${esc(p.label)}</td>
+        ${STATE.postes.length ? `<table><thead><tr><th>Libellé</th><th>Compte (décompte de paie)</th><th></th></tr></thead><tbody>
+          ${STATE.postes.map(p => `<tr><td>${esc(p.label)}</td><td style="color:var(--gris)">${p.account_label ? esc(p.account_label) : '—'}</td>
             <td><div class="tbl-actions"><button class="icon-btn" data-obj="${esc(JSON.stringify(p))}" onclick="posteModal(JSON.parse(this.dataset.obj))">✎</button><button class="icon-btn" onclick="deletePoste(${p.id})">✕</button></div></td></tr>`).join('')}
         </tbody></table>` : `<div class="empty">Aucun rôle. Ajoutez-en un (ex: Entraîneur principal).</div>`}
       </div>
+      <p class="hint" style="padding:0 18px 16px">Le compte détermine l'intitulé regroupé affiché sur le décompte de paie (ex: plusieurs rôles d'entraîneur rattachés au même compte n'apparaissent que sous "Indemnité entraîneur"). Sans compte, le rôle s'affiche sous son propre libellé.</p>
     </div>
   `;
 }
-function posteModal(p){
+/* Texte affiché/recherché pour un compte : "numéro — nom", filtrable nativement par le
+   navigateur dans un <input list="..."> au fur et à mesure de la frappe (aucune librairie). */
+const accountOptionText = a => `${a.number} — ${a.name}`;
+
+/* Retrouve le compte correspondant exactement au texte tapé/choisi dans un champ de recherche
+   de compte. Un texte qui ne correspond à aucun compte connu (faute de frappe, champ vidé) est
+   traité comme "aucun compte" plutôt que d'enregistrer un rattachement à moitié saisi. */
+function resolveComptaAccount(text){
+  const accounts = Array.isArray(STATE.comptaAccounts) ? STATE.comptaAccounts : [];
+  const t = String(text || '').trim();
+  return accounts.find(a => accountOptionText(a) === t) || null;
+}
+function comptaAccountsDatalist(id){
+  const accounts = Array.isArray(STATE.comptaAccounts) ? STATE.comptaAccounts : [];
+  return `<datalist id="${id}">${accounts.map(a => `<option value="${esc(accountOptionText(a))}">`).join('')}</datalist>`;
+}
+
+async function posteModal(p){
+  if (!STATE.comptaAccounts) STATE.comptaAccounts = await apiCompta('accounts');
+  const accounts = Array.isArray(STATE.comptaAccounts) ? STATE.comptaAccounts : [];
+  const current = p && p.account_number ? accounts.find(a => a.number === p.account_number) : null;
+  const currentText = current ? accountOptionText(current) : (p && p.account_label ? p.account_label : '');
   openModal(`
     <h3>${p?'Modifier':'Nouveau'} rôle</h3>
     <div class="modal-error"></div>
     <div class="field"><label>Libellé</label><input id="pt-label" value="${p?esc(p.label):''}" placeholder="Ex: Directeur technique"></div>
+    <div class="field">
+      <label>Compte du plan comptable (regroupement sur le décompte de paie)</label>
+      <input id="pt-account" list="pt-account-options" value="${esc(currentText)}" placeholder="Rechercher un compte, ou laisser vide" autocomplete="off">
+      ${comptaAccountsDatalist('pt-account-options')}
+      ${!accounts.length ? `<div class="hint" style="margin-top:4px">Plan comptable indisponible (droit Comptabilité requis pour le charger).</div>` : ''}
+    </div>
     <div class="modal-actions">
       ${p ? `<button class="btn btn-ghost" onclick="deletePoste(${p.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
       <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -2507,9 +2561,12 @@ function posteModal(p){
 async function savePoste(id){
   const label = document.getElementById('pt-label').value.trim();
   if (!label) return modalErr('Le libellé est requis.');
+  const acc = resolveComptaAccount(document.getElementById('pt-account').value);
+  const account_number = acc ? acc.number : '';
+  const account_label = acc ? acc.name : '';
   try {
-    if (id) await api('postes', { method: 'PUT', body: { id, label, active: true } });
-    else await api('postes', { method: 'POST', body: { label } });
+    if (id) await api('postes', { method: 'PUT', body: { id, label, active: true, account_number, account_label } });
+    else await api('postes', { method: 'POST', body: { label, account_number, account_label } });
     closeModal(); await refreshSettings();
   } catch (e) { modalErr(e.message); }
 }
@@ -2686,6 +2743,7 @@ async function renderPayslipPage(employeeId, seasonId){
       api('seasons'),
       api('payslip_context', { params: { employee_id: employeeId, month: PS.month } }),
     ]);
+    if (!STATE.comptaAccounts) STATE.comptaAccounts = await apiCompta('accounts');
   } catch (e) {
     app.innerHTML = `<div style="padding:80px;text-align:center;max-width:520px;margin:0 auto;line-height:1.6">`
       + `<h2 style="margin-bottom:10px">${e.status === 403 ? 'Accès refusé' : 'Erreur'}</h2>`
@@ -2737,7 +2795,19 @@ async function changePayslipMonth(value){
   renderPayslipDoc();
 }
 
-function addPayslipLine(type){ PS[type].push({ label: '', montant: 0 }); renderPayslipDoc(); }
+function addPayslipLine(type){ PS[type].push({ label: '', montant: 0, account_number: '', account_label: '' }); renderPayslipDoc(); }
+
+/* Rattacher une indemnité ajoutée à la main sur ce décompte à un compte du plan comptable,
+   pour qu'elle se regroupe avec les rôles du même compte sur le document imprimé (ex: une
+   prime ponctuelle "Prime diplôme" rattachée au même compte qu'un rôle "Responsable" -> les
+   deux apparaissent sous un seul intitulé "Indemnité admin" à l'impression). Sans compte
+   choisi, la ligne garde son libellé tapé à la main. */
+function setPayslipLineAccount(i, text){
+  const acc = resolveComptaAccount(text);
+  PS.indemnites[i].account_number = acc ? acc.number : '';
+  PS.indemnites[i].account_label = acc ? acc.name : '';
+  renderPayslipDoc();
+}
 
 /* Corriger un montant calculé le fige : c'est une décision de l'utilisateur, elle ne doit
    pas être écrasée au prochain recalcul. Vider le champ rend la ligne à son taux. */
@@ -2755,6 +2825,88 @@ function updatePayslipLine(type, i, field, el){
 }
 
 const PAYSLIP_MONTH_LABELS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+
+/* Reprend exactement le calcul de renderPayslipDoc (regroupement par compte, taux, montants)
+   mais renvoie des données prêtes à poster au serveur plutôt qu'à afficher, pour générer le
+   PDF natif (case 'payslip_pdf'). Les montants sont déjà mis en forme (chf/pctSmart) ici :
+   le serveur ne recalcule rien, il pose exactement ce que le responsable a sous les yeux. */
+function buildPayslipPayload(){
+  const ee = PS.employee;
+  const f = PS.fiche || {};
+  const periodDiv = PS.isSemestriel ? 2 : 12;
+  const grossBase = PS.baseRows.reduce((s, a) => s + Number(a.montant), 0) / periodDiv;
+  const extraTotal = PS.indemnites.reduce((s, l) => s + (Number(l.montant) || 0), 0);
+  const grossTotal = grossBase + extraTotal;
+  const autoLines = (PS.autoLines || []).filter(l => !l.removed).map(l => ({
+    ...l,
+    montant: l.override !== null ? l.override : (l.rate > 0 ? grossTotal * l.rate / 100 : l.fixed),
+  }));
+  const ruleTotal = autoLines.reduce((s, d) => s + d.montant, 0);
+  const manualRetenuesTotal = PS.retenues.reduce((s, l) => s + (Number(l.montant) || 0), 0);
+  const totalDeductions = ruleTotal + manualRetenuesTotal;
+  const net = grossTotal - totalDeductions;
+
+  const groupedRevenueLines = [];
+  const addRevenueLine = (key, montant) => {
+    const existing = groupedRevenueLines.find(g => g.key === key);
+    if (existing) existing.montant += montant;
+    else groupedRevenueLines.push({ key, montant });
+  };
+  PS.baseRows.forEach(a => addRevenueLine(
+    a.account_label || `${a.poste_label}${a.team_name ? ' — ' + a.team_name : (a.category_name ? ' — ' + a.category_name + ' (catégorie)' : '')}`,
+    Number(a.montant) / periodDiv
+  ));
+  PS.indemnites.forEach(l => addRevenueLine(l.account_label || l.label || '—', Number(l.montant) || 0));
+
+  const [y, m] = String(PS.month || '').split('-');
+  const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
+
+  return {
+    employee_id: PS.employeeId,
+    month: PS.month,
+    header: {
+      collab_id: ee.id,
+      avs: f.avs_number || '',
+      first_name: ee.first_name, last_name: ee.last_name,
+      street: f.street || '', zip: f.zip || '', city: f.city || '',
+      country: f.country === 'CH' ? 'Suisse' : (f.country || ''),
+      period_label: `${moisLabel} ${y || ''}`.trim(),
+      is_semestriel: !!PS.isSemestriel,
+      iban: ee.iban || '',
+    },
+    revenue: groupedRevenueLines.map(l => ({ label: l.key || '—', montant: chf(l.montant) })),
+    gross_total: chf(grossTotal),
+    charges: autoLines
+      .map(l => ({
+        label: l.label,
+        base: (l.rate > 0 && l.override === null) ? chf(grossTotal) : '',
+        taux: (l.rate > 0 && l.override === null) ? (pctSmart(l.rate) + ' %') : '',
+        montant: '− ' + chf(l.montant),
+      }))
+      .concat(PS.retenues.map(l => ({ label: l.label || '—', base: '', taux: '', montant: '− ' + chf(Number(l.montant) || 0) }))),
+    total_deductions: '− ' + chf(totalDeductions),
+    net: chf(net),
+  };
+}
+
+async function generatePayslipPdf(btn){
+  const originalText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Génération…'; }
+  try {
+    const payload = buildPayslipPayload();
+    const blob = await api('payslip_pdf', { method: 'POST', body: payload });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${payload.month}_Décompte_${PS.employee.last_name}_${PS.employee.first_name}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) {
+    alert('Échec de la génération du PDF : ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+  }
+}
 
 function renderPayslipDoc(){
   const app = document.getElementById('app');
@@ -2774,6 +2926,23 @@ function renderPayslipDoc(){
   const totalDeductions = ruleTotal + manualRetenuesTotal;
   const net = grossTotal - totalDeductions;
 
+  /* Document imprimé (celui que reçoit l'employé) : les rôles et indemnités rattachés au même
+     compte du plan comptable se regroupent sous un seul intitulé, au lieu d'une ligne par rôle
+     ou par équipe. Un rôle/une indemnité sans compte garde son libellé d'origine, jamais caché.
+     L'écran d'édition, lui, garde le détail ligne par ligne : c'est la vue de travail du
+     responsable pour corriger un montant précis. */
+  const groupedRevenueLines = [];
+  const addRevenueLine = (key, montant) => {
+    const existing = groupedRevenueLines.find(g => g.key === key);
+    if (existing) existing.montant += montant;
+    else groupedRevenueLines.push({ key, montant });
+  };
+  PS.baseRows.forEach(a => addRevenueLine(
+    a.account_label || `${a.poste_label}${a.team_name ? ' — ' + a.team_name : (a.category_name ? ' — ' + a.category_name + ' (catégorie)' : '')}`,
+    Number(a.montant) / periodDiv
+  ));
+  PS.indemnites.forEach(l => addRevenueLine(l.account_label || l.label || '—', Number(l.montant) || 0));
+
   const [y, m] = String(PS.month || '').split('-');
   const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
 
@@ -2791,21 +2960,34 @@ function renderPayslipDoc(){
     // Colonnes Base/Taux : remplies seulement quand elles ont un sens (une ligne calculée à
     // partir d'un taux). Une indemnité ou une retenue fixe/manuelle les laisse vides, comme
     // sur un décompte imprimé classique — ce n'est pas un champ oublié.
+    // white-space:nowrap sur les colonnes chiffrées : un taux ou un montant ne doit jamais
+    // retourner à la ligne. table-layout:fixed (posé sur la <table>) fige les largeurs de
+    // colonnes déclarées dans l'en-tête ; elles sont dimensionnées pour la plus longue valeur
+    // possible (ex: "12,394 %"), donc jamais un pixel trop juste comme avant.
     const row = (label, base, taux, montant, opts = {}) => `<tr${opts.topBorder?' style="border-top:1.5px solid var(--noir)"':''}>
-      <td style="padding:${opts.pad||'7px'} 10px 7px 0;${opts.bold?'font-weight:700':''}">${label}</td>
-      <td style="padding:${opts.pad||'7px'} 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums">${base ?? ''}</td>
-      <td style="padding:${opts.pad||'7px'} 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums">${taux ?? ''}</td>
-      <td style="padding:${opts.pad||'7px'} 0 7px;text-align:right;font-variant-numeric:tabular-nums;${opts.bold?'font-weight:700':''}">${montant}</td>
+      <td style="padding:${opts.pad||'7px'} 10px 7px 0;${opts.bold?'font-weight:700':''};overflow-wrap:anywhere">${label}</td>
+      <td style="padding:${opts.pad||'7px'} 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${base ?? ''}</td>
+      <td style="padding:${opts.pad||'7px'} 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${taux ?? ''}</td>
+      <td style="padding:${opts.pad||'7px'} 0 7px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;${opts.bold?'font-weight:700':''}">${montant}</td>
     </tr>`;
 
+    // Indemnités ajoutées à la main : le libellé tapé reste une note interne (visible seulement
+    // sur l'écran d'édition) ; c'est le compte choisi qui fixe l'intitulé imprimé sur le
+    // document final, pour se regrouper avec les rôles rattachés au même compte.
+    const current = (l) => l.account_number ? accountOptionText({ number: l.account_number, name: l.account_label }) : '';
     const customRow = (type, i) => {
       const l = PS[type][i];
       if (!editable) return row(esc(l.label) || '—', '', '', chf(Number(l.montant) || 0));
+      const accountPicker = type === 'indemnites' ? `
+          <input class="ps-input" list="ps-account-options" value="${esc(current(l))}" placeholder="Compte (facultatif) : recherche..." autocomplete="off"
+                 style="width:100%;margin-top:4px;padding:5px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:11.5px;color:var(--gris)"
+                 onchange="setPayslipLineAccount(${i}, this.value)" title="Compte du plan comptable : détermine l'intitulé regroupé imprimé">` : '';
       return `<tr>
         <td style="padding:5px 10px 5px 0" colspan="3">
           <input class="ps-input" value="${esc(l.label)}" placeholder="Libellé" style="width:100%;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px" onchange="updatePayslipLine('${type}',${i},'label',this)">
+          ${accountPicker}
         </td>
-        <td style="padding:5px 0;text-align:right">
+        <td style="padding:5px 0;text-align:right;vertical-align:top">
           <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
             <input class="ps-input" type="number" step="0.05" value="${l.montant||''}" placeholder="0.00" style="width:90px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right" onchange="updatePayslipLine('${type}',${i},'montant',this)">
             <button onclick="removePayslipLine('${type}',${i})" style="color:var(--rouge)" title="Retirer">✕</button>
@@ -2821,10 +3003,10 @@ function renderPayslipDoc(){
       const taux = hasRate ? pctSmart(l.rate)+' %' : '';
       if (!editable) return row(esc(l.label), base, taux, '− ' + chf(l.montant));
       return `<tr>
-        <td style="padding:7px 10px 7px 0">${esc(l.label)}</td>
-        <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums">${base}</td>
-        <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums">${taux}</td>
-        <td style="padding:5px 0;text-align:right">
+        <td style="padding:7px 10px 7px 0;overflow-wrap:anywhere">${esc(l.label)}</td>
+        <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${base}</td>
+        <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${taux}</td>
+        <td style="padding:5px 0;text-align:right;white-space:nowrap">
           <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
             <span style="color:var(--gris)">−</span>
             <input class="ps-input" type="number" step="0.05" value="${l.montant.toFixed(2)}" style="width:80px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums" onchange="overrideAutoLine(${idx}, this.value)">
@@ -2835,6 +3017,7 @@ function renderPayslipDoc(){
     };
 
     return `
+      ${editable ? comptaAccountsDatalist('ps-account-options') : ''}
       <div style="background:#fff;${editable?'border:1px solid var(--ligne);border-radius:16px;box-shadow:var(--ombre);':''}overflow:hidden;font-size:12.5px;line-height:1.5">
         <div style="background:var(--noir);color:#fff;padding:22px 30px;display:flex;align-items:center;justify-content:space-between;gap:16px">
           <div>
@@ -2863,17 +3046,19 @@ function renderPayslipDoc(){
         </div>
 
         <div style="padding:18px 30px 0">
-          <table style="width:100%;border-collapse:collapse">
+          <table style="width:100%;border-collapse:collapse;table-layout:fixed">
             <thead><tr style="border-bottom:1.5px solid var(--noir)">
               <th style="text-align:left;padding-bottom:7px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Rubrique et genres de salaires</th>
               <th style="text-align:right;padding-bottom:7px;width:85px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Base</th>
-              <th style="text-align:right;padding-bottom:7px;width:65px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Taux</th>
-              <th style="text-align:right;padding-bottom:7px;width:95px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Montant</th>
+              <th style="text-align:right;padding-bottom:7px;width:95px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Taux</th>
+              <th style="text-align:right;padding-bottom:7px;width:100px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2)">Montant</th>
             </tr></thead>
             <tbody>
               ${row('Salaire brut', '', '', '', { bold: true, pad: '16px' })}
-              ${PS.baseRows.map(a => row(`${esc(a.poste_label)}${a.team_name?' — '+esc(a.team_name):(a.category_name?' — '+esc(a.category_name):'')}`, '', '', chf(Number(a.montant)/periodDiv))).join('')}
-              ${PS.indemnites.map((l,i) => customRow('indemnites', i)).join('')}
+              ${editable
+                ? `${PS.baseRows.map(a => row(`${esc(a.poste_label)}${a.team_name?' — '+esc(a.team_name):(a.category_name?' — '+esc(a.category_name):'')}`, '', '', chf(Number(a.montant)/periodDiv))).join('')}
+                   ${PS.indemnites.map((l,i) => customRow('indemnites', i)).join('')}`
+                : groupedRevenueLines.map(l => row(esc(l.key) || '—', '', '', chf(l.montant))).join('')}
               ${row('', '', '', chf(grossTotal), { bold: true, topBorder: true })}
 
               ${row('Charges sociales', '', '', '', { bold: true, pad: '22px' })}
@@ -2920,9 +3105,10 @@ function renderPayslipDoc(){
         <div class="month-picker"><input type="month" value="${esc(PS.month)}" onchange="changePayslipMonth(this.value)"></div>
         <button class="btn btn-ghost btn-sm" onclick="addPayslipLine('indemnites')">+ Indemnité</button>
         <button class="btn btn-ghost btn-sm" onclick="addPayslipLine('retenues')">+ Retenue</button>
-        <button class="btn btn-primary" style="margin-left:auto" onclick="window.print()">Générer le PDF</button>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="window.print()" title="Aperçu à l'écran via l'impression du navigateur, dépannage seulement">Aperçu</button>
+        <button class="btn btn-primary" onclick="generatePayslipPdf(this)">Générer le PDF</button>
       </div>
-      <p class="no-print hint" style="margin:-10px 0 16px">Cet encadré sert à ajuster le décompte. Le PDF généré (bouton ci-dessus) est un document propre et professionnel, sans champs de saisie — c'est lui qui part à l'employé.</p>
+      <p class="no-print hint" style="margin:-10px 0 16px">Cet encadré sert à ajuster le décompte. "Générer le PDF" produit un vrai fichier PDF (mis en page par le serveur, identique quel que soit le navigateur) et l'enregistre automatiquement pour cette période — c'est lui qui part à l'employé.</p>
 
       <div id="ps-edit">${payslipCardHTML(true)}</div>
       <div id="ps-print">${payslipCardHTML(false)}</div>
