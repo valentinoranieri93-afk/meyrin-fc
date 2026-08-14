@@ -2457,6 +2457,10 @@ function paieRateYearForm(){
   const accounts = Array.isArray(STATE.comptaAccounts) ? STATE.comptaAccounts : [];
   const lavageAccount = existing.lavage_account_number ? accounts.find(a => a.number === existing.lavage_account_number) : null;
   const lavageAccountText = lavageAccount ? accountOptionText(lavageAccount) : (existing.lavage_account_label || '');
+  const salaryAccount = existing.player_salary_account_number ? accounts.find(a => a.number === existing.player_salary_account_number) : null;
+  const salaryAccountText = salaryAccount ? accountOptionText(salaryAccount) : (existing.player_salary_account_label || '');
+  const bonusAccount = existing.player_bonus_account_number ? accounts.find(a => a.number === existing.player_bonus_account_number) : null;
+  const bonusAccountText = bonusAccount ? accountOptionText(bonusAccount) : (existing.player_bonus_account_label || '');
   return `
     <div style="border:1px solid var(--ligne);border-radius:10px;padding:14px">
       <div class="field-row">
@@ -2464,6 +2468,21 @@ function paieRateYearForm(){
       </div>
       <div class="field-row" style="grid-template-columns:repeat(3,1fr)">
         ${PAIE_RATE_FIELDS.map(f => `<div class="field"><label>${esc(f[1])} (%)</label><input id="paie-${f[0]}" type="number" step="0.001" value="${existing[f[0]] ?? ''}" placeholder="0.000"></div>`).join('')}
+      </div>
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin:16px 0 8px">Revenus joueurs</div>
+      <p class="hint" style="margin-bottom:10px">Intitulés affichés sur le décompte de paie d'un joueur : le salaire fixe de sa fiche et ses primes de match restent deux lignes distinctes, chacune sous l'intitulé de son compte.</p>
+      <div class="field-row">
+        <div class="field">
+          <label>Compte "Indemnité joueurs" (salaire fixe de la fiche)</label>
+          <input id="paie-player-salary-account" list="paie-player-salary-account-options" value="${esc(salaryAccountText)}" placeholder="Rechercher un compte" autocomplete="off">
+          ${comptaAccountsDatalist('paie-player-salary-account-options')}
+        </div>
+        <div class="field">
+          <label>Compte "Prime de match"</label>
+          <input id="paie-player-bonus-account" list="paie-player-bonus-account-options" value="${esc(bonusAccountText)}" placeholder="Rechercher un compte" autocomplete="off">
+          ${comptaAccountsDatalist('paie-player-bonus-account-options')}
+        </div>
       </div>
 
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin:16px 0 8px">Retenue lavage (joueurs)</div>
@@ -2496,6 +2515,12 @@ async function savePaieRateYear(){
   const lavageAcc = resolveComptaAccount(document.getElementById('paie-lavage-account').value);
   body.lavage_account_number = lavageAcc ? lavageAcc.number : '';
   body.lavage_account_label = lavageAcc ? lavageAcc.name : '';
+  const salaryAcc = resolveComptaAccount(document.getElementById('paie-player-salary-account').value);
+  body.player_salary_account_number = salaryAcc ? salaryAcc.number : '';
+  body.player_salary_account_label = salaryAcc ? salaryAcc.name : '';
+  const bonusAcc = resolveComptaAccount(document.getElementById('paie-player-bonus-account').value);
+  body.player_bonus_account_number = bonusAcc ? bonusAcc.number : '';
+  body.player_bonus_account_label = bonusAcc ? bonusAcc.name : '';
   try {
     await api('payroll_rate_settings', { method: 'POST', body });
     PAIE_RATE_YEAR_EDITING = null;
@@ -3274,8 +3299,12 @@ function buildPlayerPayslipPayload(){
   const [y, m] = String(PSP.month || '').split('-');
   const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
 
-  const revenue = [{ label: 'Salaire mensuel', montant: chf(Number(p.salaire_mensuel)) }];
-  if (PSP.primesMois > 0) revenue.push({ label: 'Primes de match', montant: chf(PSP.primesMois) });
+  // Deux sources distinctes (fiche joueur vs onglet Primes), jamais fusionnées : chacune
+  // garde sa propre ligne, sous l'intitulé de son compte réglé dans Paramètres > Paie.
+  const salaryLabel = PSP.rateSettings.player_salary_account_label || 'Indemnité joueurs';
+  const bonusLabel = PSP.rateSettings.player_bonus_account_label || 'Primes de match';
+  const revenue = [{ label: salaryLabel, montant: chf(Number(p.salaire_mensuel)) }];
+  if (PSP.primesMois > 0) revenue.push({ label: bonusLabel, montant: chf(PSP.primesMois) });
 
   return {
     player_id: PSP.playerId,
@@ -3422,8 +3451,8 @@ function renderPlayerPayslipDoc(){
             </tr></thead>
             <tbody>
               ${row('Salaire brut', '', '', '', { bold: true, pad: '16px' })}
-              ${row('Salaire mensuel', '', '', chf(Number(p.salaire_mensuel)))}
-              ${PSP.primesMois > 0 ? row('Primes de match', '', '', chf(PSP.primesMois)) : ''}
+              ${row(esc(PSP.rateSettings.player_salary_account_label || 'Indemnité joueurs'), '', '', chf(Number(p.salaire_mensuel)))}
+              ${PSP.primesMois > 0 ? row(esc(PSP.rateSettings.player_bonus_account_label || 'Primes de match'), '', '', chf(PSP.primesMois)) : ''}
               ${row('', '', '', chf(gross), { bold: true, topBorder: true })}
 
               ${row(chargesHeaderLabel, '', '', '', { bold: true, pad: '22px' })}

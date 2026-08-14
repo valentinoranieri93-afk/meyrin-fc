@@ -305,6 +305,13 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'payroll_rate_settings', 'lavage_amount', 'REAL NOT NULL DEFAULT 30');
   ensure_column($pdo, 'payroll_rate_settings', 'lavage_account_number', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'payroll_rate_settings', 'lavage_account_label', "TEXT NOT NULL DEFAULT ''");
+  /* Comptes du plan comptable pour les deux revenus d'un joueur, réglés une fois pour tout le
+     club : le salaire fixe de la fiche joueur et les primes de match restent deux lignes
+     distinctes sur le décompte (sources différentes), chacune sous l'intitulé de son compte. */
+  ensure_column($pdo, 'payroll_rate_settings', 'player_salary_account_number', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'payroll_rate_settings', 'player_salary_account_label', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'payroll_rate_settings', 'player_bonus_account_number', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'payroll_rate_settings', 'player_bonus_account_label', "TEXT NOT NULL DEFAULT ''");
 
   /* Références administratives des assureurs et de la prévoyance (assureur LAA, n° de
      police, groupe LAA, institution et plan LPP, caisse d'allocations familiales) :
@@ -1449,7 +1456,9 @@ function payroll_rate_settings_for_year(PDO $pdo, int $year): array {
   return $row ?: ['year' => $year, 'avs_rate' => 0.0, 'ac_rate' => 0.0, 'amat_rate' => 0.0,
                    'aanp_rate' => 0.0, 'laac_rate' => 0.0, 'ijm_rate' => 0.0,
                    'lavage_threshold' => 300.0, 'lavage_amount' => 30.0,
-                   'lavage_account_number' => '', 'lavage_account_label' => ''];
+                   'lavage_account_number' => '', 'lavage_account_label' => '',
+                   'player_salary_account_number' => '', 'player_salary_account_label' => '',
+                   'player_bonus_account_number' => '', 'player_bonus_account_label' => ''];
 }
 
 /** Document PDF du décompte de paie (généré via Dompdf, voir case 'payslip_pdf').
@@ -2359,7 +2368,7 @@ switch ($action) {
     if ($method === 'POST' || $method === 'PUT') {
       $year = i($b, 'year'); if (!$year) fail('year requis');
       $rateCols = ['avs_rate','ac_rate','amat_rate','aanp_rate','laac_rate','ijm_rate','lavage_threshold','lavage_amount'];
-      $strCols = ['lavage_account_number','lavage_account_label'];
+      $strCols = ['lavage_account_number','lavage_account_label','player_salary_account_number','player_salary_account_label','player_bonus_account_number','player_bonus_account_label'];
       $cols = array_merge($rateCols, $strCols);
       $vals = array_merge(array_map(fn($c) => f($b, $c), $rateCols), array_map(fn($c) => s($b, $c), $strCols));
       $pdo->prepare('INSERT INTO payroll_rate_settings (year, ' . implode(',', $cols) . ') VALUES (?,' . implode(',', array_fill(0, count($cols), '?')) . ')
