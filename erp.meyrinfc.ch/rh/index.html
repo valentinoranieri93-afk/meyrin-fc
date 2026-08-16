@@ -2423,10 +2423,31 @@ const PAIE_AVS_FIELDS = [
   ['avs_rentier_franchise_monthly', 'Franchise rentier (CHF/mois)', 1400], ['avs_rentier_franchise_annual', 'Franchise rentier (CHF/an)', 16800],
   ['avs_minime_threshold', 'Seuil de minime importance (CHF/an)', 2500], ['avs_minime_abatement_semestriel', 'Abattement minime importance / OCAS (CHF/semestre)', 2500],
 ];
+// Comptabilisation (2026-08-16) : taux employeur, séparés des taux employé ci-dessus, jamais
+// déduits du net. À 0 par défaut : une rubrique sans taux employeur n'a simplement pas de
+// contrepartie patronale modélisée (ex. AANP).
+const PAIE_EMPLOYER_RATE_FIELDS = [
+  ['avs_employer_rate',  'AVS / AI / APG — part employeur'], ['ac_employer_rate', 'AC — part employeur'],
+  ['amat_employer_rate', 'AMat GE — part employeur'], ['aanp_employer_rate', 'AANP — part employeur'],
+  ['laac_employer_rate', 'LAAC — part employeur'], ['ijm_employer_rate', 'IJM — part employeur'],
+];
+// Charges 100% employeur (2026-08-17), sans aucune part employé ni case d'assujettissement
+// propre : calées sur l'assujettissement AVS de la personne (compute_payslip()).
+const PAIE_EMPLOYER_ONLY_RATE_FIELDS = [
+  ['scaf_rate', 'Cotisation SCAF'], ['lfp_rate', 'Cotisation LFP'],
+  ['cpe_rate', 'Cotisation CPE'], ['frais_admin_rate', "Frais d'administration"],
+];
+// Les 12 rubriques comptabilisables de payroll_line_accounts, dans l'ordre du décompte.
+const PAIE_LINE_ACCOUNT_KEYS = ['avs', 'ac', 'amat', 'aanp', 'laac', 'ijm', 'scaf', 'lfp', 'cpe', 'frais_admin', 'lpp', 'is'];
 let PAIE_RATE_YEAR_EDITING = null;
 
 async function renderPaieTab(el){
   if (!STATE.comptaAccounts) STATE.comptaAccounts = await apiCompta('accounts');
+  if (!STATE.comptaJournals) STATE.comptaJournals = await apiCompta('journals');
+  if (!STATE.payrollAccounting) {
+    try { STATE.payrollAccounting = await api('payroll_accounting_settings'); }
+    catch (e) { STATE.payrollAccounting = { settings: {}, lines: [] }; }
+  }
   el.innerHTML = `
     <div class="card">
       <div class="card-head"><h3>Taux d'assurances sociales</h3></div>
@@ -2461,7 +2482,112 @@ async function renderPaieTab(el){
         <div style="padding:14px 18px"><button class="btn btn-primary btn-sm" onclick="insuranceProfileModal(null)">+ Ajouter un profil</button></div>
       </div>
     </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Comptabilisation</h3></div>
+      <div class="card-body">
+        <p class="hint" style="margin-bottom:14px">Chaque décompte validé dépose un brouillon dans Compta (à valider depuis l'écran Brouillons) : le brut sur le compte du poste, les charges patronales et les retenues sur le compte du prestataire, le solde sur le compte du net à payer.</p>
+        ${payrollAccountingSettingsForm()}
+        <table style="margin-top:16px"><thead><tr><th>Rubrique</th><th>Compte de charge (employeur)</th><th>Compte de dette (prestataire)</th><th></th></tr></thead><tbody>
+          ${PAIE_LINE_ACCOUNT_KEYS.map(k => payrollLineAccountRow(k)).join('')}
+        </tbody></table>
+      </div>
+    </div>
   `;
+}
+
+function payrollAccountingSettingsForm(){
+  const s = STATE.payrollAccounting.settings || {};
+  const accounts = Array.isArray(STATE.comptaAccounts) ? STATE.comptaAccounts : [];
+  const netAcc = s.net_payable_account_number ? accounts.find(a => a.number === s.net_payable_account_number) : null;
+  const netAccText = netAcc ? accountOptionText(netAcc) : (s.net_payable_account_label || '2002 — Salaire à payer');
+  const suspAcc = s.suspense_account_number ? accounts.find(a => a.number === s.suspense_account_number) : null;
+  const suspAccText = suspAcc ? accountOptionText(suspAcc) : (s.suspense_account_label || '');
+  const journals = Array.isArray(STATE.comptaJournals) ? STATE.comptaJournals : [];
+  return `
+    <div style="border:1px solid var(--ligne);border-radius:10px;padding:14px">
+      <div class="field-row" style="grid-template-columns:repeat(3,1fr)">
+        <div class="field">
+          <label>Compte "Salaire à payer" (net)</label>
+          <input id="pas-net-account" list="pas-net-account-options" value="${esc(netAccText)}" placeholder="Rechercher un compte" autocomplete="off">
+          ${comptaAccountsDatalist('pas-net-account-options')}
+        </div>
+        <div class="field">
+          <label>Compte de suspens (retenue sans compte propre)</label>
+          <input id="pas-suspense-account" list="pas-suspense-account-options" value="${esc(suspAccText)}" placeholder="Rechercher un compte" autocomplete="off">
+          ${comptaAccountsDatalist('pas-suspense-account-options')}
+        </div>
+        <div class="field">
+          <label>Journal Compta</label>
+          <select id="pas-journal-code">
+            <option value="">— Automatique —</option>
+            ${journals.map(j => `<option value="${esc(j.code)}" ${s.journal_code === j.code ? 'selected' : ''}>${esc(j.code)} — ${esc(j.label)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field check-row" style="margin-top:10px">
+        <input type="checkbox" id="pas-push-enabled" ${s.push_enabled === undefined || Number(s.push_enabled) === 1 ? 'checked' : ''}>
+        <label style="margin:0" for="pas-push-enabled">Pousser automatiquement chaque décompte validé vers Compta (comme brouillon)</label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button class="btn btn-primary btn-sm" onclick="savePayrollAccountingSettings()">Enregistrer</button>
+      </div>
+    </div>
+  `;
+}
+async function savePayrollAccountingSettings(){
+  const netAcc = resolveComptaAccount(document.getElementById('pas-net-account').value);
+  const suspAcc = resolveComptaAccount(document.getElementById('pas-suspense-account').value);
+  const body = {
+    net_payable_account_number: netAcc ? netAcc.number : '2002',
+    net_payable_account_label: netAcc ? netAcc.name : 'Salaire à payer',
+    suspense_account_number: suspAcc ? suspAcc.number : '',
+    suspense_account_label: suspAcc ? suspAcc.name : '',
+    journal_code: document.getElementById('pas-journal-code').value,
+    push_enabled: document.getElementById('pas-push-enabled').checked,
+  };
+  try {
+    await api('payroll_accounting_settings', { method: 'PUT', body });
+    STATE.payrollAccounting = null;
+    await refreshSettings();
+  } catch (e) { alert(e.message); }
+}
+
+function payrollLineAccountRow(key){
+  const line = (STATE.payrollAccounting.lines || []).find(l => l.line_key === key) || { label: key };
+  const accounts = Array.isArray(STATE.comptaAccounts) ? STATE.comptaAccounts : [];
+  const chargeAcc = line.charge_account_number ? accounts.find(a => a.number === line.charge_account_number) : null;
+  const chargeText = chargeAcc ? accountOptionText(chargeAcc) : (line.charge_account_label || '');
+  const payableAcc = line.payable_account_number ? accounts.find(a => a.number === line.payable_account_number) : null;
+  const payableText = payableAcc ? accountOptionText(payableAcc) : (line.payable_account_label || '');
+  return `<tr>
+    <td style="font-weight:600">${esc(line.label || key)}</td>
+    <td>
+      <input id="pla-charge-${key}" list="pla-charge-${key}-options" value="${esc(chargeText)}" placeholder="Aucune part employeur" autocomplete="off" style="width:100%">
+      ${comptaAccountsDatalist('pla-charge-' + key + '-options')}
+    </td>
+    <td>
+      <input id="pla-payable-${key}" list="pla-payable-${key}-options" value="${esc(payableText)}" placeholder="Rechercher un compte" autocomplete="off" style="width:100%">
+      ${comptaAccountsDatalist('pla-payable-' + key + '-options')}
+    </td>
+    <td><button class="icon-btn" onclick="savePayrollLineAccount('${key}')" title="Enregistrer">✓</button></td>
+  </tr>`;
+}
+async function savePayrollLineAccount(key){
+  const chargeAcc = resolveComptaAccount(document.getElementById('pla-charge-' + key).value);
+  const payableAcc = resolveComptaAccount(document.getElementById('pla-payable-' + key).value);
+  const body = {
+    line_key: key,
+    charge_account_number: chargeAcc ? chargeAcc.number : '',
+    charge_account_label: chargeAcc ? chargeAcc.name : '',
+    payable_account_number: payableAcc ? payableAcc.number : '',
+    payable_account_label: payableAcc ? payableAcc.name : '',
+  };
+  try {
+    await api('payroll_accounting_settings', { method: 'PUT', body });
+    STATE.payrollAccounting = null;
+    await refreshSettings();
+  } catch (e) { alert(e.message); }
 }
 
 function paieRateYearForm(){
@@ -2482,6 +2608,16 @@ function paieRateYearForm(){
       </div>
       <div class="field-row" style="grid-template-columns:repeat(3,1fr)">
         ${PAIE_RATE_FIELDS.map(f => `<div class="field"><label>${esc(f[1])} (%)</label><input id="paie-${f[0]}" type="number" step="0.001" value="${existing[f[0]] ?? ''}" placeholder="0.000"></div>`).join('')}
+      </div>
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin:16px 0 8px">Taux employeur (comptabilisation)</div>
+      <p class="hint" style="margin-bottom:10px">Jamais déduits du net : une vraie charge du club, en plus du salaire brut. À 0 par défaut si la rubrique n'a pas de contrepartie patronale (ex. AANP).</p>
+      <div class="field-row" style="grid-template-columns:repeat(3,1fr)">
+        ${PAIE_EMPLOYER_RATE_FIELDS.map(f => `<div class="field"><label>${esc(f[1])} (%)</label><input id="paie-${f[0]}" type="number" step="0.001" value="${existing[f[0]] ?? 0}" placeholder="0.000"></div>`).join('')}
+      </div>
+      <p class="hint" style="margin:10px 0">Charges 100% employeur, sans case d'assujettissement propre : calculées sur le même salaire déterminant que l'AVS, pour toute personne assujettie à l'AVS.</p>
+      <div class="field-row" style="grid-template-columns:repeat(4,1fr)">
+        ${PAIE_EMPLOYER_ONLY_RATE_FIELDS.map(f => `<div class="field"><label>${esc(f[1])} (%)</label><input id="paie-${f[0]}" type="number" step="0.001" value="${existing[f[0]] ?? 0}" placeholder="0.000"></div>`).join('')}
       </div>
 
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin:16px 0 8px">AVS — franchise rentier et abattement minime importance</div>
@@ -2507,6 +2643,16 @@ function paieRateYearForm(){
           <label>Compte "Prime de match"</label>
           <input id="paie-player-bonus-account" list="paie-player-bonus-account-options" value="${esc(bonusAccountText)}" placeholder="Rechercher un compte" autocomplete="off">
           ${comptaAccountsDatalist('paie-player-bonus-account-options')}
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Intitulé "Indemnité joueurs" (optionnel)</label>
+          <input id="paie-player-salary-label" value="${esc(existing.player_salary_label || '')}" placeholder="Vide = reprend le nom du compte ci-dessus">
+        </div>
+        <div class="field">
+          <label>Intitulé "Prime de match" (optionnel)</label>
+          <input id="paie-player-bonus-label" value="${esc(existing.player_bonus_label || '')}" placeholder="Vide = reprend le nom du compte ci-dessus">
         </div>
       </div>
 
@@ -2535,6 +2681,8 @@ async function savePaieRateYear(){
   if (!year) return alert('Année requise.');
   const body = { year };
   PAIE_RATE_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
+  PAIE_EMPLOYER_RATE_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
+  PAIE_EMPLOYER_ONLY_RATE_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
   PAIE_AVS_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
   PAIE_CEILING_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
   body.lavage_threshold = Number(document.getElementById('paie-lavage-threshold').value) || 0;
@@ -2548,6 +2696,8 @@ async function savePaieRateYear(){
   const bonusAcc = resolveComptaAccount(document.getElementById('paie-player-bonus-account').value);
   body.player_bonus_account_number = bonusAcc ? bonusAcc.number : '';
   body.player_bonus_account_label = bonusAcc ? bonusAcc.name : '';
+  body.player_salary_label = document.getElementById('paie-player-salary-label').value.trim();
+  body.player_bonus_label = document.getElementById('paie-player-bonus-label').value.trim();
   try {
     await api('payroll_rate_settings', { method: 'POST', body });
     PAIE_RATE_YEAR_EDITING = null;
@@ -2651,6 +2801,10 @@ async function posteModal(p){
       ${comptaAccountsDatalist('pt-account-options')}
       ${!accounts.length ? `<div class="hint" style="margin-top:4px">Plan comptable indisponible (droit Comptabilité requis pour le charger).</div>` : ''}
     </div>
+    <div class="field">
+      <label>Intitulé sur le décompte de paie (optionnel)</label>
+      <input id="pt-payslip-label" value="${p?esc(p.payslip_label||''):''}" placeholder="Vide = reprend le nom du compte ci-dessus">
+    </div>
     <div class="modal-actions">
       ${p ? `<button class="btn btn-ghost" onclick="deletePoste(${p.id})" style="color:var(--rouge);margin-right:auto">Supprimer</button>` : ''}
       <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -2664,9 +2818,10 @@ async function savePoste(id){
   const acc = resolveComptaAccount(document.getElementById('pt-account').value);
   const account_number = acc ? acc.number : '';
   const account_label = acc ? acc.name : '';
+  const payslip_label = document.getElementById('pt-payslip-label').value.trim();
   try {
-    if (id) await api('postes', { method: 'PUT', body: { id, label, active: true, account_number, account_label } });
-    else await api('postes', { method: 'POST', body: { label, account_number, account_label } });
+    if (id) await api('postes', { method: 'PUT', body: { id, label, active: true, account_number, account_label, payslip_label } });
+    else await api('postes', { method: 'POST', body: { label, account_number, account_label, payslip_label } });
     closeModal(); await refreshSettings();
   } catch (e) { modalErr(e.message); }
 }
@@ -3079,7 +3234,10 @@ async function renderPayslipDoc(){
 
               ${(c.divers_lines.length || PS.retenues.length) ? `
                 ${row('Divers', '', '', '', { bold: true, pad: '22px' })}
-                ${editable ? PS.retenues.map((l,i) => customRow('retenues', i)).join('') : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
+                ${editable
+                  ? `${c.divers_lines.slice(0, Math.max(0, c.divers_lines.length - PS.retenues.length)).map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
+                     ${PS.retenues.map((l,i) => customRow('retenues', i)).join('')}`
+                  : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
                 ${row('', '', '', '− ' + chf(c.divers_total), { bold: true, topBorder: true })}
               ` : ''}
             </tbody>
@@ -3326,7 +3484,10 @@ async function renderPlayerPayslipDoc(){
 
               ${(c.divers_lines.length || PSP.retenues.length) ? `
                 ${row('Divers', '', '', '', { bold: true, pad: '22px' })}
-                ${editable ? PSP.retenues.map((l,i) => retenueRow(i)).join('') : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
+                ${editable
+                  ? `${c.divers_lines.slice(0, Math.max(0, c.divers_lines.length - PSP.retenues.length)).map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
+                     ${PSP.retenues.map((l,i) => retenueRow(i)).join('')}`
+                  : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
                 ${row('', '', '', '− ' + chf(c.divers_total), { bold: true, topBorder: true })}
               ` : ''}
             </tbody>

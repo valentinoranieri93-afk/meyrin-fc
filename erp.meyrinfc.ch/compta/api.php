@@ -309,6 +309,38 @@ function init_schema(PDO $pdo): void {
         user_name TEXT DEFAULT '',
         created_at TEXT DEFAULT (datetime('now'))
     );
+    /* Brouillons : toute génération (facture, décompte de paie...) atterrit
+       ici, PAS dans journal_entries — c'est ce qui rend l'écriture éditable et
+       différée. Volontairement dépourvu de piece_ref/journal_id définitif :
+       ceux-ci ne sont assignés qu'à la validation (compta_validate_draft(),
+       lib/mfc_compta.php), pour que la numérotation continue des pièces ne
+       souffre jamais d'un brouillon rejeté avant d'avoir été validé. */
+    CREATE TABLE IF NOT EXISTS entry_drafts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_kind TEXT NOT NULL DEFAULT 'manuel',
+        entry_date TEXT NOT NULL,
+        label TEXT NOT NULL,
+        source_module TEXT NOT NULL DEFAULT 'manuel',
+        source_ref_id TEXT NOT NULL DEFAULT '',
+        suggested_journal_id INTEGER REFERENCES journals(id),
+        piece_kind_suggested TEXT NOT NULL DEFAULT 'OD',
+        status TEXT NOT NULL DEFAULT 'brouillon',
+        validated_entry_id INTEGER REFERENCES journal_entries(id),
+        warnings TEXT NOT NULL DEFAULT '',
+        created_by TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS entry_draft_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        draft_id INTEGER NOT NULL REFERENCES entry_drafts(id) ON DELETE CASCADE,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        debit REAL NOT NULL DEFAULT 0,
+        credit REAL NOT NULL DEFAULT 0,
+        label TEXT DEFAULT '',
+        tiers_contact_id TEXT DEFAULT '',
+        cost_center_id INTEGER REFERENCES cost_centers(id),
+        position INTEGER NOT NULL DEFAULT 0
+    );
     ");
 
     /* Anti-doublon d'import : une référence banque (AcctSvcrRef) ne doit jamais
@@ -331,6 +363,11 @@ function init_schema(PDO $pdo): void {
     /* Lot 3 : TVA par défaut portée par le compte, et journal de l'écriture. */
     ensure_column($pdo, 'accounts',        'vat_rate_id',          'INTEGER');
     ensure_column($pdo, 'journal_entries', 'journal_id',           'INTEGER');
+    /* Couche brouillon : une facture existante avant cette révision est déjà
+       comptabilisée (journal_entry_id renseigné) — elle garde son statut
+       actuel, seule une facture créée depuis une base à jour peut valoir
+       status='brouillon'. draft_id reste NULL pour tout l'historique. */
+    ensure_column($pdo, 'invoices',        'draft_id',             'INTEGER');
 
     /* Index créés APRÈS les migrations, jamais dans le bloc CREATE TABLE :
        sur une base déjà en service, CREATE TABLE IF NOT EXISTS ne fait rien, si
@@ -348,6 +385,10 @@ function init_schema(PDO $pdo): void {
     CREATE INDEX IF NOT EXISTS ix_inv_att       ON invoice_attachments(invoice_id);
     CREATE INDEX IF NOT EXISTS ix_audit_entity  ON audit_log(entity_type, entity_id);
     CREATE INDEX IF NOT EXISTS ix_audit_date    ON audit_log(created_at);
+    CREATE INDEX IF NOT EXISTS ix_draft_status  ON entry_drafts(status);
+    CREATE INDEX IF NOT EXISTS ix_draft_journal ON entry_drafts(suggested_journal_id);
+    CREATE INDEX IF NOT EXISTS ix_draft_src     ON entry_drafts(source_module, source_ref_id);
+    CREATE INDEX IF NOT EXISTS ix_draft_lines   ON entry_draft_lines(draft_id);
     ");
 
     /* Reprise des factures créées avant les lignes : chacune devient une facture
@@ -629,6 +670,10 @@ const CP_PERMS = [
     'report_income_statement' => 'reports.view',
     'report_aged_balance'     => 'reports.view',
     'audit_log'               => 'audit.view',
+    'drafts'                  => 'journal.view',
+    'draft'                   => ['GET' => 'journal.view', 'write' => 'journal.edit'],
+    'draft_validate'          => 'journal.edit',
+    'draft_reject'            => 'journal.edit',
 ];
 
 $rule = array_key_exists($action, CP_PERMS) ? CP_PERMS[$action] : 'journal.edit';
@@ -1487,6 +1532,7 @@ case 'invoice_cancel': {
     $inv = $st->fetch();
     if (!$inv) fail('Facture introuvable', 404);
     if ($inv['status'] === 'annulee') fail('Cette facture est déjà annulée', 409);
+    if ($inv['status'] === 'brouillon') fail('Cette facture est encore un brouillon, rejetez-la depuis l\'écran de revue plutôt que de l\'annuler', 409);
 
     $rc = $pdo->prepare('SELECT COUNT(*) FROM reconciliations WHERE invoice_id = ?');
     $rc->execute([$id]);
@@ -1534,6 +1580,143 @@ case 'invoice_cancel': {
         $pdo->rollBack();
         fail("Erreur lors de l'annulation : " . $e->getMessage(), 500);
     }
+}
+
+/* ============================================================ BROUILLONS
+ *
+ * Écran de revue unique pour toute génération (factures ET décomptes de
+ * paie) : rien n'est numéroté/comptabilisé avant validation depuis ici.
+ */
+
+case 'drafts': {
+    $pdo = db();
+    $where = ["1=1"];
+    $args = [];
+    if (!empty($_GET['status'])) { $where[] = 'd.status = ?'; $args[] = (string) $_GET['status']; }
+    else { $where[] = "d.status = 'brouillon'"; }
+    if (!empty($_GET['source_kind']))   { $where[] = 'd.source_kind = ?';   $args[] = (string) $_GET['source_kind']; }
+    if (!empty($_GET['source_module'])) { $where[] = 'd.source_module = ?'; $args[] = (string) $_GET['source_module']; }
+    if (!empty($_GET['journal_id']))    { $where[] = 'd.suggested_journal_id = ?'; $args[] = (int) $_GET['journal_id']; }
+
+    $st = $pdo->prepare(
+        "SELECT d.*, j.code AS journal_code, j.label AS journal_label,
+                (SELECT COALESCE(SUM(l.debit), 0) FROM entry_draft_lines l WHERE l.draft_id = d.id) AS total_debit
+           FROM entry_drafts d
+           LEFT JOIN journals j ON j.id = d.suggested_journal_id
+          WHERE " . implode(' AND ', $where) . "
+          ORDER BY d.entry_date DESC, d.id DESC"
+    );
+    $st->execute($args);
+    out($st->fetchAll());
+}
+
+case 'draft': {
+    $pdo = db();
+    $id = i($_GET, 'id') ?: i($b, 'id');
+    if (!$id) fail('ID requis');
+
+    if ($method === 'GET') {
+        $st = $pdo->prepare('SELECT * FROM entry_drafts WHERE id = ?');
+        $st->execute([$id]);
+        $draft = $st->fetch();
+        if (!$draft) fail('Brouillon introuvable', 404);
+        $ln = $pdo->prepare(
+            'SELECT l.*, a.number AS account_number, a.name AS account_name
+               FROM entry_draft_lines l JOIN accounts a ON a.id = l.account_id
+              WHERE l.draft_id = ? ORDER BY l.position, l.id'
+        );
+        $ln->execute([$id]);
+        $draft['lines'] = $ln->fetchAll();
+        out($draft);
+    }
+
+    if ($method === 'PUT') {
+        $st = $pdo->prepare('SELECT status FROM entry_drafts WHERE id = ?');
+        $st->execute([$id]);
+        $status = $st->fetchColumn();
+        if ($status === false) fail('Brouillon introuvable', 404);
+        if ($status !== 'brouillon') fail('Ce brouillon a déjà été traité', 409);
+
+        $lines = $b['lines'] ?? [];
+        if (!is_array($lines) || count($lines) < 2) fail('Une écriture nécessite au moins deux lignes');
+        $totalDebit = 0.0; $totalCredit = 0.0;
+        foreach ($lines as $l) {
+            $totalDebit  += round((float) ($l['debit'] ?? 0), 2);
+            $totalCredit += round((float) ($l['credit'] ?? 0), 2);
+        }
+        if (abs($totalDebit - $totalCredit) > 0.005) {
+            fail(sprintf('Brouillon déséquilibré : débit %.2f ≠ crédit %.2f', $totalDebit, $totalCredit));
+        }
+
+        $pdo->beginTransaction();
+        try {
+            if (array_key_exists('entry_date', $b) || array_key_exists('label', $b)) {
+                $pdo->prepare('UPDATE entry_drafts SET entry_date = COALESCE(NULLIF(?, \'\'), entry_date), label = COALESCE(NULLIF(?, \'\'), label) WHERE id = ?')
+                    ->execute([s($b, 'entry_date'), s($b, 'label'), $id]);
+            }
+            if (array_key_exists('journal_id', $b)) {
+                $pdo->prepare('UPDATE entry_drafts SET suggested_journal_id = ? WHERE id = ?')
+                    ->execute([!empty($b['journal_id']) ? (int) $b['journal_id'] : null, $id]);
+            }
+            $pdo->prepare('DELETE FROM entry_draft_lines WHERE draft_id = ?')->execute([$id]);
+            $ins = $pdo->prepare(
+                'INSERT INTO entry_draft_lines (draft_id, account_id, debit, credit, label, tiers_contact_id, cost_center_id, position)
+                 VALUES (?,?,?,?,?,?,?,?)'
+            );
+            foreach ($lines as $pos => $l) {
+                $accountId = (int) ($l['account_id'] ?? 0);
+                if (!$accountId) throw new ComptaException('Chaque ligne doit avoir un compte');
+                $ins->execute([
+                    $id, $accountId,
+                    round((float) ($l['debit'] ?? 0), 2), round((float) ($l['credit'] ?? 0), 2),
+                    trim((string) ($l['label'] ?? '')), trim((string) ($l['tiers_contact_id'] ?? '')),
+                    ($l['cost_center_id'] ?? null) ? (int) $l['cost_center_id'] : null, $pos,
+                ]);
+            }
+            compta_audit_log($pdo, 'entry_draft', $id, 'edit', "Brouillon #$id modifié avant validation", $userName);
+            $pdo->commit();
+        } catch (ComptaException $e) {
+            $pdo->rollBack();
+            fail($e->getMessage());
+        }
+        out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+}
+
+case 'draft_validate': {
+    $pdo = db();
+    $ids = $b['ids'] ?? (i($b, 'id') ? [i($b, 'id')] : []);
+    if (!$ids) fail('Aucun brouillon sélectionné');
+    $results = [];
+    foreach ($ids as $draftId) {
+        $draftId = (int) $draftId;
+        try {
+            $pdo->beginTransaction();
+            $entryId = compta_validate_draft($pdo, $draftId, $userName);
+            $pdo->commit();
+            $results[] = ['id' => $draftId, 'ok' => true, 'entry_id' => $entryId];
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $results[] = ['id' => $draftId, 'ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+    out(['results' => $results]);
+}
+
+case 'draft_reject': {
+    $pdo = db();
+    $id = i($b, 'id') ?: i($_GET, 'id');
+    if (!$id) fail('ID requis');
+    try {
+        $pdo->beginTransaction();
+        compta_reject_draft($pdo, $id, $userName);
+        $pdo->commit();
+    } catch (ComptaException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        fail($e->getMessage());
+    }
+    out(['ok' => true]);
 }
 
 /* ============================================================ COMPTES BANCAIRES */
@@ -3161,37 +3344,41 @@ function invoice_create(PDO $pdo, array $d): int {
         'tiers_contact_id' => $tiers,
     ];
 
-    $entryId = compta_post_entry($pdo, [
-        'entry_date'    => $date,
-        'label'         => $label,
-        'piece_kind'    => $direction === 'a_recevoir' ? 'VTE' : 'ACH',
-        'journal_id'    => !empty($d['journal_id']) ? (int) $d['journal_id'] : null,
-        'source_module' => (string) ($d['source_module'] ?? 'manuel'),
-        'created_by'    => (string) ($d['created_by'] ?? ''),
-        'lines'         => $entryLines,
+    /* Brouillon d'abord : ni journal, ni numéro de pièce tant que ce brouillon
+       n'a pas été validé depuis l'écran de revue (compta_validate_draft(),
+       lib/mfc_compta.php). C'est elle qui appelle compta_post_entry() plus
+       tard, exactement comme le faisait cette fonction avant l'introduction
+       des brouillons. */
+    $draftId = compta_create_draft($pdo, [
+        'source_kind'          => 'invoice_' . $direction,
+        'entry_date'           => $date,
+        'label'                => $label,
+        'piece_kind_suggested' => $direction === 'a_recevoir' ? 'VTE' : 'ACH',
+        'suggested_journal_id' => !empty($d['journal_id']) ? (int) $d['journal_id'] : null,
+        'source_module'        => (string) ($d['source_module'] ?? 'manuel'),
+        'source_ref_id'        => (string) ($d['source_ref_id'] ?? ''),
+        'created_by'           => (string) ($d['created_by'] ?? ''),
+        'lines'                => $entryLines,
     ]);
-
-    $pieceSt = $pdo->prepare('SELECT piece_ref FROM journal_entries WHERE id = ?');
-    $pieceSt->execute([$entryId]);
-    $pieceRef = (string) $pieceSt->fetchColumn();
 
     /* L'en-tête conserve le compte et la TVA de la PREMIÈRE ligne : ils servent
        de repli aux écrans qui ne lisent pas encore les lignes, jamais de source
-       de vérité comptable — celle-ci est l'écriture. */
+       de vérité comptable — celle-ci est l'écriture, une fois le brouillon
+       validé. piece_ref reste vide et journal_entry_id NULL jusque-là. */
     $first = $lines[0];
     $pdo->prepare(
         'INSERT INTO invoices
             (direction, piece_ref, invoice_number, entry_date, due_date, label,
              tiers_contact_id, tiers_label, source_module, account_id, cost_center_id,
-             vat_rate_id, amount_vat, amount_total, status, journal_entry_id, notes,
+             vat_rate_id, amount_vat, amount_total, status, journal_entry_id, draft_id, notes,
              payment_term_id, created_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     )->execute([
-        $direction, $pieceRef, (string) ($d['invoice_number'] ?? ''), $date,
+        $direction, '', (string) ($d['invoice_number'] ?? ''), $date,
         $dueDate, $label, $tiers, (string) ($d['tiers_label'] ?? ''),
         (string) ($d['source_module'] ?? 'manuel'), $first['account_id'], $first['cost_center_id'],
         $first['vat_rate_id'], $vatTotal, $total,
-        'ouverte', $entryId, (string) ($d['notes'] ?? ''), $termId, (string) ($d['created_by'] ?? ''),
+        'brouillon', null, $draftId, (string) ($d['notes'] ?? ''), $termId, (string) ($d['created_by'] ?? ''),
     ]);
     $invoiceId = (int) $pdo->lastInsertId();
 
@@ -3208,7 +3395,7 @@ function invoice_create(PDO $pdo, array $d): int {
 
     // Chemin unique de création de facture (saisie manuelle, génération depuis
     // un module métier) : un seul point d'audit couvre tout.
-    compta_audit_log($pdo, 'invoice', $invoiceId, 'create', "Facture $pieceRef — $label", (string) ($d['created_by'] ?? ''));
+    compta_audit_log($pdo, 'invoice', $invoiceId, 'create', "Brouillon de facture — $label", (string) ($d['created_by'] ?? ''));
 
     return $invoiceId;
 }

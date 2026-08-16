@@ -27,6 +27,7 @@ register_shutdown_function(function () {
 require_once __DIR__ . '/mfc_boot.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib_payroll_engine.php';
+require_once __DIR__ . '/lib_payroll_compta.php';
 
 /* Session ERP + accès au module. Répond 401/403 en JSON si besoin.
    $rh_session est conservé : le reste du fichier s'en sert déjà. */
@@ -119,6 +120,12 @@ function init_schema(PDO $pdo): void {
      jamais déduit automatiquement. */
   ensure_column($pdo, 'postes', 'account_number', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'postes', 'account_label',  "TEXT NOT NULL DEFAULT ''");
+  /* Intitulé affiché sur le décompte de paie (2026-08-17), distinct du nom du compte
+     comptable : par défaut celui-ci reprend account_label (rester synchronisé avec le plan
+     comptable est le cas courant), mais reste modifiable librement en texte libre — le champ
+     de recherche de compte, lui, n'accepte que des comptes réels et ne permet donc pas de
+     taper un intitulé arbitraire. Vide = pas de préférence, on retombe sur account_label. */
+  ensure_column($pdo, 'postes', 'payslip_label', "TEXT NOT NULL DEFAULT ''");
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS team_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -313,6 +320,10 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'payroll_rate_settings', 'player_salary_account_label', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'payroll_rate_settings', 'player_bonus_account_number', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'payroll_rate_settings', 'player_bonus_account_label', "TEXT NOT NULL DEFAULT ''");
+  /* Intitulés affichés sur le décompte joueur (2026-08-17), même principe que
+     postes.payslip_label : texte libre, défaut = account_label si vide. */
+  ensure_column($pdo, 'payroll_rate_settings', 'player_salary_label', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'payroll_rate_settings', 'player_bonus_label',  "TEXT NOT NULL DEFAULT ''");
 
   /* Moteur de paie (2026-08-16) : plafonds légaux et franchises, datés comme les taux
      ci-dessus. Valeurs 2026 fournies en amorçage (voir GAP-ANALYSIS-RH.md) — à faire
@@ -329,6 +340,31 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'payroll_rate_settings', 'avs_rentier_franchise_annual', 'REAL NOT NULL DEFAULT 16800');
   ensure_column($pdo, 'payroll_rate_settings', 'avs_minime_threshold', 'REAL NOT NULL DEFAULT 2500');
   ensure_column($pdo, 'payroll_rate_settings', 'avs_minime_abatement_semestriel', 'REAL NOT NULL DEFAULT 2500');
+
+  /* Comptabilisation (2026-08-16) : les taux avs_rate/ac_rate/... ci-dessus
+     restent EXCLUSIVEMENT la part employé, déduite du brut pour obtenir le
+     net — décision actée avec Valentino, à ne pas rouvrir. La part employeur
+     (une vraie charge du club, jamais déduite du net) est un taux séparé,
+     à 0 par défaut : une ligne sans taux employeur n'a simplement pas de
+     contrepartie patronale (ex. AANP, où la loi ne prévoit rien côté
+     employeur). LPP employeur suit un mécanisme différent (montant fixe
+     par personne, déjà en base sur employees.lpp_employer_amount depuis la
+     phase précédente, mais jamais lu par le moteur de calcul jusqu'ici). */
+  ensure_column($pdo, 'payroll_rate_settings', 'avs_employer_rate',  'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'payroll_rate_settings', 'ac_employer_rate',   'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'payroll_rate_settings', 'amat_employer_rate', 'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'payroll_rate_settings', 'aanp_employer_rate', 'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'payroll_rate_settings', 'laac_employer_rate', 'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'payroll_rate_settings', 'ijm_employer_rate',  'REAL NOT NULL DEFAULT 0');
+
+  /* Charges patronales sans aucune part employé (2026-08-17), calquées sur l'assujettissement
+     AVS de la personne (pas de case d'assujettissement séparée par employé — décision de
+     Valentino) et sur la même assiette que l'AVS (salaire déterminant, après franchise
+     rentier/abattement le cas échéant, jamais plafonnée). Voir compute_payslip(). */
+  ensure_column($pdo, 'payroll_rate_settings', 'scaf_rate',        'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'payroll_rate_settings', 'lfp_rate',         'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'payroll_rate_settings', 'cpe_rate',         'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'payroll_rate_settings', 'frais_admin_rate', 'REAL NOT NULL DEFAULT 0');
 
   /* Références administratives des assureurs et de la prévoyance (assureur LAA, n° de
      police, groupe LAA, institution et plan LPP, caisse d'allocations familiales) :
@@ -354,6 +390,56 @@ function init_schema(PDO $pdo): void {
   // la part patronale (coût employeur, jamais retenue, dépend du salaire de la personne).
   ensure_column($pdo, 'employees', 'lpp_member_number',   "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'employees', 'lpp_employer_amount', 'REAL NOT NULL DEFAULT 0');
+
+  /* Comptabilisation de la paie (2026-08-16) : un compte de charge (classe 5,
+     coût employeur) et un compte de dette (créditeur, le prestataire — OCAS
+     pour AVS/AC/AMat, l'assureur LAA, l'institution LPP...) par rubrique.
+     Une ligne par rubrique plutôt que des colonnes plates (comme lavage_account_*
+     ou player_salary_account_*) : c'est une vraie petite liste à éditer, pas
+     des champs isolés, et Valentino doit pouvoir mettre le même compte sur
+     plusieurs rubriques partageant le même prestataire (avs/ac/amat -> OCAS)
+     sans dupliquer la saisie. */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_line_accounts (
+    line_key TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    charge_account_number TEXT NOT NULL DEFAULT '',
+    charge_account_label TEXT NOT NULL DEFAULT '',
+    payable_account_number TEXT NOT NULL DEFAULT '',
+    payable_account_label TEXT NOT NULL DEFAULT ''
+  )");
+  $payrollLineLabels = [
+    'avs'  => 'AVS / AI / APG',
+    'ac'   => 'Assurance chômage (AC)',
+    'amat' => 'Assurance maternité (AMat GE)',
+    'aanp' => 'Accidents non professionnels (AANP)',
+    'laac' => 'Accidents complémentaire (LAAC)',
+    'ijm'  => 'Indemnités journalières maladie',
+    'lpp'  => 'Prévoyance professionnelle (LPP)',
+    'is'   => 'Impôt à la source',
+    'scaf' => 'Cotisation SCAF',
+    'lfp'  => 'Cotisation LFP',
+    'cpe'  => 'Cotisation CPE',
+    'frais_admin' => "Frais d'administration",
+  ];
+  $insLineAcc = $pdo->prepare('INSERT OR IGNORE INTO payroll_line_accounts (line_key, label) VALUES (?,?)');
+  foreach ($payrollLineLabels as $key => $label) $insLineAcc->execute([$key, $label]);
+
+  /* Réglages globaux de comptabilisation (une seule ligne, id=1) : compte du
+     net à payer (2002 par défaut, à confirmer par Valentino), compte de
+     suspens pour une retenue manuelle sans compte propre (le brouillon se
+     crée quand même, marqué d'un avertissement, plutôt que de bloquer la
+     génération du décompte), code du journal utilisé côté Compta, et
+     interrupteur pour désactiver la poussée automatique sans toucher au code. */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_accounting_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    net_payable_account_number TEXT NOT NULL DEFAULT '2002',
+    net_payable_account_label TEXT NOT NULL DEFAULT 'Salaire à payer',
+    suspense_account_number TEXT NOT NULL DEFAULT '',
+    suspense_account_label TEXT NOT NULL DEFAULT '',
+    journal_code TEXT NOT NULL DEFAULT 'SAL',
+    push_enabled INTEGER NOT NULL DEFAULT 1
+  )");
+  $pdo->exec("INSERT OR IGNORE INTO payroll_accounting_settings (id) VALUES (1)");
 
   /* Moteur de paie (2026-08-16) : statut rentier AVS et renonciations, généralisés à tous
      les employés — jusqu'ici seul `players.avs_abatement` existait, réservé aux joueurs.
@@ -766,15 +852,51 @@ function init_schema(PDO $pdo): void {
   $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_payment_lines (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     payment_id INTEGER NOT NULL REFERENCES payroll_payments(id) ON DELETE CASCADE,
-    kind TEXT NOT NULL CHECK(kind IN ('revenue','charge','divers')),
+    kind TEXT NOT NULL CHECK(kind IN ('revenue','charge','employer_charge','divers')),
     line_key TEXT NOT NULL DEFAULT '',
     label TEXT NOT NULL DEFAULT '',
     base REAL,
     rate REAL,
     amount REAL NOT NULL DEFAULT 0,
     is_legal_reference INTEGER NOT NULL DEFAULT 0,
-    sort_order INTEGER NOT NULL DEFAULT 0
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    account_number TEXT NOT NULL DEFAULT '',
+    account_label TEXT NOT NULL DEFAULT ''
   )");
+  ensure_column($pdo, 'payroll_payment_lines', 'account_number', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'payroll_payment_lines', 'account_label',  "TEXT NOT NULL DEFAULT ''");
+
+  /* Comptabilisation (2026-08-16) : la base déjà en service porte encore
+     l'ancienne contrainte CHECK(kind IN ('revenue','charge','divers')), qui
+     rejetterait toute ligne de charge employeur. SQLite ne sait pas modifier
+     une contrainte CHECK par ALTER : reconstruction, même méthode que pour
+     employee_assignments plus haut dans ce fichier — jamais de perte de
+     données, juste une copie vers une table au schéma élargi. */
+  $migratedEmployerCharge = (bool) $pdo->query("SELECT 1 FROM schema_migrations WHERE name = 'payroll_lines_employer_charge_2026_08'")->fetchColumn();
+  if (!$migratedEmployerCharge) {
+    $checkSql = (string) $pdo->query("SELECT sql FROM sqlite_master WHERE type='table' AND name='payroll_payment_lines'")->fetchColumn();
+    if ($checkSql !== '' && !str_contains($checkSql, 'employer_charge')) {
+      $pdo->exec('ALTER TABLE payroll_payment_lines RENAME TO payroll_payment_lines__legacy');
+      $pdo->exec("CREATE TABLE payroll_payment_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        payment_id INTEGER NOT NULL REFERENCES payroll_payments(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK(kind IN ('revenue','charge','employer_charge','divers')),
+        line_key TEXT NOT NULL DEFAULT '',
+        label TEXT NOT NULL DEFAULT '',
+        base REAL,
+        rate REAL,
+        amount REAL NOT NULL DEFAULT 0,
+        is_legal_reference INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        account_number TEXT NOT NULL DEFAULT '',
+        account_label TEXT NOT NULL DEFAULT ''
+      )");
+      $pdo->exec('INSERT INTO payroll_payment_lines (id, payment_id, kind, line_key, label, base, rate, amount, is_legal_reference, sort_order)
+        SELECT id, payment_id, kind, line_key, label, base, rate, amount, is_legal_reference, sort_order FROM payroll_payment_lines__legacy');
+      $pdo->exec('DROP TABLE payroll_payment_lines__legacy');
+    }
+    $pdo->prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)')->execute(['payroll_lines_employer_charge_2026_08']);
+  }
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS imports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1941,6 +2063,7 @@ const RH_PERMS = [
   'employee_files_file'    => 'employees.view',
   'payroll_rate_settings'  => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
   'insurance_profiles'     => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
+  'payroll_accounting_settings' => ['GET' => 'payroll.view', 'write' => 'payroll.edit'],
   'payslip_context'        => 'payroll.view',
   'player_payslip_context' => 'payroll.view',
   'payslip_compute'        => 'payroll.view',
@@ -2006,14 +2129,14 @@ switch ($action) {
     if ($method === 'GET') out(db()->query('SELECT * FROM postes ORDER BY active DESC, label')->fetchAll());
     if ($method === 'POST') {
       $label = s($b, 'label'); if (!$label) fail('Libellé requis');
-      $st = db()->prepare('INSERT INTO postes (label, account_number, account_label) VALUES (?,?,?)');
-      try { $st->execute([$label, s($b, 'account_number'), s($b, 'account_label')]); } catch (Throwable $e) { fail('Ce poste existe déjà'); }
+      $st = db()->prepare('INSERT INTO postes (label, account_number, account_label, payslip_label) VALUES (?,?,?,?)');
+      try { $st->execute([$label, s($b, 'account_number'), s($b, 'account_label'), s($b, 'payslip_label')]); } catch (Throwable $e) { fail('Ce poste existe déjà'); }
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
       $id = i($b, 'id'); if (!$id) fail('id requis');
-      $st = db()->prepare('UPDATE postes SET label=?, active=?, account_number=?, account_label=? WHERE id=?');
-      $st->execute([s($b, 'label'), bo($b, 'active', true) ? 1 : 0, s($b, 'account_number'), s($b, 'account_label'), $id]);
+      $st = db()->prepare('UPDATE postes SET label=?, active=?, account_number=?, account_label=?, payslip_label=? WHERE id=?');
+      $st->execute([s($b, 'label'), bo($b, 'active', true) ? 1 : 0, s($b, 'account_number'), s($b, 'account_label'), s($b, 'payslip_label'), $id]);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
@@ -2444,8 +2567,14 @@ switch ($action) {
         // qu'en dur dans le code, pour suivre un changement de norme (ex: seuil de minime
         // importance revalorisé) sans toucher au code.
         'ac_ceiling','laa_ceiling','lpp_ceiling','lpp_entry_threshold','lpp_coordination_deduction','lpp_coordinated_min',
-        'avs_rentier_franchise_monthly','avs_rentier_franchise_annual','avs_minime_threshold','avs_minime_abatement_semestriel'];
-      $strCols = ['lavage_account_number','lavage_account_label','player_salary_account_number','player_salary_account_label','player_bonus_account_number','player_bonus_account_label'];
+        'avs_rentier_franchise_monthly','avs_rentier_franchise_annual','avs_minime_threshold','avs_minime_abatement_semestriel',
+        // Comptabilisation (2026-08-16) : taux employeur, jamais retenus sur le net — voir
+        // compute_payslip() dans lib_payroll_engine.php.
+        'avs_employer_rate','ac_employer_rate','amat_employer_rate','aanp_employer_rate','laac_employer_rate','ijm_employer_rate',
+        // Charges 100% employeur (2026-08-17), calquées sur l'assujettissement AVS.
+        'scaf_rate','lfp_rate','cpe_rate','frais_admin_rate'];
+      $strCols = ['lavage_account_number','lavage_account_label','player_salary_account_number','player_salary_account_label','player_bonus_account_number','player_bonus_account_label',
+        'player_salary_label','player_bonus_label'];
       $cols = array_merge($rateCols, $strCols);
       $vals = array_merge(array_map(fn($c) => f($b, $c), $rateCols), array_map(fn($c) => s($b, $c), $strCols));
       $pdo->prepare('INSERT INTO payroll_rate_settings (year, ' . implode(',', $cols) . ') VALUES (?,' . implode(',', array_fill(0, count($cols), '?')) . ')
@@ -2479,6 +2608,35 @@ switch ($action) {
       // ON DELETE SET NULL sur employees.insurance_profile_id : les fiches qui pointaient
       // vers ce profil retombent à "aucun profil" plutôt que de casser.
       $pdo->prepare('DELETE FROM payroll_insurance_profiles WHERE id=?')->execute([$id]);
+      out(['ok' => true]);
+    }
+    fail('Méthode non supportée', 405);
+  }
+
+  /* Comptabilisation de la paie (2026-08-16) : comptes par rubrique (part
+     employeur + dette par prestataire), compte du net à payer, compte de
+     suspens, journal Compta, et interrupteur d'auto-push. GET renvoie tout
+     d'un coup (l'écran Paramètres > Paie > Comptabilisation affiche les deux
+     ensemble) ; PUT distingue par la présence de 'line_key' (une ligne de
+     payroll_line_accounts) ou non (payroll_accounting_settings, singleton). */
+  case 'payroll_accounting_settings': {
+    $pdo = db();
+    if ($method === 'GET') {
+      out([
+        'settings' => $pdo->query('SELECT * FROM payroll_accounting_settings WHERE id = 1')->fetch() ?: [],
+        'lines'    => $pdo->query('SELECT * FROM payroll_line_accounts ORDER BY line_key')->fetchAll(),
+      ]);
+    }
+    if ($method === 'PUT') {
+      if (s($b, 'line_key') !== '') {
+        $pdo->prepare('UPDATE payroll_line_accounts SET charge_account_number=?, charge_account_label=?, payable_account_number=?, payable_account_label=? WHERE line_key=?')
+          ->execute([s($b,'charge_account_number'), s($b,'charge_account_label'), s($b,'payable_account_number'), s($b,'payable_account_label'), s($b,'line_key')]);
+        out(['ok' => true]);
+      }
+      $pdo->prepare('UPDATE payroll_accounting_settings SET net_payable_account_number=?, net_payable_account_label=?, suspense_account_number=?, suspense_account_label=?, journal_code=?, push_enabled=? WHERE id=1')
+        ->execute([s($b,'net_payable_account_number','2002'), s($b,'net_payable_account_label','Salaire à payer'),
+                   s($b,'suspense_account_number'), s($b,'suspense_account_label'),
+                   s($b,'journal_code','SAL'), bo($b,'push_enabled',true) ? 1 : 0]);
       out(['ok' => true]);
     }
     fail('Méthode non supportée', 405);
@@ -2579,6 +2737,8 @@ switch ($action) {
     } catch (RuntimeException $e) {
       fail($e->getMessage(), 409);
     }
+    // Best-effort, ne doit jamais empêcher la génération du PDF (voir lib_payroll_compta.php).
+    payroll_push_draft($pdo, $paymentId);
 
     $header = [
       'collab_id' => $employee_id, 'avs' => $emp['avs_number'],
@@ -2677,6 +2837,8 @@ switch ($action) {
     } catch (RuntimeException $e) {
       fail($e->getMessage(), 409);
     }
+    // Best-effort, ne doit jamais empêcher la génération du PDF (voir lib_payroll_compta.php).
+    payroll_push_draft($pdo, $paymentId);
 
     $header = [
       'collab_id' => $player_id, 'avs' => '', 'first_name' => $player['first_name'], 'last_name' => $player['last_name'],

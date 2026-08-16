@@ -188,6 +188,7 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
 .lines-editor{border:1px solid var(--ligne);border-radius:var(--r-s);overflow:hidden;margin-bottom:10px}
 .line-row{display:grid;grid-template-columns:2.2fr 1fr 1fr auto;gap:8px;padding:8px;border-bottom:1px solid var(--ligne-2);align-items:center}
 .line-row:last-child{border-bottom:none}
+.line-row.drf-line-row{grid-template-columns:1.6fr 1fr 1fr 1.4fr auto}
 .line-totals{display:flex;justify-content:space-between;padding:10px 14px;background:var(--bg);font-family:"Sora";font-size:13px;font-weight:700}
 .line-totals.balanced{color:var(--vert)}
 .line-totals.unbalanced{color:var(--rouge)}
@@ -229,6 +230,10 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
       <button class="nav-item" data-view="invoices">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 2h9l5 5v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v6h6"/><path d="M9 12h6M9 16h6"/></svg>
         Factures
+      </button>
+      <button class="nav-item" data-view="drafts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        Brouillons <span id="drafts-nav-badge" class="badge" style="display:none;margin-left:4px"></span>
       </button>
       <div class="nav-label">Banques</div>
       <button class="nav-item" data-view="bank">
@@ -336,6 +341,33 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
         <div id="entries-list"><div class="loading-row"><span class="spinner"></span></div></div>
       </div>
 
+      <!-- ===== BROUILLONS ===== -->
+      <div id="v-drafts" class="view">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <select class="field" style="max-width:170px" id="drf-journal" onchange="loadDrafts()">
+              <option value="">Tous les journaux</option>
+            </select>
+            <select class="field" style="max-width:180px" id="drf-kind" onchange="loadDrafts()">
+              <option value="">Toutes origines</option>
+              <option value="invoice_a_payer">Factures à payer</option>
+              <option value="invoice_a_recevoir">Factures à encaisser</option>
+              <option value="payroll">Décomptes de paie</option>
+              <option value="manuel">Manuel</option>
+            </select>
+            <select class="field" style="max-width:150px" id="drf-status" onchange="loadDrafts()">
+              <option value="brouillon">À valider</option>
+              <option value="validee">Validés</option>
+            </select>
+          </div>
+        </div>
+        <div id="drafts-list"><div class="loading-row"><span class="spinner"></span></div></div>
+        <div class="line-totals" id="drafts-sel-bar" style="display:none;position:sticky;bottom:0;margin-top:12px">
+          <span id="drafts-sel-count"></span>
+          <button class="btn btn-primary btn-sm" onclick="validateSelectedDrafts()">Valider la sélection</button>
+        </div>
+      </div>
+
       <!-- ===== BANQUES ===== -->
       <div id="v-bank" class="view">
         <div class="panel">
@@ -429,6 +461,7 @@ label.lbl{font-size:11.5px;font-weight:700;color:var(--gris);text-transform:uppe
           <div class="toolbar-left">
             <select class="field" id="inv-filter-status" onchange="loadInvoices()">
               <option value="">Tous les statuts</option>
+              <option value="brouillon">Brouillons</option>
               <option value="ouverte">Ouvertes</option>
               <option value="reglee_partielle">Partiellement réglées</option>
               <option value="reglee">Réglées</option>
@@ -612,6 +645,7 @@ const VIEW_META = {
   periods:   ['Périodes', 'Découpage interne de l\'exercice'],
   invoices:  ['Factures', 'À payer et à encaisser, générées depuis les modules ou saisies'],
   invoice_edit: ['Facture', 'Saisie et consultation d\'une facture'],
+  drafts:    ['Brouillons', 'Factures et décomptes de paie en attente de validation comptable'],
   years:     ['Exercices', 'Saison comptable, écriture d\'ouverture et clôture'],
   settings:  ['Réglages', 'Comptes par défaut, produits, TVA, centres de coût'],
 };
@@ -654,7 +688,7 @@ function goTo(view) {
     dashboard: loadDashboard, accounts: loadAccounts, entries: loadEntries,
     bank: loadBankView, reconcile: loadReconcileList, reports: loadReports, periods: loadPeriods,
     invoices: loadInvoices, years: loadYears, settings: loadSettings,
-    invoice_edit: openInvoiceForm,
+    invoice_edit: openInvoiceForm, drafts: loadDrafts,
   };
   (loaders[view] || loaders.dashboard)();
 }
@@ -939,6 +973,157 @@ async function deleteEntry(id) {
     await loadEntries();
   } catch (e) { toast(e.message, 'err'); }
 }
+/* ===============================================================
+   BROUILLONS
+=============================================================== */
+const S_DRAFTS_KIND_LABEL = { invoice_a_payer: 'Facture à payer', invoice_a_recevoir: 'Facture à encaisser', payroll: 'Décompte de paie', manuel: 'Manuel' };
+
+async function loadDrafts() {
+  const jsel = document.getElementById('drf-journal');
+  if (jsel && jsel.options.length <= 1) {
+    jsel.innerHTML = '<option value="">Tous les journaux</option>' +
+      (S.journals || []).map(j => `<option value="${j.id}">${esc(j.code)} — ${esc(j.label)}</option>`).join('');
+  }
+
+  const params = {};
+  if (f('drf-journal')) params.journal_id = f('drf-journal');
+  if (f('drf-kind'))    params.source_kind = f('drf-kind');
+  params.status = f('drf-status') || 'brouillon';
+
+  const el = document.getElementById('drafts-list');
+  try {
+    S.drafts = await apiGet('drafts', params);
+    const badge = document.getElementById('drafts-nav-badge');
+    const pending = S.drafts.filter(d => d.status === 'brouillon').length;
+    if (params.status === 'brouillon' && pending) { badge.textContent = pending; badge.style.display = ''; }
+    else if (params.status === 'brouillon') { badge.style.display = 'none'; }
+
+    if (!S.drafts.length) {
+      el.innerHTML = `<div class="panel"><div class="empty">Aucun brouillon pour ces critères.</div></div>`;
+      updateDraftSelBar();
+      return;
+    }
+    el.innerHTML = `<div class="panel"><div class="table-wrap"><table>
+      <thead><tr><th style="width:32px"><input type="checkbox" id="drf-check-all" onchange="toggleAllDrafts(this.checked)"></th>
+        <th style="width:100px">Date</th><th style="width:150px">Origine</th><th style="width:110px">Journal</th>
+        <th>Libellé</th><th class="num" style="width:110px">Montant</th><th style="width:160px"></th></tr></thead>
+      <tbody>${S.drafts.map(d => `
+        <tr>
+          <td><input type="checkbox" class="drf-item" value="${d.id}" data-amount="${d.total_debit}" ${d.status !== 'brouillon' ? 'disabled' : ''} onchange="updateDraftSelBar()"></td>
+          <td>${esc(d.entry_date)}</td>
+          <td>${esc(S_DRAFTS_KIND_LABEL[d.source_kind] || d.source_kind)}${d.warnings ? ' <span class="badge b-late" title="' + esc(d.warnings) + '">⚠</span>' : ''}</td>
+          <td style="color:var(--gris);font-size:12px">${esc(d.journal_code || '—')}</td>
+          <td>${esc(d.label)}</td>
+          <td class="num">${fmt(d.total_debit)}</td>
+          <td style="text-align:right">
+            ${d.status === 'brouillon' ? `
+              <button class="btn btn-ghost btn-sm" onclick="modalDraftEdit(${d.id})">Éditer</button>
+              <button class="btn btn-ghost btn-sm" onclick="rejectDraft(${d.id})">Rejeter</button>
+            ` : `<span class="badge b-matched">Validé</span>`}
+          </td>
+        </tr>`).join('')}
+      </tbody></table></div></div>`;
+    updateDraftSelBar();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+function toggleAllDrafts(checked) {
+  document.querySelectorAll('.drf-item:not(:disabled)').forEach(c => c.checked = checked);
+  updateDraftSelBar();
+}
+function updateDraftSelBar() {
+  const checked = [...document.querySelectorAll('.drf-item:checked')];
+  const bar = document.getElementById('drafts-sel-bar');
+  if (!checked.length) { bar.style.display = 'none'; return; }
+  const total = checked.reduce((s, c) => s + (parseFloat(c.dataset.amount) || 0), 0);
+  document.getElementById('drafts-sel-count').textContent = `${checked.length} brouillon(s) sélectionné(s) — total ${fmt(total)} CHF`;
+  bar.style.display = '';
+}
+
+async function validateSelectedDrafts() {
+  const ids = [...document.querySelectorAll('.drf-item:checked')].map(c => parseInt(c.value));
+  if (!ids.length) return;
+  try {
+    const res = await api('draft_validate', 'POST', { ids });
+    const ok = res.results.filter(r => r.ok).length;
+    const errs = res.results.filter(r => !r.ok);
+    if (ok) toast(`${ok} brouillon(s) validé(s)`);
+    errs.forEach(r => toast(`Brouillon #${r.id} : ${r.error}`, 'err'));
+    await loadDrafts();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function rejectDraft(id) {
+  if (!confirm('Rejeter ce brouillon ? Il disparaîtra sans laisser de trace comptable.')) return;
+  try {
+    await api('draft_reject', 'POST', { id });
+    toast('Brouillon rejeté');
+    await loadDrafts();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+function draftLineRow(accOptions, l = {}) {
+  return `<div class="line-row drf-line-row">
+    <select class="field drf-line-account"><option value="">— Compte —</option>${accOptions.replace(`value="${l.account_id}"`, `value="${l.account_id}" selected`)}</select>
+    <input type="number" step="0.01" min="0" class="field drf-line-debit" placeholder="Débit" value="${l.debit > 0 ? l.debit : ''}">
+    <input type="number" step="0.01" min="0" class="field drf-line-credit" placeholder="Crédit" value="${l.credit > 0 ? l.credit : ''}">
+    <input class="field drf-line-label" placeholder="Libellé" value="${esc(l.label || '')}" style="max-width:160px">
+    <button class="btn btn-ghost btn-sm" type="button" onclick="this.closest('.line-row').remove(); updateDraftEditTotals();">✕</button>
+  </div>`;
+}
+function addDraftLine() {
+  const accOptions = S.accounts.filter(a => a.active == 1).map(a => `<option value="${a.id}">${esc(a.number)} — ${esc(a.name)}</option>`).join('');
+  document.getElementById('mDrfLines').insertAdjacentHTML('beforeend', draftLineRow(accOptions));
+}
+function updateDraftEditTotals() {
+  let debit = 0, credit = 0;
+  document.querySelectorAll('#mDrfLines .line-row').forEach(row => {
+    debit += parseFloat(row.querySelector('.drf-line-debit').value) || 0;
+    credit += parseFloat(row.querySelector('.drf-line-credit').value) || 0;
+  });
+  const el = document.getElementById('mDrfTotals');
+  const balanced = Math.abs(debit - credit) < 0.005;
+  el.className = 'line-totals ' + (balanced ? 'balanced' : 'unbalanced');
+  el.textContent = `Débit ${fmt(debit)} · Crédit ${fmt(credit)}` + (balanced ? ' ✓ équilibrée' : ' — déséquilibrée');
+}
+
+async function modalDraftEdit(id) {
+  let draft;
+  try { draft = await apiGet('draft', { id }); } catch (e) { toast(e.message, 'err'); return; }
+
+  const accOptions = S.accounts.filter(a => a.active == 1).map(a => `<option value="${a.id}">${esc(a.number)} — ${esc(a.name)}</option>`).join('');
+  openModal('Brouillon — ' + draft.label, `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div><label class="lbl">Date</label><input type="date" class="field" id="mDrfDate" value="${esc(draft.entry_date)}"></div>
+      <div><label class="lbl">Journal</label><select class="field" id="mDrfJournal">
+        <option value="">Journal automatique</option>
+        ${(S.journals || []).map(j => `<option value="${j.id}" ${j.id == draft.suggested_journal_id ? 'selected' : ''}>${esc(j.code)} — ${esc(j.label)}</option>`).join('')}
+      </select></div>
+    </div>
+    <div style="margin-bottom:12px"><label class="lbl">Libellé</label><input class="field" id="mDrfLabel" value="${esc(draft.label)}"></div>
+    ${draft.warnings ? `<div class="empty" style="color:var(--rouge);margin-bottom:12px">⚠ ${esc(draft.warnings)}</div>` : ''}
+    <label class="lbl">Lignes</label>
+    <div class="lines-editor" id="mDrfLines">${draft.lines.map(l => draftLineRow(accOptions, l)).join('')}</div>
+    <button class="btn btn-ghost btn-sm" type="button" onclick="addDraftLine()">+ Ajouter une ligne</button>
+    <div class="line-totals" id="mDrfTotals" style="margin-top:10px">Débit 0.00 · Crédit 0.00</div>
+  `, async () => {
+    const lines = [...document.querySelectorAll('#mDrfLines .line-row')].map(row => ({
+      account_id: parseInt(row.querySelector('.drf-line-account').value) || 0,
+      debit: parseFloat(row.querySelector('.drf-line-debit').value) || 0,
+      credit: parseFloat(row.querySelector('.drf-line-credit').value) || 0,
+      label: row.querySelector('.drf-line-label').value || '',
+    })).filter(l => l.account_id && (l.debit > 0 || l.credit > 0));
+    if (lines.length < 2) throw new Error('Au moins deux lignes avec un montant sont requises');
+    await api('draft', 'PUT', { id, entry_date: f('mDrfDate'), label: f('mDrfLabel'), journal_id: parseInt(f('mDrfJournal')) || null, lines });
+    toast('Brouillon mis à jour');
+    closeModal();
+    await loadDrafts();
+  }, 'Enregistrer');
+  document.getElementById('mDrfLines').addEventListener('input', updateDraftEditTotals);
+  document.getElementById('mDrfLines').addEventListener('change', updateDraftEditTotals);
+  updateDraftEditTotals();
+}
+
 function modalEntry() {
   const accOptions = S.accounts.filter(a => a.active == 1).map(a => `<option value="${a.id}">${esc(a.number)} — ${esc(a.name)}</option>`).join('');
   openModal('Nouvelle écriture', `
@@ -1480,6 +1665,7 @@ async function togglePeriod(id, closed) {
    FACTURES
 =============================================================== */
 const INV_STATUS = {
+  brouillon:        ['b-late',      'brouillon'],
   ouverte:          ['b-unmatched', 'ouverte'],
   reglee_partielle: ['b-unmatched', 'partielle'],
   reglee:           ['b-matched',   'réglée'],
@@ -1510,9 +1696,11 @@ async function loadInvoices() {
         <td class="num" style="font-weight:700">${fmt(i.amount_open)}</td>
         <td><span class="badge ${cls}">${lbl}</span></td>
         <td style="text-align:right">
-          <button class="btn btn-ghost btn-sm" onclick="showInvoice(${i.id})">Détail</button>
-          ${MFC.invoicesEdit && i.status !== 'annulee' && Number(i.amount_settled) === 0
-            ? `<button class="btn btn-ghost btn-sm" onclick="cancelInvoice(${i.id})">Annuler</button>` : ''}
+          ${i.status === 'brouillon'
+            ? (MFC.journalEdit ? `<button class="btn btn-ghost btn-sm" onclick="goTo('drafts')">Voir le brouillon</button>` : '')
+            : `<button class="btn btn-ghost btn-sm" onclick="showInvoice(${i.id})">Détail</button>
+               ${MFC.invoicesEdit && i.status !== 'annulee' && Number(i.amount_settled) === 0
+                 ? `<button class="btn btn-ghost btn-sm" onclick="cancelInvoice(${i.id})">Annuler</button>` : ''}`}
         </td></tr>`;
     }).join('') : `<tr><td colspan="9" class="empty">Aucune facture. Générez-en depuis un module, ou saisissez-en une à la main.</td></tr>`;
   } catch (e) {

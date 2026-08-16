@@ -431,6 +431,160 @@ function compta_post_entry(PDO $pdo, array $e): int {
     return $entryId;
 }
 
+/* ============================================================ BROUILLONS
+ *
+ * Étape intermédiaire, obligatoire pour toute génération (facture ou décompte
+ * de paie) : rien n'est numéroté ni comptabilisé tant qu'un brouillon n'a pas
+ * été validé depuis l'écran de revue. Contrairement à compta_post_entry(),
+ * compta_create_draft() ne résout ni exercice, ni période, ni journal, ni
+ * numéro de pièce — tout ça n'a de sens qu'à la validation, pour que la
+ * numérotation continue des pièces ne souffre jamais d'un brouillon rejeté.
+ */
+
+/**
+ * Dépose un brouillon d'écriture. Même contrôle de forme que
+ * compta_post_entry() (au moins deux lignes non nulles, débit=crédit, un
+ * compte par ligne), mais sans toucher au journal ni à la numérotation.
+ *
+ * $d : ['source_kind', 'entry_date', 'label', 'source_module', 'source_ref_id',
+ *       'suggested_journal_id'?, 'piece_kind_suggested'?, 'warnings'?,
+ *       'created_by'?, 'lines' => [['account_id','debit','credit','label'?,
+ *       'tiers_contact_id'?,'cost_center_id'?], ...]]
+ *
+ * @return int L'id du brouillon (entry_drafts.id).
+ */
+function compta_create_draft(PDO $pdo, array $d): int {
+    $date  = trim((string) ($d['entry_date'] ?? ''));
+    $label = trim((string) ($d['label'] ?? ''));
+    if ($date === '')  throw new ComptaException('Date requise');
+    if ($label === '') throw new ComptaException('Libellé requis');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) throw new ComptaException('Date invalide (format attendu AAAA-MM-JJ)');
+
+    $totalDebit = 0.0; $totalCredit = 0.0; $clean = [];
+    foreach ($d['lines'] ?? [] as $l) {
+        $accountId = (int) ($l['account_id'] ?? 0);
+        $debit     = round((float) ($l['debit'] ?? 0), 2);
+        $credit    = round((float) ($l['credit'] ?? 0), 2);
+        if ($debit == 0.0 && $credit == 0.0) continue;
+        if (!$accountId) throw new ComptaException('Chaque ligne doit avoir un compte');
+        if ($debit < 0 || $credit < 0) throw new ComptaException('Montants négatifs interdits');
+        if ($debit > 0 && $credit > 0) throw new ComptaException('Une ligne ne peut pas être à la fois débitrice et créditrice');
+        $totalDebit  += $debit;
+        $totalCredit += $credit;
+        $clean[] = [
+            $accountId, $debit, $credit,
+            trim((string) ($l['label'] ?? '')),
+            trim((string) ($l['tiers_contact_id'] ?? '')),
+            ($l['cost_center_id'] ?? null) ? (int) $l['cost_center_id'] : null,
+        ];
+    }
+    if (count($clean) < 2) throw new ComptaException('Une écriture nécessite au moins deux lignes avec un montant');
+    if (abs($totalDebit - $totalCredit) > 0.005) {
+        throw new ComptaException(sprintf('Brouillon déséquilibré : débit %.2f ≠ crédit %.2f', $totalDebit, $totalCredit));
+    }
+
+    $pdo->prepare(
+        'INSERT INTO entry_drafts
+            (source_kind, entry_date, label, source_module, source_ref_id,
+             suggested_journal_id, piece_kind_suggested, warnings, created_by)
+         VALUES (?,?,?,?,?,?,?,?,?)'
+    )->execute([
+        (string) ($d['source_kind'] ?? 'manuel'),
+        $date, $label,
+        (string) ($d['source_module'] ?? 'manuel'),
+        (string) ($d['source_ref_id'] ?? ''),
+        ($d['suggested_journal_id'] ?? null) ? (int) $d['suggested_journal_id'] : null,
+        (string) ($d['piece_kind_suggested'] ?? 'OD'),
+        (string) ($d['warnings'] ?? ''),
+        (string) ($d['created_by'] ?? ''),
+    ]);
+    $draftId = (int) $pdo->lastInsertId();
+
+    $ins = $pdo->prepare(
+        'INSERT INTO entry_draft_lines (draft_id, account_id, debit, credit, label, tiers_contact_id, cost_center_id, position)
+         VALUES (?,?,?,?,?,?,?,?)'
+    );
+    $order = 0;
+    foreach ($clean as $c) $ins->execute(array_merge([$draftId], $c, [$order++]));
+
+    return $draftId;
+}
+
+/**
+ * Valide un brouillon : c'est SEULEMENT à cet instant que le journal est
+ * résolu et que le numéro de pièce est attribué (compta_post_entry() fait
+ * exactement ce que faisait invoice_create() avant l'introduction des
+ * brouillons). Si le brouillon est lié à une facture (source_kind commençant
+ * par 'invoice_'), la ligne `invoices` correspondante quitte le statut
+ * 'brouillon' et reçoit son écriture définitive.
+ *
+ * @return int L'id de l'écriture définitive créée (journal_entries.id).
+ * @throws ComptaException si le brouillon est introuvable, déjà validé, ou
+ *         que ses lignes ont été éditées jusqu'à devenir déséquilibrées.
+ */
+function compta_validate_draft(PDO $pdo, int $draftId, string $userName, ?int $journalIdOverride = null): int {
+    $st = $pdo->prepare('SELECT * FROM entry_drafts WHERE id = ?');
+    $st->execute([$draftId]);
+    $draft = $st->fetch();
+    if (!$draft) throw new ComptaException('Brouillon introuvable');
+    if ($draft['status'] !== 'brouillon') throw new ComptaException('Ce brouillon a déjà été traité (' . $draft['status'] . ')');
+
+    $lines = $pdo->prepare('SELECT * FROM entry_draft_lines WHERE draft_id = ? ORDER BY position');
+    $lines->execute([$draftId]);
+    $entryLines = array_map(fn($l) => [
+        'account_id'       => (int) $l['account_id'],
+        'debit'            => (float) $l['debit'],
+        'credit'           => (float) $l['credit'],
+        'label'            => (string) $l['label'],
+        'tiers_contact_id' => (string) $l['tiers_contact_id'],
+        'cost_center_id'   => $l['cost_center_id'],
+    ], $lines->fetchAll());
+
+    $entryId = compta_post_entry($pdo, [
+        'entry_date'    => $draft['entry_date'],
+        'label'         => $draft['label'],
+        'lines'         => $entryLines,
+        'journal_id'    => $journalIdOverride ?? $draft['suggested_journal_id'],
+        'piece_kind'    => $draft['piece_kind_suggested'],
+        'source_module' => $draft['source_module'],
+        'source_ref_id' => $draft['source_ref_id'],
+        'created_by'    => $userName,
+    ]);
+
+    $pdo->prepare("UPDATE entry_drafts SET status='validee', validated_entry_id=? WHERE id=?")
+        ->execute([$entryId, $draftId]);
+
+    if (str_starts_with((string) $draft['source_kind'], 'invoice_')) {
+        $pdo->prepare("UPDATE invoices SET status='ouverte', journal_entry_id=? WHERE draft_id=? AND status='brouillon'")
+            ->execute([$entryId, $draftId]);
+    }
+
+    compta_audit_log($pdo, 'entry_draft', $draftId, 'validate', "Brouillon #$draftId validé — " . $draft['label'], $userName);
+
+    return $entryId;
+}
+
+/**
+ * Rejette un brouillon jamais validé : suppression pure (cascade sur ses
+ * lignes). S'il est lié à une facture, la facture disparaît avec lui — elle
+ * n'a jamais existé comptablement, à la différence d'une facture annulée
+ * après validation, qui reste tracée par extourne (invoice_cancel).
+ */
+function compta_reject_draft(PDO $pdo, int $draftId, string $userName): void {
+    $st = $pdo->prepare('SELECT * FROM entry_drafts WHERE id = ?');
+    $st->execute([$draftId]);
+    $draft = $st->fetch();
+    if (!$draft) throw new ComptaException('Brouillon introuvable');
+    if ($draft['status'] !== 'brouillon') throw new ComptaException('Ce brouillon a déjà été traité (' . $draft['status'] . ')');
+
+    if (str_starts_with((string) $draft['source_kind'], 'invoice_')) {
+        $pdo->prepare("DELETE FROM invoices WHERE draft_id=? AND status='brouillon'")->execute([$draftId]);
+    }
+    $pdo->prepare('DELETE FROM entry_drafts WHERE id = ?')->execute([$draftId]);
+
+    compta_audit_log($pdo, 'entry_draft', $draftId, 'reject', "Brouillon #$draftId rejeté — " . $draft['label'], $userName);
+}
+
 /* ------------------------------------------------------- Exercices, périodes */
 
 /** Exercice couvrant une date, quel que soit son statut, ou null. */

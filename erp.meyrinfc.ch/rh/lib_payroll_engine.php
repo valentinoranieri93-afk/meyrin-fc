@@ -62,6 +62,21 @@ function payroll_shared_lines_catalog(): array {
   ];
 }
 
+/** Charges 100% employeur (2026-08-17) : aucune part employé, pas de case d'assujettissement
+ * propre — calées sur payroll_shared_lines_catalog()['avs'] (assujettissement ET assiette,
+ * salaire déterminant AVS, jamais plafonnée), décision de Valentino pour ne pas ajouter une
+ * quatrième case à cocher sur chaque fiche. Miroir JS : PAIE_LINE_ACCOUNT_KEYS/labels dans
+ * index.html (partie ajoutée) pour les paramètres de compte, pas de doublon des taux/labels
+ * métier côté JS puisque ceux-ci ne s'affichent que via payroll_rate_settings. */
+function payroll_employer_only_lines_catalog(): array {
+  return [
+    'scaf'        => 'Cotisation SCAF',
+    'lfp'         => 'Cotisation LFP',
+    'cpe'         => 'Cotisation CPE',
+    'frais_admin' => "Frais d'administration",
+  ];
+}
+
 /** Clés de lignes à taux partagé plafonnées par le gain maximum LAA (148'200 en 2026) :
  * accidents et leurs compléments suivent ce plafond en droit suisse. AC a son propre
  * plafond (identique en valeur en 2026, mais paramétré séparément — les deux peuvent
@@ -122,7 +137,7 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
     $periodDiv = ($person['paiement'] === 'semestriel') ? 2 : 12;
 
     $asg = $pdo->prepare("SELECT ea.*, t.name AS team_name, tc.name AS category_name,
-             po.label AS poste_label, po.account_number, po.account_label
+             po.label AS poste_label, po.account_number, po.account_label, po.payslip_label
       FROM employee_assignments ea
       JOIN postes po ON po.id = ea.poste_id
       LEFT JOIN teams t ON t.id = ea.team_id
@@ -136,8 +151,12 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
     foreach ($assignments as $a) {
       $periodAmount = (float)$a['montant'] / $periodDiv;
       $grossBase += $periodAmount;
-      $label = $a['account_label'] ?: ($a['poste_label'] . ($a['team_name'] ? ' — ' . $a['team_name'] : ($a['category_name'] ? ' — ' . $a['category_name'] . ' (catégorie)' : '')));
-      $revenueLines[] = ['label' => $label, 'montant' => round($periodAmount, 2)];
+      // Priorité (2026-08-17) : intitulé propre au décompte (payslip_label, modifiable
+      // librement dans Paramètres > Rôles), sinon le nom du compte comptable rattaché, sinon
+      // le libellé du rôle + équipe/catégorie comme avant.
+      $label = ($a['payslip_label'] ?: null) ?: ($a['account_label'] ?: ($a['poste_label'] . ($a['team_name'] ? ' — ' . $a['team_name'] : ($a['category_name'] ? ' — ' . $a['category_name'] . ' (catégorie)' : ''))));
+      $revenueLines[] = ['label' => $label, 'montant' => round($periodAmount, 2),
+        'account_number' => (string)($a['account_number'] ?? ''), 'account_label' => (string)($a['account_label'] ?? '')];
     }
     // Le brut projeté sur l'année sert de base au seuil LPP (§4.4) : la somme des montants
     // annuels des affectations, indépendamment de la périodicité de versement.
@@ -158,8 +177,14 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
 
     $grossBase = $salaireMensuel + $primes;
     $revenueLines = [];
-    if ($salaireMensuel > 0) $revenueLines[] = ['label' => 'Salaire fixe', 'montant' => round($salaireMensuel, 2)];
-    if ($primes > 0) $revenueLines[] = ['label' => 'Primes de match', 'montant' => round($primes, 2)];
+    // Même priorité que côté employé (2026-08-17) : payslip_label (texte libre, Paramètres >
+    // Paie) sinon le nom du compte comptable rattaché, sinon l'intitulé générique d'origine.
+    $salaryLabel = (string)($rs['player_salary_label'] ?? '') ?: ((string)($rs['player_salary_account_label'] ?? '') ?: 'Salaire fixe');
+    $bonusLabel  = (string)($rs['player_bonus_label'] ?? '')  ?: ((string)($rs['player_bonus_account_label'] ?? '')  ?: 'Primes de match');
+    if ($salaireMensuel > 0) $revenueLines[] = ['label' => $salaryLabel, 'montant' => round($salaireMensuel, 2),
+      'account_number' => (string)($rs['player_salary_account_number'] ?? ''), 'account_label' => (string)($rs['player_salary_account_label'] ?? '')];
+    if ($primes > 0) $revenueLines[] = ['label' => $bonusLabel, 'montant' => round($primes, 2),
+      'account_number' => (string)($rs['player_bonus_account_number'] ?? ''), 'account_label' => (string)($rs['player_bonus_account_label'] ?? '')];
     // Pas d'affectation annuelle pour un joueur : la projection LPP ne s'applique pas
     // à cette population (§C.1 addendum — hors périmètre LPP en phase 1).
     $annualGross = $grossBase * 12;
@@ -169,19 +194,25 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
   $grossTotal = $grossBase + $extraTotal;
   foreach ($indemnites as $l) {
     $indLabel = (string)($l['account_label'] ?? '') !== '' ? (string)$l['account_label'] : (string)($l['label'] ?? '—');
-    $revenueLines[] = ['label' => $indLabel, 'montant' => round((float)($l['montant'] ?? 0), 2)];
+    $revenueLines[] = ['label' => $indLabel, 'montant' => round((float)($l['montant'] ?? 0), 2),
+      'account_number' => (string)($l['account_number'] ?? ''), 'account_label' => (string)($l['account_label'] ?? '')];
   }
   // Regroupement par intitulé (compte comptable ou libellé de poste) : deux rôles ou une
   // indemnité rattachés au même compte apparaissent en une seule ligne sur le document
   // imprimé, plutôt qu'une ligne par affectation — comportement déjà en place côté écran
-  // avant cette phase (groupedRevenueLines dans index.html), repris ici côté serveur.
+  // avant cette phase (groupedRevenueLines dans index.html), repris ici côté serveur. Le
+  // compte comptable du premier élément rencontré pour ce libellé est conservé (deux lignes
+  // qui partagent déjà le même libellé partagent en pratique le même compte).
   $groupedRevenue = [];
   foreach ($revenueLines as $l) {
     $key = $l['label'];
     if (isset($groupedRevenue[$key])) $groupedRevenue[$key]['montant'] += $l['montant'];
     else $groupedRevenue[$key] = $l;
   }
-  $revenueLines = array_values(array_map(fn($l) => ['label' => $l['label'], 'montant' => round($l['montant'], 2)], $groupedRevenue));
+  $revenueLines = array_values(array_map(fn($l) => [
+    'label' => $l['label'], 'montant' => round($l['montant'], 2),
+    'account_number' => (string)($l['account_number'] ?? ''), 'account_label' => (string)($l['account_label'] ?? ''),
+  ], $groupedRevenue));
 
   /* --- Statut AVS de la personne : franchise rentier / abattement minime importance -----
      Non cumulables (§6.2.4 SPEC, contrôle bloquant [9.2]).
@@ -222,6 +253,7 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
   /* --- Bases par assurance, avec plafonds, puis cotisations ----------------------------- */
   $chargeLines = [];
   $legalReferenceLines = [];
+  $employerChargeLines = [];
   foreach (payroll_shared_lines_catalog() as $key => $label) {
     if ((int)($person[$key . '_subject'] ?? 0) !== 1) continue;
     $rate = (float)($rs[$key . '_rate'] ?? 0);
@@ -242,6 +274,21 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
     }
     $chargeLines[] = ['key' => $key, 'label' => $label, 'base' => round($base, 2), 'rate' => $rate, 'amount' => $amount];
 
+    // Part employeur (2026-08-16) : même assiette (après franchise/abattement, la loi réduit
+    // le salaire déterminant pour les deux parts à la fois), taux séparé, jamais retenue sur
+    // le net. Une ligne uniquement si un taux employeur est réellement paramétré pour cette
+    // rubrique — la plupart des rubriques n'ont pas de contrepartie patronale (AANP, LAAC, IJM
+    // suivent le contrat d'assurance réel du club, pas modélisé ici).
+    $employerRate = (float)($rs[$key . '_employer_rate'] ?? 0);
+    if ($employerRate > 0) {
+      $employerAmount = round($base * $employerRate / 100, 2);
+      $overrideEmployerKey = $key . '_employer';
+      if (array_key_exists($overrideEmployerKey, $overrides) && $overrides[$overrideEmployerKey] !== null && $overrides[$overrideEmployerKey] !== '') {
+        $employerAmount = round((float)$overrides[$overrideEmployerKey], 2);
+      }
+      $employerChargeLines[] = ['key' => $key, 'label' => $label . ' (part employeur)', 'base' => round($base, 2), 'rate' => $employerRate, 'amount' => $employerAmount];
+    }
+
     // Double calcul légal/arrangement (§C.2.1.c addendum), pour chaque assiette réellement
     // réduite : sert à mesurer l'exposition du club si l'arrangement OCAS (aujourd'hui sans
     // trace écrite, voir GAP-ANALYSIS-RH.md) était un jour remis en cause — jamais utilisé
@@ -250,6 +297,35 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
       $legalAmount = round($legalBase * $rate / 100, 2);
       $legalReferenceLines[] = ['key' => $key . '_legal', 'label' => "$label — référence légale stricte ($chargeReductionLabel non appliqué)",
                                  'base' => round($legalBase, 2), 'rate' => $rate, 'amount' => $legalAmount, 'is_legal_reference' => true];
+    }
+  }
+
+  /* --- Charges 100% employeur calées sur l'AVS (SCAF/LFP/CPE/frais d'administration, --------
+     2026-08-17) : même assujettissement que l'AVS (salaire déterminant, après franchise
+     rentier/abattement, jamais plafonnée) — voir payroll_employer_only_lines_catalog() plus
+     haut. Pas de ligne 'charge' (employé) en contrepartie : ce sont de vraies charges
+     patronales en plus du brut, jamais retenues sur le net.
+
+     Cas particulier « frais d'administration » (précisé par Valentino le 2026-08-17) : ce
+     n'est PAS un pourcentage du brut AVS, c'est un pourcentage de la COTISATION AVS elle-même
+     (les 5,3% du brut) — donc frais_admin_rate% appliqué à (brut AVS × taux AVS employeur),
+     pas directement au brut AVS. Le taux AVS employeur déjà paramétré (avs_employer_rate) sert
+     de référence, avec repli sur avs_rate si l'employeur n'en a pas de distinct paramétré :
+     décision explicite de ne pas dupliquer le taux légal dans un champ séparé. */
+  $avsSubjectBase = max(0.0, $grossTotal - $chargeReduction);
+  $avsRateForFraisAdmin = (float)($rs['avs_employer_rate'] ?? 0) ?: (float)($rs['avs_rate'] ?? 0);
+  $avsContributionAmount = round($avsSubjectBase * $avsRateForFraisAdmin / 100, 2);
+  if ((int)($person['avs_subject'] ?? 0) === 1) {
+    foreach (payroll_employer_only_lines_catalog() as $key => $label) {
+      $rate = (float)($rs[$key . '_rate'] ?? 0);
+      if ($rate <= 0) continue;
+      $lineBase = ($key === 'frais_admin') ? $avsContributionAmount : $avsSubjectBase;
+      $amount = round($lineBase * $rate / 100, 2);
+      $overrideKey = $key . '_employer';
+      if (array_key_exists($overrideKey, $overrides) && $overrides[$overrideKey] !== null && $overrides[$overrideKey] !== '') {
+        $amount = round((float)$overrides[$overrideKey], 2);
+      }
+      $employerChargeLines[] = ['key' => $key, 'label' => $label, 'base' => round($lineBase, 2), 'rate' => $rate, 'amount' => $amount];
     }
   }
 
@@ -266,6 +342,15 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
         $amount = round((float)$overrides['lpp'], 2);
       }
       $chargeLines[] = ['key' => 'lpp', 'label' => 'Prévoyance professionnelle (LPP)', 'base' => round($periodCoordinated, 2), 'rate' => $rate, 'amount' => $amount];
+
+      // Part employeur LPP (2026-08-16) : montant fixe par personne (employees.lpp_employer_amount,
+      // en base depuis la phase précédente mais jamais lu par le moteur jusqu'ici), pas un taux —
+      // la répartition employeur/employé de la LPP est libre contractuellement, contrairement aux
+      // taux légaux fixes des autres rubriques.
+      $lppEmployerAmount = round((float)($person['lpp_employer_amount'] ?? 0), 2);
+      if ($lppEmployerAmount > 0) {
+        $employerChargeLines[] = ['key' => 'lpp', 'label' => 'Prévoyance professionnelle (LPP) — part employeur', 'base' => round($periodCoordinated, 2), 'rate' => null, 'amount' => $lppEmployerAmount];
+      }
     }
   }
 
@@ -283,14 +368,21 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
   /* --- Retenue lavage (joueurs, déjà paramétrée depuis le 2026-08-14) --------------------- */
   $diversLines = [];
   if ($personType === 'player' && $grossTotal > (float)$rs['lavage_threshold']) {
-    $diversLines[] = ['label' => 'Retenue lavage', 'montant' => round((float)$rs['lavage_amount'], 2)];
+    $diversLines[] = ['label' => 'Retenue lavage', 'montant' => round((float)$rs['lavage_amount'], 2),
+      'account_number' => (string)($rs['lavage_account_number'] ?? ''), 'account_label' => (string)($rs['lavage_account_label'] ?? '')];
   }
   foreach ($retenues as $l) {
-    $diversLines[] = ['label' => (string)($l['label'] ?? '—'), 'montant' => round((float)($l['montant'] ?? 0), 2)];
+    $diversLines[] = ['label' => (string)($l['label'] ?? '—'), 'montant' => round((float)($l['montant'] ?? 0), 2),
+      'account_number' => (string)($l['account_number'] ?? ''), 'account_label' => (string)($l['account_label'] ?? '')];
   }
 
   $chargesTotal = round(array_sum(array_column($chargeLines, 'amount')), 2);
-  $diversTotal  = round(array_sum(array_column($diversLines, 'amount')), 2);
+  $employerChargesTotal = round(array_sum(array_column($employerChargeLines, 'amount')), 2);
+  // Bug corrigé (2026-08-17) : les lignes divers portent leur montant sous la clé 'montant'
+  // (comme revenue_lines), pas 'amount' (réservée aux charge_lines/employer_charge_lines) —
+  // array_column() sur la mauvaise clé renvoyait un tableau vide, donc un total et un net
+  // toujours calculés comme si aucune retenue lavage/manuelle n'existait, silencieusement.
+  $diversTotal  = round(array_sum(array_column($diversLines, 'montant')), 2);
   $net = round($grossTotal - $chargesTotal - $diversTotal, 2);
   if ($net < 0) $warnings[] = 'Net négatif (' . $net . ') : les retenues dépassent le brut.';
 
@@ -309,9 +401,11 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
     'gross_total' => round($grossTotal, 2),
     'revenue_lines' => $revenueLines,
     'charge_lines' => $chargeLines,
+    'employer_charge_lines' => $employerChargeLines,
     'legal_reference_lines' => $legalReferenceLines,
     'divers_lines' => $diversLines,
     'charges_total' => $chargesTotal,
+    'employer_charges_total' => $employerChargesTotal,
     'divers_total' => $diversTotal,
     'net' => $net,
     'avs_reduction_applied' => $chargeReductionLabel,
@@ -364,19 +458,25 @@ function persist_payslip_lines(PDO $pdo, array $computed): int {
   }
 
   $pdo->prepare('DELETE FROM payroll_payment_lines WHERE payment_id=?')->execute([$paymentId]);
-  $ins = $pdo->prepare('INSERT INTO payroll_payment_lines (payment_id, kind, line_key, label, base, rate, amount, is_legal_reference, sort_order) VALUES (?,?,?,?,?,?,?,?,?)');
+  $ins = $pdo->prepare('INSERT INTO payroll_payment_lines (payment_id, kind, line_key, label, base, rate, amount, is_legal_reference, sort_order, account_number, account_label) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
   $order = 0;
   foreach ($computed['revenue_lines'] as $l) {
-    $ins->execute([$paymentId, 'revenue', '', $l['label'], null, null, $l['montant'], 0, $order++]);
+    $ins->execute([$paymentId, 'revenue', '', $l['label'], null, null, $l['montant'], 0, $order++, (string)($l['account_number'] ?? ''), (string)($l['account_label'] ?? '')]);
   }
   foreach ($computed['charge_lines'] as $l) {
-    $ins->execute([$paymentId, 'charge', $l['key'], $l['label'], $l['base'], $l['rate'], $l['amount'], 0, $order++]);
+    $ins->execute([$paymentId, 'charge', $l['key'], $l['label'], $l['base'], $l['rate'], $l['amount'], 0, $order++, '', '']);
+  }
+  // Charges employeur (2026-08-16) : compte résolu au moment de la poussée comptable (par
+  // line_key -> payroll_line_accounts, lib_payroll_compta.php), pas ici — c'est un réglage
+  // partagé par toutes les fiches, pas une donnée propre à ce décompte.
+  foreach ($computed['employer_charge_lines'] as $l) {
+    $ins->execute([$paymentId, 'employer_charge', $l['key'], $l['label'], $l['base'], $l['rate'], $l['amount'], 0, $order++, '', '']);
   }
   foreach ($computed['legal_reference_lines'] as $l) {
-    $ins->execute([$paymentId, 'charge', $l['key'], $l['label'], $l['base'], $l['rate'], $l['amount'], 1, $order++]);
+    $ins->execute([$paymentId, 'charge', $l['key'], $l['label'], $l['base'], $l['rate'], $l['amount'], 1, $order++, '', '']);
   }
   foreach ($computed['divers_lines'] as $l) {
-    $ins->execute([$paymentId, 'divers', '', $l['label'], null, null, $l['montant'], 0, $order++]);
+    $ins->execute([$paymentId, 'divers', '', $l['label'], null, null, $l['montant'], 0, $order++, (string)($l['account_number'] ?? ''), (string)($l['account_label'] ?? '')]);
   }
 
   return $paymentId;
