@@ -2409,6 +2409,20 @@ const PAIE_RATE_FIELDS = [
   ['amat_rate', 'Assurance maternité (AMat GE)'], ['aanp_rate', 'Accidents non professionnels (AANP)'],
   ['laac_rate', 'Accidents complémentaire (LAAC)'], ['ijm_rate', 'Indemnités journalières maladie'],
 ];
+// Plafonds et franchises légales lus par le moteur de paie (rh/lib_payroll_engine.php) :
+// aucun n'est plus en dur dans le code depuis le 2026-08-16, tous se règlent ici pour
+// pouvoir suivre un changement de norme sans toucher au code.
+// Troisième élément : valeur légale 2026 d'amorçage, utilisée seulement si l'année n'a pas
+// encore de ligne en base — jamais un champ vide qui se sauverait silencieusement à 0.
+const PAIE_CEILING_FIELDS = [
+  ['ac_ceiling', 'Plafond AC (CHF/an)', 148200], ['laa_ceiling', 'Plafond LAA (CHF/an)', 148200],
+  ['lpp_ceiling', 'Plafond LPP (CHF/an)', 90720], ['lpp_entry_threshold', 'Seuil d\'entrée LPP (CHF/an)', 22680],
+  ['lpp_coordination_deduction', 'Déduction de coordination LPP (CHF/an)', 26460], ['lpp_coordinated_min', 'Salaire coordonné minimum LPP (CHF/an)', 3780],
+];
+const PAIE_AVS_FIELDS = [
+  ['avs_rentier_franchise_monthly', 'Franchise rentier (CHF/mois)', 1400], ['avs_rentier_franchise_annual', 'Franchise rentier (CHF/an)', 16800],
+  ['avs_minime_threshold', 'Seuil de minime importance (CHF/an)', 2500], ['avs_minime_abatement_semestriel', 'Abattement minime importance / OCAS (CHF/semestre)', 2500],
+];
 let PAIE_RATE_YEAR_EDITING = null;
 
 async function renderPaieTab(el){
@@ -2470,6 +2484,17 @@ function paieRateYearForm(){
         ${PAIE_RATE_FIELDS.map(f => `<div class="field"><label>${esc(f[1])} (%)</label><input id="paie-${f[0]}" type="number" step="0.001" value="${existing[f[0]] ?? ''}" placeholder="0.000"></div>`).join('')}
       </div>
 
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin:16px 0 8px">AVS — franchise rentier et abattement minime importance</div>
+      <p class="hint" style="margin-bottom:10px">Franchise rentier (§6.2 SPEC) et abattement OCAS des joueurs/coachs (§C.2 addendum) : deux montants distincts, jamais cumulés sur une même personne. Modifier ces valeurs suit un changement de norme (ex: seuil revalorisé) sans toucher au code.</p>
+      <div class="field-row" style="grid-template-columns:repeat(4,1fr)">
+        ${PAIE_AVS_FIELDS.map(f => `<div class="field"><label>${esc(f[1])}</label><input id="paie-${f[0]}" type="number" step="0.05" value="${existing[f[0]] ?? f[2]}"></div>`).join('')}
+      </div>
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin:16px 0 8px">Plafonds légaux (AC / LAA / LPP)</div>
+      <div class="field-row" style="grid-template-columns:repeat(3,1fr)">
+        ${PAIE_CEILING_FIELDS.map(f => `<div class="field"><label>${esc(f[1])}</label><input id="paie-${f[0]}" type="number" step="0.05" value="${existing[f[0]] ?? f[2]}"></div>`).join('')}
+      </div>
+
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin:16px 0 8px">Revenus joueurs</div>
       <p class="hint" style="margin-bottom:10px">Intitulés affichés sur le décompte de paie d'un joueur : le salaire fixe de sa fiche et ses primes de match restent deux lignes distinctes, chacune sous l'intitulé de son compte.</p>
       <div class="field-row">
@@ -2510,6 +2535,8 @@ async function savePaieRateYear(){
   if (!year) return alert('Année requise.');
   const body = { year };
   PAIE_RATE_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
+  PAIE_AVS_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
+  PAIE_CEILING_FIELDS.forEach(f => { body[f[0]] = Number(document.getElementById('paie-' + f[0]).value) || 0; });
   body.lavage_threshold = Number(document.getElementById('paie-lavage-threshold').value) || 0;
   body.lavage_amount = Number(document.getElementById('paie-lavage-amount').value) || 0;
   const lavageAcc = resolveComptaAccount(document.getElementById('paie-lavage-account').value);
@@ -2796,8 +2823,8 @@ async function updatePaymentNote(personType, personId, note){
 
 /* ============================================================ DÉCOMPTE DE PAIE (page autonome, nouvel onglet) */
 
-let PS = { employee: null, fiche: null, children: [], season: null, seasonId: null, isSemestriel: false,
-           baseRows: [], autoLines: [], indemnites: [], retenues: [], month: new Date().toISOString().slice(0,7) };
+let PS = { employee: null, fiche: null, season: null, seasonId: null,
+           indemnites: [], retenues: [], overrides: {}, month: new Date().toISOString().slice(0,7), computed: null };
 
 async function renderPayslipPage(employeeId, seasonId){
   const app = document.getElementById('app');
@@ -2824,46 +2851,20 @@ async function renderPayslipPage(employeeId, seasonId){
   }
   const ee = employees.find(e => e.id === employeeId);
   if (!ee) { app.innerHTML = `<div style="padding:80px;text-align:center">Employé introuvable.</div>`; return; }
-  PS.employeeId = employeeId; PS.seasonId0 = seasonId; // pour rafraîchir au changement de mois
+  PS.employeeId = employeeId;
   PS.employee = ee;
   PS.fiche = ctx.employee;
-  PS.children = ctx.children || [];
-  PS.insuranceProfile = ctx.insurance_profile;
   PS.season = seasons.find(s => s.id === seasonId) || null;
   PS.seasonId = seasonId;
-  PS.isSemestriel = ee.paiement === 'semestriel';
-  PS.baseRows = ee.assignments.filter(a => Number(a.season_id) === seasonId);
-  buildAutoLines(ctx.rate_settings);
   PS.indemnites = [];
   PS.retenues = [];
-  renderPayslipDoc(); // fixe aussi document.title (nom de fichier suggéré à l'impression)
+  PS.overrides = {};
+  await renderPayslipDoc(); // fixe aussi document.title (nom de fichier suggéré à l'impression)
 }
 
-/* Retenues issues des affiliations de la fiche : taux partagé de l'année du mois décompté
- * pour les six lignes communes, taux/montant personnel pour LPP et impôt à la source. Chaque
- * ligne garde son taux pour se recalculer si une indemnité est ajoutée, et porte un
- * `override` qui prend le dessus dès que le montant est corrigé à la main sur le décompte. */
-function buildAutoLines(rateSettings){
-  const shared = SHARED_SOCIAL_LINES
-    .filter(l => Number(PS.fiche[l.k + '_subject']) === 1)
-    .map(l => ({ key: l.k, label: l.label, rate: Number(rateSettings[l.k + '_rate']) || 0, fixed: 0, override: null, removed: false }));
-  const personal = PERSONAL_SOCIAL_LINES
-    .filter(l => Number(PS.fiche[l.k + '_subject']) === 1)
-    .map(l => ({ key: l.k, label: l.label, rate: Number(PS.fiche[l.k + '_rate']) || 0,
-                 fixed: Number(PS.fiche[l.k + '_amount']) || 0, override: null, removed: false }));
-  PS.autoLines = [...shared, ...personal];
-}
-
-/* Changer le mois peut faire changer l'année civile (ex: décembre → janvier), donc le taux
- * des lignes partagées : on redemande le contexte plutôt que de se fier à un taux mis en
- * cache pour l'ancienne année. */
 async function changePayslipMonth(value){
   PS.month = value;
-  try {
-    const ctx = await api('payslip_context', { params: { employee_id: PS.employeeId, month: PS.month } });
-    buildAutoLines(ctx.rate_settings);
-  } catch (e) { /* affichage inchangé si l'appel échoue, le mois reste modifiable */ }
-  renderPayslipDoc();
+  await renderPayslipDoc();
 }
 
 function addPayslipLine(type){ PS[type].push({ label: '', montant: 0, account_number: '', account_label: '' }); renderPayslipDoc(); }
@@ -2880,14 +2881,17 @@ function setPayslipLineAccount(i, text){
   renderPayslipDoc();
 }
 
-/* Corriger un montant calculé le fige : c'est une décision de l'utilisateur, elle ne doit
-   pas être écrasée au prochain recalcul. Vider le champ rend la ligne à son taux. */
-function overrideAutoLine(i, value){
+/* Corriger une ligne calculée par le serveur (charge sociale) fige son montant, envoyé comme
+   override à payslip_compute : c'est une décision du responsable, elle ne doit pas être
+   écrasée au prochain recalcul. Vider le champ lui rend son calcul normal. Contrairement à
+   avant cette phase, une charge sociale ne peut plus être supprimée du décompte (elle est due
+   dès que la fiche coche l'assujettissement) : la corriger à 0 en est le nouvel équivalent
+   explicite, si un cas réel le justifie, plutôt qu'une suppression qui n'en gardait pas trace. */
+function overrideAutoLine(key, value){
   const v = String(value).trim();
-  PS.autoLines[i].override = v === '' ? null : (Number(v) || 0);
+  if (v === '') delete PS.overrides[key]; else PS.overrides[key] = Number(v) || 0;
   renderPayslipDoc();
 }
-function removeAutoLine(i){ PS.autoLines[i].removed = true; renderPayslipDoc(); }
 
 function removePayslipLine(type, i){ PS[type].splice(i, 1); renderPayslipDoc(); }
 function updatePayslipLine(type, i, field, el){
@@ -2897,84 +2901,37 @@ function updatePayslipLine(type, i, field, el){
 
 const PAYSLIP_MONTH_LABELS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 
-/* Reprend exactement le calcul de renderPayslipDoc (regroupement par compte, taux, montants)
-   mais renvoie des données prêtes à poster au serveur plutôt qu'à afficher, pour générer le
-   PDF natif (case 'payslip_pdf'). Les montants sont déjà mis en forme (chf/pctSmart) ici :
-   le serveur ne recalcule rien, il pose exactement ce que le responsable a sous les yeux. */
-function buildPayslipPayload(){
-  const ee = PS.employee;
-  const f = PS.fiche || {};
-  const periodDiv = PS.isSemestriel ? 2 : 12;
-  const grossBase = PS.baseRows.reduce((s, a) => s + Number(a.montant), 0) / periodDiv;
-  const extraTotal = PS.indemnites.reduce((s, l) => s + (Number(l.montant) || 0), 0);
-  const grossTotal = grossBase + extraTotal;
-  const autoLines = (PS.autoLines || []).filter(l => !l.removed).map(l => ({
-    ...l,
-    montant: l.override !== null ? l.override : (l.rate > 0 ? grossTotal * l.rate / 100 : l.fixed),
-  }));
-  const ruleTotal = autoLines.reduce((s, d) => s + d.montant, 0);
-  const manualRetenuesTotal = PS.retenues.reduce((s, l) => s + (Number(l.montant) || 0), 0);
-  const totalDeductions = ruleTotal + manualRetenuesTotal;
-  const net = grossTotal - totalDeductions;
-
-  const groupedRevenueLines = [];
-  const addRevenueLine = (key, montant) => {
-    const existing = groupedRevenueLines.find(g => g.key === key);
-    if (existing) existing.montant += montant;
-    else groupedRevenueLines.push({ key, montant });
-  };
-  PS.baseRows.forEach(a => addRevenueLine(
-    a.account_label || `${a.poste_label}${a.team_name ? ' — ' + a.team_name : (a.category_name ? ' — ' + a.category_name + ' (catégorie)' : '')}`,
-    Number(a.montant) / periodDiv
-  ));
-  PS.indemnites.forEach(l => addRevenueLine(l.account_label || l.label || '—', Number(l.montant) || 0));
-
-  const [y, m] = String(PS.month || '').split('-');
-  const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
-
-  return {
-    employee_id: PS.employeeId,
-    month: PS.month,
-    header: {
-      collab_id: ee.id,
-      avs: f.avs_number || '',
-      first_name: ee.first_name, last_name: ee.last_name,
-      street: f.street || '', zip: f.zip || '', city: f.city || '',
-      country: f.country === 'CH' ? 'Suisse' : (f.country || ''),
-      period_label: `${moisLabel} ${y || ''}`.trim(),
-      is_semestriel: !!PS.isSemestriel,
-      iban: ee.iban || '',
-    },
-    revenue: groupedRevenueLines.map(l => ({ label: l.key || '—', montant: chf(l.montant) })),
-    gross_total: chf(grossTotal),
-    charges: autoLines.map(l => ({
-      label: l.label,
-      base: (l.rate > 0 && l.override === null) ? chf(grossTotal) : '',
-      taux: (l.rate > 0 && l.override === null) ? (pctSmart(l.rate) + ' %') : '',
-      montant: '− ' + chf(l.montant),
-    })),
-    charges_total: '− ' + chf(ruleTotal),
-    // Retenues ajoutées à la main sur le décompte : catégorie distincte "Divers", après
-    // Salaire brut et Charges sociales, plutôt que mélangées aux charges calculées par taux.
-    divers: PS.retenues.map(l => ({ label: l.label || '—', montant: '− ' + chf(Number(l.montant) || 0) })),
-    divers_total: '− ' + chf(manualRetenuesTotal),
-    total_deductions: '− ' + chf(totalDeductions),
-    net: chf(net),
-  };
+/* Seule source de vérité du calcul (bases, plafonds, franchise/abattement, net) : le serveur
+ * (lib_payroll_engine.php, action payslip_compute), pas ce fichier. Rappelé à chaque
+ * changement (mois, indemnité, retenue, override) par renderPayslipDoc(). */
+async function fetchPayslipComputed(){
+  try {
+    PS.computed = await api('payslip_compute', { method: 'POST', body: {
+      person_type: 'employee', person_id: PS.employeeId, month: PS.month, season_id: PS.seasonId,
+      indemnites: PS.indemnites, retenues: PS.retenues, overrides: PS.overrides,
+    }});
+    PS.computeError = null;
+  } catch (e) { PS.computed = null; PS.computeError = e.message; }
 }
 
 async function generatePayslipPdf(btn){
   const originalText = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Génération…'; }
   try {
-    const payload = buildPayslipPayload();
-    const blob = await api('payslip_pdf', { method: 'POST', body: payload });
+    // Le serveur recalcule à partir de ces seules lignes manuelles, persiste et verrouille le
+    // décompte, puis génère le PDF depuis ce qu'il vient d'enregistrer — jamais depuis un
+    // montant transmis par l'écran.
+    const blob = await api('payslip_pdf', { method: 'POST', body: {
+      employee_id: PS.employeeId, month: PS.month, season_id: PS.seasonId,
+      indemnites: PS.indemnites, retenues: PS.retenues, overrides: PS.overrides,
+    }});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${payload.month}_Décompte_${PS.employee.last_name}_${PS.employee.first_name}.pdf`;
+    a.download = `${PS.month}_Décompte_${PS.employee.last_name}_${PS.employee.first_name}.pdf`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
+    await renderPayslipDoc(); // recharge : le décompte est désormais verrouillé côté serveur
   } catch (e) {
     alert('Échec de la génération du PDF : ' + e.message);
   } finally {
@@ -2982,40 +2939,19 @@ async function generatePayslipPdf(btn){
   }
 }
 
-function renderPayslipDoc(){
+async function renderPayslipDoc(){
   const app = document.getElementById('app');
   const ee = PS.employee;
   const f = PS.fiche || {};
-  const periodDiv = PS.isSemestriel ? 2 : 12;
-  const grossBase = PS.baseRows.reduce((s, a) => s + Number(a.montant), 0) / periodDiv;
-  const extraTotal = PS.indemnites.reduce((s, l) => s + (Number(l.montant) || 0), 0);
-  const grossTotal = grossBase + extraTotal;
-  const autoLines = (PS.autoLines || []).filter(l => !l.removed);
-  autoLines.forEach(l => {
-    l.montant = l.override !== null ? l.override
-              : (l.rate > 0 ? grossTotal * l.rate / 100 : l.fixed);
-  });
-  const ruleTotal = autoLines.reduce((s, d) => s + d.montant, 0);
-  const manualRetenuesTotal = PS.retenues.reduce((s, l) => s + (Number(l.montant) || 0), 0);
-  const totalDeductions = ruleTotal + manualRetenuesTotal;
-  const net = grossTotal - totalDeductions;
-
-  /* Document imprimé (celui que reçoit l'employé) : les rôles et indemnités rattachés au même
-     compte du plan comptable se regroupent sous un seul intitulé, au lieu d'une ligne par rôle
-     ou par équipe. Un rôle/une indemnité sans compte garde son libellé d'origine, jamais caché.
-     L'écran d'édition, lui, garde le détail ligne par ligne : c'est la vue de travail du
-     responsable pour corriger un montant précis. */
-  const groupedRevenueLines = [];
-  const addRevenueLine = (key, montant) => {
-    const existing = groupedRevenueLines.find(g => g.key === key);
-    if (existing) existing.montant += montant;
-    else groupedRevenueLines.push({ key, montant });
-  };
-  PS.baseRows.forEach(a => addRevenueLine(
-    a.account_label || `${a.poste_label}${a.team_name ? ' — ' + a.team_name : (a.category_name ? ' — ' + a.category_name + ' (catégorie)' : '')}`,
-    Number(a.montant) / periodDiv
-  ));
-  PS.indemnites.forEach(l => addRevenueLine(l.account_label || l.label || '—', Number(l.montant) || 0));
+  await fetchPayslipComputed();
+  const c = PS.computed;
+  if (!c) {
+    app.innerHTML = `<div style="padding:80px;text-align:center;max-width:520px;margin:0 auto;line-height:1.6">
+      <h2 style="margin-bottom:10px;color:var(--rouge)">Erreur de calcul</h2>
+      <p>${esc(PS.computeError || 'Erreur inconnue')}</p>
+      <p style="margin-top:16px"><a href="index.php">Retour au module RH</a></p></div>`;
+    return;
+  }
 
   const [y, m] = String(PS.month || '').split('-');
   const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
@@ -3024,7 +2960,7 @@ function renderPayslipDoc(){
      AAAA-MM_Décompte_Nom_Prénom. Recalculé à chaque rendu pour suivre un changement de mois. */
   document.title = `${y}-${m}_Décompte_${ee.last_name}_${ee.first_name}`;
 
-  /* Deux rendus distincts à partir des mêmes données calculées ci-dessus, et non un seul
+  /* Deux rendus distincts à partir des mêmes données calculées côté serveur, et non un seul
      formulaire maquillé pour l'impression : un <input> gardait son rendu de champ de saisie
      au print (espacement, police, parfois les flèches du type number) même bordure masquée.
      - editable=true  : version écran, avec champs de saisie et boutons ✕ (jamais imprimée).
@@ -3070,12 +3006,11 @@ function renderPayslipDoc(){
       </tr>`;
     };
 
-    const autoLineRow = (l) => {
-      const idx = PS.autoLines.indexOf(l);
-      const hasRate = l.rate > 0 && l.override === null;
-      const base = hasRate ? chf(grossTotal) : '';
+    const chargeRow = (l) => {
+      const hasRate = l.rate > 0 && !(l.key in PS.overrides);
+      const base = hasRate ? chf(l.base) : '';
       const taux = hasRate ? pctSmart(l.rate)+' %' : '';
-      if (!editable) return row(esc(l.label), base, taux, '− ' + chf(l.montant));
+      if (!editable) return row(esc(l.label), base, taux, '− ' + chf(l.amount));
       return `<tr>
         <td style="padding:7px 10px 7px 0;overflow-wrap:anywhere">${esc(l.label)}</td>
         <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${base}</td>
@@ -3083,12 +3018,15 @@ function renderPayslipDoc(){
         <td style="padding:5px 0;text-align:right;white-space:nowrap">
           <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
             <span style="color:var(--gris)">−</span>
-            <input class="ps-input" type="number" step="0.05" value="${l.montant.toFixed(2)}" style="width:80px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums" onchange="overrideAutoLine(${idx}, this.value)">
-            <button onclick="removeAutoLine(${idx})" style="color:var(--rouge)" title="Retirer cette retenue">✕</button>
+            <input class="ps-input" type="number" step="0.05" value="${l.amount.toFixed(2)}" style="width:80px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums" onchange="overrideAutoLine('${l.key}', this.value)">
           </div>
         </td>
       </tr>`;
     };
+
+    const chargesHeaderLabel = 'Charges sociales' + (c.avs_reduction_applied
+      ? ` <span style="font-weight:400;color:var(--gris);text-transform:none;font-size:11.5px">— ${esc(c.avs_reduction_applied)}</span>`
+      : '');
 
     return `
       ${editable ? comptaAccountsDatalist('ps-account-options') : ''}
@@ -3100,7 +3038,7 @@ function renderPayslipDoc(){
           </div>
           <div style="text-align:right">
             <div class="sora" style="font-size:15px;font-weight:700;text-transform:capitalize">${esc(moisLabel)} ${esc(y||'')}</div>
-            <div style="font-size:11px;color:#C9C7BD;margin-top:2px">${PS.isSemestriel?'Période semestrielle':'Période mensuelle'}</div>
+            <div style="font-size:11px;color:#C9C7BD;margin-top:2px">${c.period_div === 2?'Période semestrielle':'Période mensuelle'}</div>
           </div>
         </div>
 
@@ -3130,19 +3068,19 @@ function renderPayslipDoc(){
             <tbody>
               ${row('Salaire brut', '', '', '', { bold: true, pad: '16px' })}
               ${editable
-                ? `${PS.baseRows.map(a => row(`${esc(a.poste_label)}${a.team_name?' — '+esc(a.team_name):(a.category_name?' — '+esc(a.category_name):'')}`, '', '', chf(Number(a.montant)/periodDiv))).join('')}
+                ? `${(ee.assignments||[]).filter(a => Number(a.season_id) === PS.seasonId).map(a => row(`${esc(a.poste_label)}${a.team_name?' — '+esc(a.team_name):(a.category_name?' — '+esc(a.category_name):'')}`, '', '', chf(Number(a.montant)/c.period_div))).join('')}
                    ${PS.indemnites.map((l,i) => customRow('indemnites', i)).join('')}`
-                : groupedRevenueLines.map(l => row(esc(l.key) || '—', '', '', chf(l.montant))).join('')}
-              ${row('', '', '', chf(grossTotal), { bold: true, topBorder: true })}
+                : c.revenue_lines.map(l => row(esc(l.label) || '—', '', '', chf(l.montant))).join('')}
+              ${row('', '', '', chf(c.gross_total), { bold: true, topBorder: true })}
 
-              ${row('Charges sociales', '', '', '', { bold: true, pad: '22px' })}
-              ${autoLines.map(autoLineRow).join('')}
-              ${row('', '', '', '− ' + chf(ruleTotal), { bold: true, topBorder: true })}
+              ${row(chargesHeaderLabel, '', '', '', { bold: true, pad: '22px' })}
+              ${c.charge_lines.map(chargeRow).join('')}
+              ${row('', '', '', '− ' + chf(c.charges_total), { bold: true, topBorder: true })}
 
-              ${PS.retenues.length ? `
+              ${(c.divers_lines.length || PS.retenues.length) ? `
                 ${row('Divers', '', '', '', { bold: true, pad: '22px' })}
-                ${editable ? PS.retenues.map((l,i) => customRow('retenues', i)).join('') : PS.retenues.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(Number(l.montant) || 0))).join('')}
-                ${row('', '', '', '− ' + chf(manualRetenuesTotal), { bold: true, topBorder: true })}
+                ${editable ? PS.retenues.map((l,i) => customRow('retenues', i)).join('') : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
+                ${row('', '', '', '− ' + chf(c.divers_total), { bold: true, topBorder: true })}
               ` : ''}
             </tbody>
           </table>
@@ -3155,11 +3093,18 @@ function renderPayslipDoc(){
           </div>
           <div style="padding:14px 22px;background:var(--noir);color:#fff;display:flex;align-items:center;gap:16px;justify-content:flex-end;min-width:210px">
             <span style="font-size:12px;color:#C9C7BD">Salaire net</span>
-            <span class="sora" style="font-size:19px;font-weight:800;color:var(--jaune);font-variant-numeric:tabular-nums">${chf(net)}</span>
+            <span class="sora" style="font-size:19px;font-weight:800;color:var(--jaune);font-variant-numeric:tabular-nums">${chf(c.net)}</span>
           </div>
         </div>
       </div>`;
   }
+
+  // Avertissements du moteur (§9 SPEC) : rouge et bouton désactivé si bloquant (N° AVS
+  // invalide, net négatif, cumul franchise/abattement), orange sinon (ex: LPP sous le seuil).
+  const warningsBanner = c.warnings.length ? `
+    <div class="no-print" style="margin-bottom:16px;padding:12px 16px;border-radius:10px;border:1px solid ${c.blocking.length?'var(--rouge)':'#E9C77A'};background:${c.blocking.length?'#FDECEA':'#FFF8E6'};font-size:12.5px;line-height:1.5">
+      ${c.warnings.map(w => `<div>${c.blocking.includes(w) ? '🔴' : '⚠️'} ${esc(w)}</div>`).join('')}
+    </div>` : '';
 
   app.innerHTML = `
     <style>
@@ -3185,9 +3130,10 @@ function renderPayslipDoc(){
         <button class="btn btn-ghost btn-sm" onclick="addPayslipLine('indemnites')">+ Indemnité</button>
         <button class="btn btn-ghost btn-sm" onclick="addPayslipLine('retenues')">+ Retenue</button>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="window.print()" title="Aperçu à l'écran via l'impression du navigateur, dépannage seulement">Aperçu</button>
-        <button class="btn btn-primary" onclick="generatePayslipPdf(this)">Générer le PDF</button>
+        <button class="btn btn-primary" ${c.blocking.length?'disabled title="Corriger les contrôles bloquants ci-dessus avant de générer"':''} onclick="generatePayslipPdf(this)">Générer le PDF</button>
       </div>
-      <p class="no-print hint" style="margin:-10px 0 16px">Cet encadré sert à ajuster le décompte. "Générer le PDF" produit un vrai fichier PDF (mis en page par le serveur, identique quel que soit le navigateur) et l'enregistre automatiquement pour cette période — c'est lui qui part à l'employé.</p>
+      <p class="no-print hint" style="margin:-10px 0 16px">Cet encadré sert à ajuster le décompte. "Générer le PDF" calcule, verrouille et enregistre le décompte pour cette période — c'est lui qui part à l'employé.</p>
+      ${warningsBanner}
 
       <div id="ps-edit">${payslipCardHTML(true)}</div>
       <div id="ps-print">${payslipCardHTML(false)}</div>
@@ -3197,18 +3143,12 @@ function renderPayslipDoc(){
 
 /* ============================================================ DÉCOMPTE DE PAIE JOUEUR (page autonome, nouvel onglet)
  *
- * Même principe que le décompte employé (calcul à l'écran, PDF natif généré par le serveur),
- * en plus simple : pas de postes/équipes à regrouper, juste salaire fixe + primes du mois.
- * Deux particularités propres aux joueurs (et non aux employés) :
- * - l'abattement AVS (2500.-/semestre, 416.67 CHF/mois) qui réduit la base de calcul des
- *   charges sociales sans toucher au salaire brut affiché ;
- * - la retenue lavage, calculée automatiquement si le brut du mois dépasse un seuil réglé
- *   dans Paramètres > Paie, mais qui reste modifiable/supprimable comme une charge sociale.
+ * Même principe que le décompte employé : seule source de vérité du calcul, le serveur
+ * (payslip_compute / player_payslip_pdf), pas ce fichier. Deux particularités propres aux
+ * joueurs (et non aux employés), gérées par le moteur : l'abattement AVS minime importance
+ * (paramétré et daté, Paramètres > Paie) et la retenue lavage automatique.
  */
-const AVS_ABATEMENT_MONTHLY = 2500 / 6;
-
-let PSP = { player: null, primesMois: 0, rateSettings: null, playerId: null,
-            autoLines: [], autoDivers: [], retenues: [], month: new Date().toISOString().slice(0,7) };
+let PSP = { player: null, playerId: null, retenues: [], overrides: {}, month: new Date().toISOString().slice(0,7), computed: null };
 
 async function renderPlayerPayslipPage(playerId, month){
   const app = document.getElementById('app');
@@ -3224,40 +3164,15 @@ async function renderPlayerPayslipPage(playerId, month){
     return;
   }
   PSP.playerId = playerId; PSP.month = month;
-  PSP.player = ctx.player; PSP.primesMois = Number(ctx.primes_mois) || 0; PSP.rateSettings = ctx.rate_settings;
-  buildPlayerAutoLines();
+  PSP.player = ctx.player;
   PSP.retenues = [];
-  renderPlayerPayslipDoc();
-}
-
-/** Base brute du mois (salaire + primes), et lignes automatiques recalculées depuis elle :
- * charges sociales (assujettissements de la fiche joueur, taux partagés de l'année) et
- * retenue lavage (seuil/montant/compte réglés dans Paramètres > Paie). Refait à chaque
- * changement de mois, les primes et donc le brut en dépendant. */
-function buildPlayerAutoLines(){
-  const p = PSP.player;
-  const gross = Number(p.salaire_mensuel) + PSP.primesMois;
-  const abatementActive = Number(p.avs_abatement) === 1;
-  const chargeBase = abatementActive ? Math.max(0, gross - AVS_ABATEMENT_MONTHLY) : gross;
-  PSP.autoLines = SHARED_SOCIAL_LINES
-    .filter(l => Number(p[l.k + '_subject']) === 1)
-    .map(l => ({ label: l.label, rate: Number(PSP.rateSettings[l.k + '_rate']) || 0, base: chargeBase, fixed: 0, override: null, removed: false }));
-  const threshold = Number(PSP.rateSettings.lavage_threshold) || 0;
-  const amount = Number(PSP.rateSettings.lavage_amount) || 0;
-  PSP.autoDivers = (amount > 0 && gross > threshold)
-    ? [{ label: PSP.rateSettings.lavage_account_label || 'Retenue lavage', rate: 0, base: 0, fixed: amount, override: null, removed: false }]
-    : [];
+  PSP.overrides = {};
+  await renderPlayerPayslipDoc();
 }
 
 async function changePlayerPayslipMonth(value){
   PSP.month = value;
-  try {
-    const ctx = await api('player_payslip_context', { params: { player_id: PSP.playerId, month: PSP.month } });
-    PSP.primesMois = Number(ctx.primes_mois) || 0;
-    PSP.rateSettings = ctx.rate_settings;
-    buildPlayerAutoLines();
-  } catch (e) { /* affichage inchangé si l'appel échoue, le mois reste modifiable */ }
-  renderPlayerPayslipDoc();
+  await renderPlayerPayslipDoc();
 }
 
 function addPlayerPayslipLine(){ PSP.retenues.push({ label: '', montant: 0 }); renderPlayerPayslipDoc(); }
@@ -3266,81 +3181,38 @@ function updatePlayerPayslipLine(i, field, el){
   PSP.retenues[i][field] = field === 'montant' ? (Number(el.value) || 0) : el.value;
   renderPlayerPayslipDoc();
 }
-/* Corriger une ligne automatique (charge ou retenue lavage) la fige, comme sur le décompte
-   employé : vider le champ lui rend son calcul normal. */
-function overridePlayerAutoLine(type, i, value){
+/* Corriger une charge calculée par le serveur la fige, comme sur le décompte employé (même
+   remarque : ce n'est plus une suppression silencieuse, voir overrideAutoLine plus haut). */
+function overridePlayerAutoLine(key, value){
   const v = String(value).trim();
-  const arr = type === 'charges' ? PSP.autoLines : PSP.autoDivers;
-  arr[i].override = v === '' ? null : (Number(v) || 0);
-  renderPlayerPayslipDoc();
-}
-function removePlayerAutoLine(type, i){
-  const arr = type === 'charges' ? PSP.autoLines : PSP.autoDivers;
-  arr[i].removed = true;
+  if (v === '') delete PSP.overrides[key]; else PSP.overrides[key] = Number(v) || 0;
   renderPlayerPayslipDoc();
 }
 
-function buildPlayerPayslipPayload(){
-  const p = PSP.player;
-  const gross = Number(p.salaire_mensuel) + PSP.primesMois;
-  const abatementActive = Number(p.avs_abatement) === 1;
-  const chargeBase = abatementActive ? Math.max(0, gross - AVS_ABATEMENT_MONTHLY) : gross;
-  const autoLines = PSP.autoLines.filter(l => !l.removed).map(l => ({
-    ...l, montant: l.override !== null ? l.override : (chargeBase * l.rate / 100),
-  }));
-  const chargesTotal = autoLines.reduce((s, l) => s + l.montant, 0);
-  const autoDivers = PSP.autoDivers.filter(l => !l.removed).map(l => ({
-    ...l, montant: l.override !== null ? l.override : l.fixed,
-  }));
-  const manualRetenuesTotal = PSP.retenues.reduce((s, l) => s + (Number(l.montant) || 0), 0);
-  const diversTotal = autoDivers.reduce((s, l) => s + l.montant, 0) + manualRetenuesTotal;
-  const net = gross - chargesTotal - diversTotal;
-
-  const [y, m] = String(PSP.month || '').split('-');
-  const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
-
-  // Deux sources distinctes (fiche joueur vs onglet Primes), jamais fusionnées : chacune
-  // garde sa propre ligne, sous l'intitulé de son compte réglé dans Paramètres > Paie.
-  const salaryLabel = PSP.rateSettings.player_salary_account_label || 'Indemnité joueurs';
-  const bonusLabel = PSP.rateSettings.player_bonus_account_label || 'Primes de match';
-  const revenue = [{ label: salaryLabel, montant: chf(Number(p.salaire_mensuel)) }];
-  if (PSP.primesMois > 0) revenue.push({ label: bonusLabel, montant: chf(PSP.primesMois) });
-
-  return {
-    player_id: PSP.playerId,
-    month: PSP.month,
-    header: {
-      collab_id: p.id, avs: '',
-      first_name: p.first_name, last_name: p.last_name,
-      street: p.adresse || '', zip: p.npa || '', city: p.ville || '', country: '',
-      period_label: `${moisLabel} ${y || ''}`.trim(),
-      is_semestriel: false,
-      iban: p.iban || '',
-    },
-    revenue,
-    gross_total: chf(gross),
-    charges: autoLines.map(l => ({ label: l.label, base: chf(chargeBase), taux: pctSmart(l.rate) + ' %', montant: '− ' + chf(l.montant) })),
-    charges_total: '− ' + chf(chargesTotal),
-    charges_note: abatementActive ? `Base réduite de l'abattement AVS (${chf(AVS_ABATEMENT_MONTHLY)} CHF/mois)` : '',
-    divers: autoDivers.map(l => ({ label: l.label, montant: '− ' + chf(l.montant) }))
-      .concat(PSP.retenues.map(l => ({ label: l.label || '—', montant: '− ' + chf(Number(l.montant) || 0) }))),
-    divers_total: '− ' + chf(diversTotal),
-    net: chf(net),
-  };
+async function fetchPlayerPayslipComputed(){
+  try {
+    PSP.computed = await api('payslip_compute', { method: 'POST', body: {
+      person_type: 'player', person_id: PSP.playerId, month: PSP.month,
+      retenues: PSP.retenues, overrides: PSP.overrides,
+    }});
+    PSP.computeError = null;
+  } catch (e) { PSP.computed = null; PSP.computeError = e.message; }
 }
 
 async function generatePlayerPayslipPdf(btn){
   const originalText = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Génération…'; }
   try {
-    const payload = buildPlayerPayslipPayload();
-    const blob = await api('player_payslip_pdf', { method: 'POST', body: payload });
+    const blob = await api('player_payslip_pdf', { method: 'POST', body: {
+      player_id: PSP.playerId, month: PSP.month, retenues: PSP.retenues, overrides: PSP.overrides,
+    }});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${payload.month}_Décompte_${PSP.player.last_name}_${PSP.player.first_name}.pdf`;
+    a.download = `${PSP.month}_Décompte_${PSP.player.last_name}_${PSP.player.first_name}.pdf`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
+    await renderPlayerPayslipDoc();
   } catch (e) {
     alert('Échec de la génération du PDF : ' + e.message);
   } finally {
@@ -3348,20 +3220,18 @@ async function generatePlayerPayslipPdf(btn){
   }
 }
 
-function renderPlayerPayslipDoc(){
+async function renderPlayerPayslipDoc(){
   const app = document.getElementById('app');
   const p = PSP.player;
-  const gross = Number(p.salaire_mensuel) + PSP.primesMois;
-  const abatementActive = Number(p.avs_abatement) === 1;
-  const chargeBase = abatementActive ? Math.max(0, gross - AVS_ABATEMENT_MONTHLY) : gross;
-  const autoLines = PSP.autoLines.filter(l => !l.removed);
-  autoLines.forEach(l => { l.montant = l.override !== null ? l.override : (chargeBase * l.rate / 100); });
-  const chargesTotal = autoLines.reduce((s, l) => s + l.montant, 0);
-  const autoDivers = PSP.autoDivers.filter(l => !l.removed);
-  autoDivers.forEach(l => { l.montant = l.override !== null ? l.override : l.fixed; });
-  const manualRetenuesTotal = PSP.retenues.reduce((s, l) => s + (Number(l.montant) || 0), 0);
-  const diversTotal = autoDivers.reduce((s, l) => s + l.montant, 0) + manualRetenuesTotal;
-  const net = gross - chargesTotal - diversTotal;
+  await fetchPlayerPayslipComputed();
+  const c = PSP.computed;
+  if (!c) {
+    app.innerHTML = `<div style="padding:80px;text-align:center;max-width:520px;margin:0 auto;line-height:1.6">
+      <h2 style="margin-bottom:10px;color:var(--rouge)">Erreur de calcul</h2>
+      <p>${esc(PSP.computeError || 'Erreur inconnue')}</p>
+      <p style="margin-top:16px"><a href="index.php">Retour au module RH</a></p></div>`;
+    return;
+  }
 
   const [y, m] = String(PSP.month || '').split('-');
   const moisLabel = PAYSLIP_MONTH_LABELS[(Number(m) || 1) - 1] || '';
@@ -3375,13 +3245,11 @@ function renderPlayerPayslipDoc(){
       <td style="padding:${opts.pad||'7px'} 0 7px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;${opts.bold?'font-weight:700':''}">${montant}</td>
     </tr>`;
 
-    const autoLineRow = (type, l) => {
-      const arr = type === 'charges' ? autoLines : autoDivers;
-      const idx = arr.indexOf(l);
-      const hasRate = l.rate > 0 && l.override === null;
-      const base = hasRate ? chf(chargeBase) : '';
+    const chargeRow = (l) => {
+      const hasRate = l.rate > 0 && !(l.key in PSP.overrides);
+      const base = hasRate ? chf(l.base) : '';
       const taux = hasRate ? pctSmart(l.rate) + ' %' : '';
-      if (!editable) return row(esc(l.label), base, taux, '− ' + chf(l.montant));
+      if (!editable) return row(esc(l.label), base, taux, '− ' + chf(l.amount));
       return `<tr>
         <td style="padding:7px 10px 7px 0">${esc(l.label)}</td>
         <td style="padding:7px 10px 7px 0;text-align:right;color:var(--gris);font-variant-numeric:tabular-nums;white-space:nowrap">${base}</td>
@@ -3389,8 +3257,7 @@ function renderPlayerPayslipDoc(){
         <td style="padding:5px 0;text-align:right;white-space:nowrap">
           <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
             <span style="color:var(--gris)">−</span>
-            <input class="ps-input" type="number" step="0.05" value="${l.montant.toFixed(2)}" style="width:80px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums" onchange="overridePlayerAutoLine('${type}',${idx}, this.value)">
-            <button onclick="removePlayerAutoLine('${type}',${idx})" style="color:var(--rouge)" title="Retirer cette ligne">✕</button>
+            <input class="ps-input" type="number" step="0.05" value="${l.amount.toFixed(2)}" style="width:80px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums" onchange="overridePlayerAutoLine('${l.key}', this.value)">
           </div>
         </td>
       </tr>`;
@@ -3411,12 +3278,11 @@ function renderPlayerPayslipDoc(){
       </tr>`;
     };
 
-    const chargesHeaderLabel = 'Charges sociales' + (abatementActive
-      ? ` <span style="font-weight:400;color:var(--gris);text-transform:none;font-size:11.5px">— base réduite de l'abattement AVS (${chf(AVS_ABATEMENT_MONTHLY)} CHF/mois)</span>`
+    const chargesHeaderLabel = 'Charges sociales' + (c.avs_reduction_applied
+      ? ` <span style="font-weight:400;color:var(--gris);text-transform:none;font-size:11.5px">— ${esc(c.avs_reduction_applied)}</span>`
       : '');
 
     return `
-      ${editable ? comptaAccountsDatalist('psp-account-options') : ''}
       <div style="background:#fff;${editable?'border:1px solid var(--ligne);border-radius:16px;box-shadow:var(--ombre);':''}overflow:hidden;font-size:12.5px;line-height:1.5">
         <div style="background:var(--noir);color:#fff;padding:22px 30px;display:flex;align-items:center;justify-content:space-between;gap:16px">
           <div>
@@ -3451,19 +3317,17 @@ function renderPlayerPayslipDoc(){
             </tr></thead>
             <tbody>
               ${row('Salaire brut', '', '', '', { bold: true, pad: '16px' })}
-              ${row(esc(PSP.rateSettings.player_salary_account_label || 'Indemnité joueurs'), '', '', chf(Number(p.salaire_mensuel)))}
-              ${PSP.primesMois > 0 ? row(esc(PSP.rateSettings.player_bonus_account_label || 'Primes de match'), '', '', chf(PSP.primesMois)) : ''}
-              ${row('', '', '', chf(gross), { bold: true, topBorder: true })}
+              ${c.revenue_lines.map(l => row(esc(l.label) || '—', '', '', chf(l.montant))).join('')}
+              ${row('', '', '', chf(c.gross_total), { bold: true, topBorder: true })}
 
               ${row(chargesHeaderLabel, '', '', '', { bold: true, pad: '22px' })}
-              ${autoLines.length ? autoLines.map(l => autoLineRow('charges', l)).join('') : `<tr><td colspan="4" style="padding:8px 0;color:var(--gris)">Aucun assujettissement coché sur la fiche joueur.</td></tr>`}
-              ${row('', '', '', '− ' + chf(chargesTotal), { bold: true, topBorder: true })}
+              ${c.charge_lines.length ? c.charge_lines.map(chargeRow).join('') : `<tr><td colspan="4" style="padding:8px 0;color:var(--gris)">Aucun assujettissement coché sur la fiche joueur.</td></tr>`}
+              ${row('', '', '', '− ' + chf(c.charges_total), { bold: true, topBorder: true })}
 
-              ${(autoDivers.length || PSP.retenues.length) ? `
+              ${(c.divers_lines.length || PSP.retenues.length) ? `
                 ${row('Divers', '', '', '', { bold: true, pad: '22px' })}
-                ${autoDivers.map(l => autoLineRow('divers', l)).join('')}
-                ${PSP.retenues.map((l,i) => retenueRow(i)).join('')}
-                ${row('', '', '', '− ' + chf(diversTotal), { bold: true, topBorder: true })}
+                ${editable ? PSP.retenues.map((l,i) => retenueRow(i)).join('') : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
+                ${row('', '', '', '− ' + chf(c.divers_total), { bold: true, topBorder: true })}
               ` : ''}
             </tbody>
           </table>
@@ -3476,11 +3340,16 @@ function renderPlayerPayslipDoc(){
           </div>
           <div style="padding:14px 22px;background:var(--noir);color:#fff;display:flex;align-items:center;gap:16px;justify-content:flex-end;min-width:210px">
             <span style="font-size:12px;color:#C9C7BD">Salaire net</span>
-            <span class="sora" style="font-size:19px;font-weight:800;color:var(--jaune);font-variant-numeric:tabular-nums">${chf(net)}</span>
+            <span class="sora" style="font-size:19px;font-weight:800;color:var(--jaune);font-variant-numeric:tabular-nums">${chf(c.net)}</span>
           </div>
         </div>
       </div>`;
   }
+
+  const warningsBanner = c.warnings.length ? `
+    <div class="no-print" style="margin-bottom:16px;padding:12px 16px;border-radius:10px;border:1px solid ${c.blocking.length?'var(--rouge)':'#E9C77A'};background:${c.blocking.length?'#FDECEA':'#FFF8E6'};font-size:12.5px;line-height:1.5">
+      ${c.warnings.map(w => `<div>${c.blocking.includes(w) ? '🔴' : '⚠️'} ${esc(w)}</div>`).join('')}
+    </div>` : '';
 
   app.innerHTML = `
     <style>
@@ -3500,9 +3369,10 @@ function renderPlayerPayslipDoc(){
         <div class="month-picker"><input type="month" value="${esc(PSP.month)}" onchange="changePlayerPayslipMonth(this.value)"></div>
         <button class="btn btn-ghost btn-sm" onclick="addPlayerPayslipLine()">+ Retenue</button>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="window.print()" title="Aperçu à l'écran via l'impression du navigateur, dépannage seulement">Aperçu</button>
-        <button class="btn btn-primary" onclick="generatePlayerPayslipPdf(this)">Générer le PDF</button>
+        <button class="btn btn-primary" ${c.blocking.length?'disabled title="Corriger les contrôles bloquants ci-dessus avant de générer"':''} onclick="generatePlayerPayslipPdf(this)">Générer le PDF</button>
       </div>
-      <p class="no-print hint" style="margin:-10px 0 16px">Cet encadré sert à ajuster le décompte. "Générer le PDF" produit un vrai fichier PDF et l'enregistre automatiquement pour cette période — c'est lui qui part au joueur.</p>
+      <p class="no-print hint" style="margin:-10px 0 16px">Cet encadré sert à ajuster le décompte. "Générer le PDF" calcule, verrouille et enregistre le décompte pour cette période — c'est lui qui part au joueur.</p>
+      ${warningsBanner}
 
       <div id="psp-edit">${payslipCardHTML(true)}</div>
       <div id="psp-print">${payslipCardHTML(false)}</div>

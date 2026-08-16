@@ -26,6 +26,7 @@ register_shutdown_function(function () {
 
 require_once __DIR__ . '/mfc_boot.php';
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/lib_payroll_engine.php';
 
 /* Session ERP + accès au module. Répond 401/403 en JSON si besoin.
    $rh_session est conservé : le reste du fichier s'en sert déjà. */
@@ -313,6 +314,22 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'payroll_rate_settings', 'player_bonus_account_number', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'payroll_rate_settings', 'player_bonus_account_label', "TEXT NOT NULL DEFAULT ''");
 
+  /* Moteur de paie (2026-08-16) : plafonds légaux et franchises, datés comme les taux
+     ci-dessus. Valeurs 2026 fournies en amorçage (voir GAP-ANALYSIS-RH.md) — à faire
+     valider par l'OCAS et AXA avant tout usage en production, comme le reste des
+     paramètres de cette table. Remplace la constante JS AVS_ABATEMENT_MONTHLY : l'abattement
+     minime importance devient un paramètre daté, plus une valeur figée dans le navigateur. */
+  ensure_column($pdo, 'payroll_rate_settings', 'ac_ceiling', 'REAL NOT NULL DEFAULT 148200');
+  ensure_column($pdo, 'payroll_rate_settings', 'laa_ceiling', 'REAL NOT NULL DEFAULT 148200');
+  ensure_column($pdo, 'payroll_rate_settings', 'lpp_ceiling', 'REAL NOT NULL DEFAULT 90720');
+  ensure_column($pdo, 'payroll_rate_settings', 'lpp_entry_threshold', 'REAL NOT NULL DEFAULT 22680');
+  ensure_column($pdo, 'payroll_rate_settings', 'lpp_coordination_deduction', 'REAL NOT NULL DEFAULT 26460');
+  ensure_column($pdo, 'payroll_rate_settings', 'lpp_coordinated_min', 'REAL NOT NULL DEFAULT 3780');
+  ensure_column($pdo, 'payroll_rate_settings', 'avs_rentier_franchise_monthly', 'REAL NOT NULL DEFAULT 1400');
+  ensure_column($pdo, 'payroll_rate_settings', 'avs_rentier_franchise_annual', 'REAL NOT NULL DEFAULT 16800');
+  ensure_column($pdo, 'payroll_rate_settings', 'avs_minime_threshold', 'REAL NOT NULL DEFAULT 2500');
+  ensure_column($pdo, 'payroll_rate_settings', 'avs_minime_abatement_semestriel', 'REAL NOT NULL DEFAULT 2500');
+
   /* Références administratives des assureurs et de la prévoyance (assureur LAA, n° de
      police, groupe LAA, institution et plan LPP, caisse d'allocations familiales) :
      plusieurs profils possibles (ex. "Staff" / "Joueurs"), un employé en choisit un.
@@ -337,6 +354,16 @@ function init_schema(PDO $pdo): void {
   // la part patronale (coût employeur, jamais retenue, dépend du salaire de la personne).
   ensure_column($pdo, 'employees', 'lpp_member_number',   "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'employees', 'lpp_employer_amount', 'REAL NOT NULL DEFAULT 0');
+
+  /* Moteur de paie (2026-08-16) : statut rentier AVS et renonciations, généralisés à tous
+     les employés — jusqu'ici seul `players.avs_abatement` existait, réservé aux joueurs.
+     Franchise rentier et abattement minime importance sont exclusifs l'un de l'autre
+     (§6.2.4 SPEC RH/Paie) : le moteur de calcul le vérifie, ces deux colonnes n'empêchent
+     pas à elles seules de les cocher toutes les deux, d'où le contrôle bloquant séparé. */
+  ensure_column($pdo, 'employees', 'avs_rentier', 'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'employees', 'avs_rentier_since', "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'employees', 'avs_franchise_renonce', 'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'employees', 'avs_minime_renonce', 'INTEGER NOT NULL DEFAULT 0');
 
   /* Reprise unique : si d'anciennes colonnes laa_insurer/laa_policy/laa_group/lpp_institution/
      lpp_plan/caf_fund/caf_number existent encore sur employees (fenêtre du 2026-08-14) et
@@ -716,6 +743,38 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'payroll_payments', 'payslip_path', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'payroll_payments', 'payslip_filename', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'payroll_payments', 'sent_at', 'TEXT');
+
+  /* Moteur de paie (2026-08-16) : le décompte calculé par compute_payslip() est persisté
+     ici plutôt que dans une table séparée — payroll_payments est déjà la ligne "un décompte
+     par personne et par mois" (UNIQUE person_type/person_id/period), c'était l'attache
+     naturelle. `locked=1` dès qu'un PDF a été généré via payslip_pdf/player_payslip_pdf :
+     le serveur refuse alors toute réécriture des lignes (immutabilité, §5.4 SPEC). Les
+     décomptes déposés manuellement avant cette phase (payslip_path rempli, gross_total NULL)
+     restent affichables tels quels, marqués locked=1 sans recalcul rétroactif. */
+  ensure_column($pdo, 'payroll_payments', 'gross_total', 'REAL');
+  ensure_column($pdo, 'payroll_payments', 'net_amount', 'REAL');
+  ensure_column($pdo, 'payroll_payments', 'legal_reference_avs', 'REAL');
+  ensure_column($pdo, 'payroll_payments', 'params_year', 'INTEGER');
+  ensure_column($pdo, 'payroll_payments', 'computed_at', 'TEXT');
+  ensure_column($pdo, 'payroll_payments', 'locked', 'INTEGER NOT NULL DEFAULT 0');
+  $pdo->exec('UPDATE payroll_payments SET locked = 1 WHERE payslip_path != \'\' AND locked = 0');
+
+  /* Lignes du décompte, copiées au moment du calcul (base et taux réellement utilisés, pas
+     une référence recalculable) — même principe que compta.invoices/invoice_lines
+     (compta/api.php) : reclasser un poste ou changer un taux l'an prochain ne doit jamais
+     réécrire un décompte déjà émis. */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_payment_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    payment_id INTEGER NOT NULL REFERENCES payroll_payments(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK(kind IN ('revenue','charge','divers')),
+    line_key TEXT NOT NULL DEFAULT '',
+    label TEXT NOT NULL DEFAULT '',
+    base REAL,
+    rate REAL,
+    amount REAL NOT NULL DEFAULT 0,
+    is_legal_reference INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0
+  )");
 
   $pdo->exec("CREATE TABLE IF NOT EXISTS imports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1402,6 +1461,9 @@ function employee_fiche_fields(): array {
     // foreign_keys=ON, et aucun profil n'a l'id 0).
     'insurance_profile_id' => 'nullint',
     'lpp_member_number' => 'str', 'lpp_employer_amount' => 'float',
+    // Statut rentier AVS et renonciations (moteur de paie, 2026-08-16)
+    'avs_rentier' => 'bool', 'avs_rentier_since' => 'str',
+    'avs_franchise_renonce' => 'bool', 'avs_minime_renonce' => 'bool',
   ];
 }
 
@@ -1443,7 +1505,8 @@ function employee_payroll_only_fields(): array {
           'insurance_profile_id', 'lpp_member_number', 'lpp_employer_amount',
           'avs_subject', 'ac_subject', 'amat_subject', 'aanp_subject', 'laac_subject', 'ijm_subject',
           'lpp_subject', 'lpp_rate', 'lpp_amount',
-          'is_subject', 'is_rate', 'is_amount'];
+          'is_subject', 'is_rate', 'is_amount',
+          'avs_rentier', 'avs_rentier_since', 'avs_franchise_renonce', 'avs_minime_renonce'];
 }
 
 /** Taux d'assurances sociales partagés d'une année civile. Retombe sur des zéros si
@@ -1458,7 +1521,15 @@ function payroll_rate_settings_for_year(PDO $pdo, int $year): array {
                    'lavage_threshold' => 300.0, 'lavage_amount' => 30.0,
                    'lavage_account_number' => '', 'lavage_account_label' => '',
                    'player_salary_account_number' => '', 'player_salary_account_label' => '',
-                   'player_bonus_account_number' => '', 'player_bonus_account_label' => ''];
+                   'player_bonus_account_number' => '', 'player_bonus_account_label' => '',
+                   // Plafonds/franchises : zéro par défaut serait dangereux (un plafond à 0 bloque
+                   // tout salaire). Une année non paramétrée retombe donc sur les valeurs légales
+                   // 2026 d'amorçage, pas sur zéro comme les taux ci-dessus.
+                   'ac_ceiling' => 148200.0, 'laa_ceiling' => 148200.0,
+                   'lpp_ceiling' => 90720.0, 'lpp_entry_threshold' => 22680.0,
+                   'lpp_coordination_deduction' => 26460.0, 'lpp_coordinated_min' => 3780.0,
+                   'avs_rentier_franchise_monthly' => 1400.0, 'avs_rentier_franchise_annual' => 16800.0,
+                   'avs_minime_threshold' => 2500.0, 'avs_minime_abatement_semestriel' => 2500.0];
 }
 
 /** Document PDF du décompte de paie (généré via Dompdf, voir case 'payslip_pdf').
@@ -1872,6 +1943,7 @@ const RH_PERMS = [
   'insurance_profiles'     => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
   'payslip_context'        => 'payroll.view',
   'player_payslip_context' => 'payroll.view',
+  'payslip_compute'        => 'payroll.view',
   'player_payslip_pdf'     => 'payroll.edit',
   'indemnites_custom'      => ['GET' => 'employees.view',  'write' => 'indemnites.edit'],
   'payroll_rules'          => ['GET' => 'payroll.view',    'write' => 'payroll.edit'],
@@ -2367,7 +2439,12 @@ switch ($action) {
     }
     if ($method === 'POST' || $method === 'PUT') {
       $year = i($b, 'year'); if (!$year) fail('year requis');
-      $rateCols = ['avs_rate','ac_rate','amat_rate','aanp_rate','laac_rate','ijm_rate','lavage_threshold','lavage_amount'];
+      $rateCols = ['avs_rate','ac_rate','amat_rate','aanp_rate','laac_rate','ijm_rate','lavage_threshold','lavage_amount',
+        // Plafonds et franchises légales (moteur de paie, 2026-08-16) : modifiables ici plutôt
+        // qu'en dur dans le code, pour suivre un changement de norme (ex: seuil de minime
+        // importance revalorisé) sans toucher au code.
+        'ac_ceiling','laa_ceiling','lpp_ceiling','lpp_entry_threshold','lpp_coordination_deduction','lpp_coordinated_min',
+        'avs_rentier_franchise_monthly','avs_rentier_franchise_annual','avs_minime_threshold','avs_minime_abatement_semestriel'];
       $strCols = ['lavage_account_number','lavage_account_label','player_salary_account_number','player_salary_account_label','player_bonus_account_number','player_bonus_account_label'];
       $cols = array_merge($rateCols, $strCols);
       $vals = array_merge(array_map(fn($c) => f($b, $c), $rateCols), array_map(fn($c) => s($b, $c), $strCols));
@@ -2441,26 +2518,81 @@ switch ($action) {
     ]);
   }
 
+  /* Aperçu en direct du décompte, non persisté : appelé à chaque changement (mois,
+     indemnité, retenue, override) pendant que le décompte est en cours de préparation à
+     l'écran. Seule source de vérité du calcul — remplace buildAutoLines/buildPayslipPayload
+     côté navigateur (voir lib_payroll_engine.php). */
+  case 'payslip_compute': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $person_type = s($b, 'person_type');
+    $person_id = i($b, 'person_id');
+    $month = s($b, 'month');
+    if (!$person_id || !preg_match('/^\d{4}-\d{2}$/', $month)) fail('person_id et month requis');
+    try {
+      $computed = compute_payslip(db(), $person_type, $person_id, $month, [
+        'season_id' => i($b, 'season_id'),
+        'indemnites' => is_array($b['indemnites'] ?? null) ? $b['indemnites'] : [],
+        'retenues' => is_array($b['retenues'] ?? null) ? $b['retenues'] : [],
+        'overrides' => is_array($b['overrides'] ?? null) ? $b['overrides'] : [],
+      ]);
+    } catch (InvalidArgumentException $e) {
+      fail($e->getMessage());
+    } catch (RuntimeException $e) {
+      fail($e->getMessage(), 404);
+    }
+    out($computed);
+  }
+
   /* Génère le PDF natif du décompte (Dompdf), à la place de l'impression navigateur.
-     Enregistre aussi directement le fichier dans payroll_payments, comme un dépôt manuel
-     (payments_upload) : plus besoin d'imprimer puis de re-déposer le fichier à la main. */
+     Le calcul est désormais fait ici (compute_payslip), pas relu depuis un payload client :
+     le client ne transmet plus que les lignes manuelles (indemnités/retenues/overrides), le
+     serveur reste seule autorité sur les bases, taux et montants. Le résultat est persisté et
+     verrouillé (payroll_payment_lines) avant génération du PDF, qui est donc construit à
+     partir des données enregistrées, pas du payload de la requête. */
   case 'payslip_pdf': {
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $employee_id = i($b, 'employee_id'); $month = s($b, 'month');
     if (!$employee_id || !preg_match('/^\d{4}-\d{2}$/', $month)) fail('employee_id et month requis');
-    $header = is_array($b['header'] ?? null) ? $b['header'] : [];
-    $revenue = is_array($b['revenue'] ?? null) ? $b['revenue'] : [];
-    $charges = is_array($b['charges'] ?? null) ? $b['charges'] : [];
-    $divers = is_array($b['divers'] ?? null) ? $b['divers'] : [];
 
     $pdo = db();
-    $st = $pdo->prepare('SELECT first_name, last_name FROM employees WHERE id = ?');
+    $st = $pdo->prepare('SELECT first_name, last_name, avs_number, street, zip, city, country, iban FROM employees WHERE id = ?');
     $st->execute([$employee_id]);
     $emp = $st->fetch();
     if (!$emp) fail('Employé introuvable', 404);
 
+    try {
+      $computed = compute_payslip($pdo, 'employee', $employee_id, $month, [
+        'season_id' => i($b, 'season_id'),
+        'indemnites' => is_array($b['indemnites'] ?? null) ? $b['indemnites'] : [],
+        'retenues' => is_array($b['retenues'] ?? null) ? $b['retenues'] : [],
+        'overrides' => is_array($b['overrides'] ?? null) ? $b['overrides'] : [],
+      ]);
+    } catch (InvalidArgumentException $e) {
+      fail($e->getMessage());
+    } catch (RuntimeException $e) {
+      fail($e->getMessage(), 404);
+    }
+    if ($computed['blocking']) fail('Contrôle bloquant : ' . implode(' / ', $computed['blocking']));
+
+    try {
+      $paymentId = persist_payslip_lines($pdo, $computed);
+    } catch (RuntimeException $e) {
+      fail($e->getMessage(), 409);
+    }
+
+    $header = [
+      'collab_id' => $employee_id, 'avs' => $emp['avs_number'],
+      'first_name' => $emp['first_name'], 'last_name' => $emp['last_name'],
+      'street' => $emp['street'], 'zip' => $emp['zip'], 'city' => $emp['city'], 'country' => $emp['country'],
+      'iban' => $emp['iban'], 'period_label' => payslip_month_label($month), 'is_semestriel' => $computed['period_div'] === 2,
+    ];
+    $charges = array_values(array_filter($computed['charge_lines'], fn($l) => empty($l['is_legal_reference'])));
+    $chargeRows = array_map(fn($l) => ['label' => $l['label'], 'base' => chf_fmt($l['base']), 'taux' => $l['rate'] > 0 ? pct_fmt($l['rate']) : '', 'montant' => '− ' . chf_fmt($l['amount'])], $charges);
+    $revenueRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => chf_fmt($l['montant'])], $computed['revenue_lines']);
+    $diversRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => '− ' . chf_fmt($l['montant'])], $computed['divers_lines']);
+
     require_once __DIR__ . '/../lib/vendor/autoload.php';
-    $html = render_payslip_pdf_html($header, $revenue, s($b, 'gross_total'), $charges, s($b, 'charges_total'), $divers, s($b, 'divers_total'), s($b, 'net'));
+    $html = render_payslip_pdf_html($header, $revenueRows, chf_fmt($computed['gross_total']), $chargeRows, chf_fmt($computed['charges_total']), $diversRows, chf_fmt($computed['divers_total']), chf_fmt($computed['net']), $computed['avs_reduction_applied']);
 
     $options = new \Dompdf\Options();
     $options->set('isRemoteEnabled', false);
@@ -2479,16 +2611,7 @@ switch ($action) {
     $path = $dir . '/' . $filename;
     $origName = "{$month}_Décompte_{$emp['last_name']}_{$emp['first_name']}.pdf";
     file_put_contents($path, $pdfContent);
-
-    $existing = $pdo->prepare('SELECT id, payslip_path FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
-    $existing->execute(['employee', $employee_id, $month]);
-    $exRow = $existing->fetch();
-    if ($exRow) {
-      $pdo->prepare('UPDATE payroll_payments SET payslip_path=?, payslip_filename=?, sent_at=NULL WHERE id=?')->execute([$path, $origName, $exRow['id']]);
-    } else {
-      $pdo->prepare('INSERT INTO payroll_payments (person_type, person_id, period, payslip_path, payslip_filename) VALUES (?,?,?,?,?)')
-        ->execute(['employee', $employee_id, $month, $path, $origName]);
-    }
+    $pdo->prepare('UPDATE payroll_payments SET payslip_path=?, payslip_filename=?, sent_at=NULL WHERE id=?')->execute([$path, $origName, $paymentId]);
 
     if (ob_get_level() > 0) ob_clean();
     header('Content-Type: application/pdf');
@@ -2522,26 +2645,53 @@ switch ($action) {
     ]);
   }
 
-  /* Même mécanique que payslip_pdf pour les employés : le calcul (charges, abattement,
-     retenue lavage) reste fait côté écran, cette route pose le résultat déjà mis en forme
-     dans un PDF et l'enregistre dans payroll_payments (person_type='player'). */
+  /* Même bascule que payslip_pdf : le calcul (charges, franchise/abattement AVS, retenue
+     lavage) est désormais fait ici par compute_payslip(), persisté et verrouillé avant
+     génération du PDF, plus relu depuis le payload du client. */
   case 'player_payslip_pdf': {
     if ($method !== 'POST') fail('Méthode non supportée', 405);
     $player_id = i($b, 'player_id'); $month = s($b, 'month');
     if (!$player_id || !preg_match('/^\d{4}-\d{2}$/', $month)) fail('player_id et month requis');
-    $header = is_array($b['header'] ?? null) ? $b['header'] : [];
-    $revenue = is_array($b['revenue'] ?? null) ? $b['revenue'] : [];
-    $charges = is_array($b['charges'] ?? null) ? $b['charges'] : [];
-    $divers = is_array($b['divers'] ?? null) ? $b['divers'] : [];
 
     $pdo = db();
-    $st = $pdo->prepare('SELECT first_name, last_name FROM players WHERE id = ?');
+    $st = $pdo->prepare('SELECT first_name, last_name, iban FROM players WHERE id = ?');
     $st->execute([$player_id]);
     $player = $st->fetch();
     if (!$player) fail('Joueur introuvable', 404);
 
+    try {
+      $computed = compute_payslip($pdo, 'player', $player_id, $month, [
+        'indemnites' => is_array($b['indemnites'] ?? null) ? $b['indemnites'] : [],
+        'retenues' => is_array($b['retenues'] ?? null) ? $b['retenues'] : [],
+        'overrides' => is_array($b['overrides'] ?? null) ? $b['overrides'] : [],
+      ]);
+    } catch (InvalidArgumentException $e) {
+      fail($e->getMessage());
+    } catch (RuntimeException $e) {
+      fail($e->getMessage(), 404);
+    }
+    if ($computed['blocking']) fail('Contrôle bloquant : ' . implode(' / ', $computed['blocking']));
+
+    try {
+      $paymentId = persist_payslip_lines($pdo, $computed);
+    } catch (RuntimeException $e) {
+      fail($e->getMessage(), 409);
+    }
+
+    $header = [
+      'collab_id' => $player_id, 'avs' => '', 'first_name' => $player['first_name'], 'last_name' => $player['last_name'],
+      'iban' => $player['iban'], 'period_label' => payslip_month_label($month), 'is_semestriel' => false,
+    ];
+    // avs_reduction_applied porte déjà la phrase complète avec le montant réel déduit sur ce
+    // décompte (ex: "Abattement OCAS : − CHF 416.65"), composée par compute_payslip().
+    $chargesNote = $computed['avs_reduction_applied'];
+    $charges = array_values(array_filter($computed['charge_lines'], fn($l) => empty($l['is_legal_reference'])));
+    $chargeRows = array_map(fn($l) => ['label' => $l['label'], 'base' => chf_fmt($l['base']), 'taux' => $l['rate'] > 0 ? pct_fmt($l['rate']) : '', 'montant' => '− ' . chf_fmt($l['amount'])], $charges);
+    $revenueRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => chf_fmt($l['montant'])], $computed['revenue_lines']);
+    $diversRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => '− ' . chf_fmt($l['montant'])], $computed['divers_lines']);
+
     require_once __DIR__ . '/../lib/vendor/autoload.php';
-    $html = render_payslip_pdf_html($header, $revenue, s($b, 'gross_total'), $charges, s($b, 'charges_total'), $divers, s($b, 'divers_total'), s($b, 'net'), s($b, 'charges_note'));
+    $html = render_payslip_pdf_html($header, $revenueRows, chf_fmt($computed['gross_total']), $chargeRows, chf_fmt($computed['charges_total']), $diversRows, chf_fmt($computed['divers_total']), chf_fmt($computed['net']), $chargesNote);
 
     $options = new \Dompdf\Options();
     $options->set('isRemoteEnabled', false);
@@ -2560,16 +2710,7 @@ switch ($action) {
     $path = $dir . '/' . $filename;
     $origName = "{$month}_Décompte_{$player['last_name']}_{$player['first_name']}.pdf";
     file_put_contents($path, $pdfContent);
-
-    $existing = $pdo->prepare('SELECT id, payslip_path FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
-    $existing->execute(['player', $player_id, $month]);
-    $exRow = $existing->fetch();
-    if ($exRow) {
-      $pdo->prepare('UPDATE payroll_payments SET payslip_path=?, payslip_filename=?, sent_at=NULL WHERE id=?')->execute([$path, $origName, $exRow['id']]);
-    } else {
-      $pdo->prepare('INSERT INTO payroll_payments (person_type, person_id, period, payslip_path, payslip_filename) VALUES (?,?,?,?,?)')
-        ->execute(['player', $player_id, $month, $path, $origName]);
-    }
+    $pdo->prepare('UPDATE payroll_payments SET payslip_path=?, payslip_filename=?, sent_at=NULL WHERE id=?')->execute([$path, $origName, $paymentId]);
 
     if (ob_get_level() > 0) ob_clean();
     header('Content-Type: application/pdf');
