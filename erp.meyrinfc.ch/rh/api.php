@@ -188,6 +188,16 @@ function init_schema(PDO $pdo): void {
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )");
 
+  /* Dashboard général (2026-08-18) : les primes de match sont variables et jamais connues
+     d'avance sur l'ensemble de la saison (elles dépendent des résultats), contrairement aux
+     indemnités et salaires qui sont budgétés. Un seul montant projeté par saison, saisi à la
+     main (aucune formule fiable pour le déduire du calendrier), affiché à côté du montant
+     réellement versé à ce jour — jamais à sa place, voir dashboard_accounts_breakdown(). */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_season_settings (
+    season_id INTEGER PRIMARY KEY REFERENCES seasons(id) ON DELETE CASCADE,
+    primes_projetees REAL NOT NULL DEFAULT 0
+  )");
+
   $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     first_name TEXT NOT NULL,
@@ -449,7 +459,19 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'employees', 'avs_rentier', 'INTEGER NOT NULL DEFAULT 0');
   ensure_column($pdo, 'employees', 'avs_rentier_since', "TEXT NOT NULL DEFAULT ''");
   ensure_column($pdo, 'employees', 'avs_franchise_renonce', 'INTEGER NOT NULL DEFAULT 0');
-  ensure_column($pdo, 'employees', 'avs_minime_renonce', 'INTEGER NOT NULL DEFAULT 0');
+  /* Abattement minime importance côté employés (2026-08-18) : réservé jusqu'ici aux joueurs
+     (players.avs_abatement). Demande explicite de Valentino : les entraîneurs (des employés,
+     pas des joueurs) doivent pouvoir en bénéficier aussi. Colonne renommée depuis
+     `avs_minime_renonce` (créée le 2026-08-16, jamais lue par le moteur : sa première version
+     appliquait l'abattement par défaut à TOUT employé sans case à cocher pour y renoncer,
+     bug découvert sur la fiche de Valentino lui-même, d'où le revert). Repartie sur un flag
+     explicite, décoché par défaut (comme players.avs_abatement), coché à la main sur la fiche
+     de la personne concernée : plus de risque d'abattement silencieux sur du personnel non
+     éligible. Voir la case à cocher dans l'onglet Assurances de la fiche employé. */
+  if (column_exists($pdo, 'employees', 'avs_minime_renonce') && !column_exists($pdo, 'employees', 'avs_minime_abatement')) {
+    $pdo->exec('ALTER TABLE employees RENAME COLUMN avs_minime_renonce TO avs_minime_abatement');
+  }
+  ensure_column($pdo, 'employees', 'avs_minime_abatement', 'INTEGER NOT NULL DEFAULT 0');
 
   /* Reprise unique : si d'anciennes colonnes laa_insurer/laa_policy/laa_group/lpp_institution/
      lpp_plan/caf_fund/caf_number existent encore sur employees (fenêtre du 2026-08-14) et
@@ -1086,6 +1108,143 @@ function compute_player_pay(PDO $pdo, string $month): array {
   return ['joueurs' => $out, 'primes_ponctuels' => $guestTotal];
 }
 
+/** Alertes anniversaire du Dashboard (2026-08-18), à 7 jours pile et le jour même. Couvre les
+ * employés actifs — les coachs n'ont pas d'existence séparée dans ce système, un coach EST un
+ * employé (employee_assignments) — et les joueurs actifs de la table `players`, qui ne contient
+ * que les salariés de la 1ère équipe (voir sync_employee_to_contacts et le module Paie joueurs) :
+ * ces deux tables couvrent donc exactement "employés, coachs et joueurs de la première". */
+function birthday_alerts(PDO $pdo): array {
+  $alerts = [];
+  $today = new DateTimeImmutable('today');
+  $check = function (string $name, string $birthDate) use (&$alerts, $today): void {
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $birthDate, $mm)) return;
+    $thisYear = DateTimeImmutable::createFromFormat('Y-m-d', $today->format('Y') . '-' . $mm[2] . '-' . $mm[3]);
+    if ($thisYear === false) return; // ex. 29 février saisi sur une fiche : ignoré silencieusement, cas trop rare pour justifier un traitement dédié
+    $next = $thisYear < $today ? $thisYear->modify('+1 year') : $thisYear;
+    $days = (int) $today->diff($next)->days;
+    if ($days === 0) $alerts[] = "🎂 Anniversaire de $name aujourd'hui !";
+    elseif ($days === 7) $alerts[] = "🎂 Anniversaire de $name dans 7 jours (le " . $next->format('d.m') . ')';
+  };
+
+  $st = $pdo->query("SELECT first_name, last_name, birth_date FROM employees WHERE active=1 AND birth_date != ''");
+  foreach ($st->fetchAll() as $e) $check(trim($e['first_name'] . ' ' . $e['last_name']), $e['birth_date']);
+
+  $st = $pdo->query("SELECT first_name, last_name, date_naissance FROM players WHERE active=1 AND is_guest=0 AND date_naissance != ''");
+  foreach ($st->fetchAll() as $p) $check(trim($p['first_name'] . ' ' . $p['last_name']), $p['date_naissance']);
+
+  return $alerts;
+}
+
+/** Alertes "documents manquants" du Dashboard (2026-08-18), une ligne par employé actif ayant
+ * au moins une pièce d'engagement obligatoire non reçue. Miroir server-side de DOC_TYPES dans
+ * index.html (required:true) — garder les deux synchronisés si une pièce obligatoire change.
+ * Le permis de séjour n'est obligatoire que pour un employé non suisse (permit_type renseigné),
+ * même règle que côté écran. */
+function missing_documents_alerts(PDO $pdo): array {
+  $required = [
+    'casier_special'        => 'Extrait spécial du casier judiciaire',
+    'contrat_signe'         => 'Contrat de travail signé',
+    'piece_identite'        => "Copie pièce d'identité",
+    'attestation_avs'       => 'Attestation AVS',
+    'coordonnees_bancaires' => 'Coordonnées bancaires',
+  ];
+  $employees = $pdo->query("SELECT id, first_name, last_name, permit_type FROM employees WHERE active=1")->fetchAll();
+  if (!$employees) return [];
+
+  $received = [];
+  foreach ($pdo->query('SELECT employee_id, doc_type, received FROM employee_documents')->fetchAll() as $d) {
+    if ((int)$d['received'] === 1) $received[(int)$d['employee_id']][$d['doc_type']] = true;
+  }
+
+  $alerts = [];
+  foreach ($employees as $e) {
+    $need = $required;
+    if (trim((string)$e['permit_type']) !== '') $need['permis_sejour'] = 'Permis de séjour / travail';
+    $missing = [];
+    foreach ($need as $k => $label) {
+      if (empty($received[(int)$e['id']][$k])) $missing[] = $label;
+    }
+    if ($missing) {
+      $name = trim($e['first_name'] . ' ' . $e['last_name']);
+      $alerts[] = [
+        'text' => "📄 $name — " . count($missing) . ' pièce(s) manquante(s) : ' . implode(', ', $missing),
+        'employee_id' => (int)$e['id'],
+      ];
+    }
+  }
+  return $alerts;
+}
+
+/** Ventilation par compte comptable pour le Dashboard général (2026-08-18) : une ligne par
+ * compte réellement utilisé, avec son montant annuel et le nombre de personnes distinctes
+ * concernées. Sert à la fois au filtre "compte comptable", au donut de composition et au
+ * tableau d'effectif — les trois lisent exactement les mêmes lignes, pour ne jamais afficher
+ * des chiffres qui se contredisent d'un bloc à l'autre.
+ *
+ * Trois familles de comptes :
+ * - 'poste' : un compte par poste d'employé (postes.account_number, groupé comme sur le PDF de
+ *   décompte — voir le regroupement de compute_payslip() — pas par libellé de poste, deux postes
+ *   différents peuvent partager un seul compte, ex. "Entraîneur assistant"/"Entraîneur gardiens"
+ *   -> "Indemnité entraîneur").
+ * - 'joueurs' : un compte unique pour le salaire fixe des joueurs de la 1ère équipe
+ *   (payroll_rate_settings.player_salary_account, réglage global, pas par joueur).
+ * - 'primes' : un compte unique pour les primes de match réellement versées depuis le début de
+ *   la saison (payroll_rate_settings.player_bonus_account), guests inclus (même règle que
+ *   l'ancien total mensuel, qui les comptait dans le total général sans les lister nommément).
+ *
+ * Un poste ou un compte joueur sans numéro configuré retombe sur son libellé comme clé de
+ * regroupement (pas sur "Sans compte" générique), pour ne jamais fusionner par erreur deux
+ * rubriques distinctes qui n'ont simplement pas encore de compte comptable paramétré. */
+function dashboard_accounts_breakdown(PDO $pdo, int $seasonId, array $season, array $rateSettings): array {
+  $accounts = [];
+  $touch = function (string $key, string $label, string $kind) use (&$accounts): void {
+    if (!isset($accounts[$key])) $accounts[$key] = ['key' => $key, 'label' => $label, 'montant' => 0.0, 'kind' => $kind, 'people' => []];
+  };
+
+  $st = $pdo->prepare("SELECT ea.employee_id, ea.montant, po.account_number, po.account_label, po.label AS poste_label
+    FROM employee_assignments ea
+    JOIN postes po ON po.id = ea.poste_id
+    JOIN employees e ON e.id = ea.employee_id AND e.active = 1
+    WHERE ea.active = 1 AND ea.season_id = ? AND ea.employee_id IS NOT NULL");
+  $st->execute([$seasonId]);
+  foreach ($st->fetchAll() as $r) {
+    $num = (string)$r['account_number'];
+    $label = (string)($r['account_label'] !== '' ? $r['account_label'] : $r['poste_label']);
+    $key = 'poste:' . ($num !== '' ? $num : ('label:' . $label));
+    $touch($key, $label, 'poste');
+    $accounts[$key]['montant'] += (float)$r['montant'];
+    $accounts[$key]['people'][(int)$r['employee_id']] = true;
+  }
+
+  $salLabel = (string)($rateSettings['player_salary_account_label'] ?? '') ?: 'Joueurs';
+  $salKey = 'joueurs:' . ((string)($rateSettings['player_salary_account_number'] ?? '') !== '' ? $rateSettings['player_salary_account_number'] : ('label:' . $salLabel));
+  foreach ($pdo->query('SELECT id, salaire_mensuel FROM players WHERE active=1 AND is_guest=0')->fetchAll() as $p) {
+    $touch($salKey, $salLabel, 'joueurs');
+    $accounts[$salKey]['montant'] += (float)$p['salaire_mensuel'] * 12;
+    $accounts[$salKey]['people']['p' . $p['id']] = true;
+  }
+
+  $bonLabel = (string)($rateSettings['player_bonus_account_label'] ?? '') ?: 'Prime de match';
+  $bonKey = 'primes:' . ((string)($rateSettings['player_bonus_account_number'] ?? '') !== '' ? $rateSettings['player_bonus_account_number'] : ('label:' . $bonLabel));
+  $stp = $pdo->prepare('SELECT mp.player_id, SUM(mp.montant) AS total FROM match_players mp
+    JOIN matches m ON m.id = mp.match_id
+    WHERE m.date >= ? AND m.date <= ? GROUP BY mp.player_id');
+  $stp->execute([$season['start_date'], $season['end_date']]);
+  foreach ($stp->fetchAll() as $r) {
+    if ((float)$r['total'] <= 0) continue;
+    $touch($bonKey, $bonLabel, 'primes');
+    $accounts[$bonKey]['montant'] += (float)$r['total'];
+    $accounts[$bonKey]['people']['p' . $r['player_id']] = true;
+  }
+
+  $out = [];
+  foreach ($accounts as $a) {
+    $out[] = ['key' => $a['key'], 'label' => $a['label'], 'montant' => round($a['montant'], 2), 'count' => count($a['people']), 'kind' => $a['kind']];
+  }
+  usort($out, fn($a, $b) => $b['montant'] <=> $a['montant']);
+  return $out;
+}
+
 /** Liste unifiée employés + joueurs à payer pour un mois donné (montant > 0 uniquement), pour l'onglet Paiements. */
 function compute_month_payments(PDO $pdo, string $month, int $season_id): array {
   $employeeData = compute_employee_indemnites($pdo, $month, $season_id);
@@ -1585,7 +1744,7 @@ function employee_fiche_fields(): array {
     'lpp_member_number' => 'str', 'lpp_employer_amount' => 'float',
     // Statut rentier AVS et renonciations (moteur de paie, 2026-08-16)
     'avs_rentier' => 'bool', 'avs_rentier_since' => 'str',
-    'avs_franchise_renonce' => 'bool', 'avs_minime_renonce' => 'bool',
+    'avs_franchise_renonce' => 'bool', 'avs_minime_abatement' => 'bool',
   ];
 }
 
@@ -1628,7 +1787,7 @@ function employee_payroll_only_fields(): array {
           'avs_subject', 'ac_subject', 'amat_subject', 'aanp_subject', 'laac_subject', 'ijm_subject',
           'lpp_subject', 'lpp_rate', 'lpp_amount',
           'is_subject', 'is_rate', 'is_amount',
-          'avs_rentier', 'avs_rentier_since', 'avs_franchise_renonce', 'avs_minime_renonce'];
+          'avs_rentier', 'avs_rentier_since', 'avs_franchise_renonce', 'avs_minime_abatement'];
 }
 
 /** Taux d'assurances sociales partagés d'une année civile. Retombe sur des zéros si
@@ -2048,6 +2207,7 @@ const RH_PERMS = [
   'category_totals'        => 'teams.view',
   'payment_totals'         => 'teams.view',
   'dashboard'              => 'teams.view',
+  'season_primes_projetees'=> 'payroll.edit',
   'employees'              => ['GET' => 'employees.view',  'write' => 'employees.edit'],
   'employee_assignments'   => ['GET' => 'employees.view',  'write' => 'employees.edit'],
   /* Les enfants servent aux allocations familiales et au barème d'impôt source :
@@ -2092,6 +2252,7 @@ const RH_PERMS = [
   'payments_file'          => 'payroll.view',
   'payments_upload'        => 'payroll.edit',
   'payments_send_email'    => 'payroll.edit',
+  'payments_delete_file'   => 'payroll.edit',
   'payslip_pdf'            => 'payroll.edit',
   /* Le lien personnel donne acces aux fiches de paie de la personne sans
      compte : le consulter revient a pouvoir le transmettre, d'ou payroll.view.
@@ -2321,7 +2482,7 @@ switch ($action) {
     }
     if ($method === 'POST') {
       $ln = s($b, 'last_name'); if (!$ln) fail('Nom requis');
-      $paiement = s($b, 'paiement', 'mensuel');
+      $paiement = s($b, 'paiement', 'semestriel');
       if (!in_array($paiement, ['mensuel', 'semestriel'], true)) fail('paiement invalide');
       $first = s($b, 'first_name'); $email = s($b, 'email'); $phone = s($b, 'phone'); $iban = s($b, 'iban');
       $st = db()->prepare('INSERT INTO employees (first_name,last_name,email,phone,iban,paiement) VALUES (?,?,?,?,?,?)');
@@ -2733,7 +2894,7 @@ switch ($action) {
     if ($computed['blocking']) fail('Contrôle bloquant : ' . implode(' / ', $computed['blocking']));
 
     try {
-      $paymentId = persist_payslip_lines($pdo, $computed);
+      $paymentId = persist_payslip_lines($pdo, $computed, ($rh_session['role'] ?? '') === 'admin');
     } catch (RuntimeException $e) {
       fail($e->getMessage(), 409);
     }
@@ -2749,10 +2910,10 @@ switch ($action) {
     $charges = array_values(array_filter($computed['charge_lines'], fn($l) => empty($l['is_legal_reference'])));
     $chargeRows = array_map(fn($l) => ['label' => $l['label'], 'base' => chf_fmt($l['base']), 'taux' => $l['rate'] > 0 ? pct_fmt($l['rate']) : '', 'montant' => '− ' . chf_fmt($l['amount'])], $charges);
     $revenueRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => chf_fmt($l['montant'])], $computed['revenue_lines']);
-    $diversRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => '− ' . chf_fmt($l['montant'])], $computed['divers_lines']);
+    $diversRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => divers_amount_fmt($l['montant'])], $computed['divers_lines']);
 
     require_once __DIR__ . '/../lib/vendor/autoload.php';
-    $html = render_payslip_pdf_html($header, $revenueRows, chf_fmt($computed['gross_total']), $chargeRows, chf_fmt($computed['charges_total']), $diversRows, chf_fmt($computed['divers_total']), chf_fmt($computed['net']), $computed['avs_reduction_applied']);
+    $html = render_payslip_pdf_html($header, $revenueRows, chf_fmt($computed['gross_total']), $chargeRows, chf_fmt($computed['charges_total']), $diversRows, divers_amount_fmt($computed['divers_total']), chf_fmt($computed['net']), $computed['avs_reduction_applied']);
 
     $options = new \Dompdf\Options();
     $options->set('isRemoteEnabled', false);
@@ -2833,7 +2994,7 @@ switch ($action) {
     if ($computed['blocking']) fail('Contrôle bloquant : ' . implode(' / ', $computed['blocking']));
 
     try {
-      $paymentId = persist_payslip_lines($pdo, $computed);
+      $paymentId = persist_payslip_lines($pdo, $computed, ($rh_session['role'] ?? '') === 'admin');
     } catch (RuntimeException $e) {
       fail($e->getMessage(), 409);
     }
@@ -2850,10 +3011,10 @@ switch ($action) {
     $charges = array_values(array_filter($computed['charge_lines'], fn($l) => empty($l['is_legal_reference'])));
     $chargeRows = array_map(fn($l) => ['label' => $l['label'], 'base' => chf_fmt($l['base']), 'taux' => $l['rate'] > 0 ? pct_fmt($l['rate']) : '', 'montant' => '− ' . chf_fmt($l['amount'])], $charges);
     $revenueRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => chf_fmt($l['montant'])], $computed['revenue_lines']);
-    $diversRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => '− ' . chf_fmt($l['montant'])], $computed['divers_lines']);
+    $diversRows = array_map(fn($l) => ['label' => $l['label'], 'montant' => divers_amount_fmt($l['montant'])], $computed['divers_lines']);
 
     require_once __DIR__ . '/../lib/vendor/autoload.php';
-    $html = render_payslip_pdf_html($header, $revenueRows, chf_fmt($computed['gross_total']), $chargeRows, chf_fmt($computed['charges_total']), $diversRows, chf_fmt($computed['divers_total']), chf_fmt($computed['net']), $chargesNote);
+    $html = render_payslip_pdf_html($header, $revenueRows, chf_fmt($computed['gross_total']), $chargeRows, chf_fmt($computed['charges_total']), $diversRows, divers_amount_fmt($computed['divers_total']), chf_fmt($computed['net']), $chargesNote);
 
     $options = new \Dompdf\Options();
     $options->set('isRemoteEnabled', false);
@@ -3369,49 +3530,108 @@ switch ($action) {
 
   /* ============ DASHBOARD ============ */
 
+  /* Dashboard général (2026-08-18, refonte demandée par Valentino) : n'est plus un dashboard
+     mensuel — il présente la saison entière (indemnités et salaires sont des montants annuels
+     par construction, voir employee_assignments.montant et players.salaire_mensuel × 12), avec
+     un filtre optionnel par compte comptable qui recalcule uniformément KPI, donut de
+     composition et tableau d'effectif à partir des mêmes lignes (dashboard_accounts_breakdown).
+     Le mois n'intervient plus ici ; Paiements et Primes gardent leur propre sélecteur de mois. */
   case 'dashboard': {
-    $month = s($_GET, 'month') ?: date('Y-m');
     $pdo = db();
     $season_id = i($_GET, 'season_id') ?: ensure_current_season($pdo);
-    $employeeData = compute_employee_indemnites($pdo, $month, $season_id);
-    $playerData = compute_player_pay($pdo, $month);
+    $accountFilter = s($_GET, 'account');
+    $seasonSt = $pdo->prepare('SELECT * FROM seasons WHERE id=?');
+    $seasonSt->execute([$season_id]);
+    $season = $seasonSt->fetch();
+    if (!$season) fail('Saison introuvable', 404);
+    $year = (int) substr($season['start_date'], 0, 4);
+    $rs = payroll_rate_settings_for_year($pdo, $year);
 
-    $totalEmployees = array_sum(array_column($employeeData['par_employee'], 'total'));
-    $totalSalaires = array_sum(array_column($playerData['joueurs'], 'salaire'));
-    $totalPrimes = array_sum(array_column($playerData['joueurs'], 'primes')) + $playerData['primes_ponctuels'];
+    $accounts = dashboard_accounts_breakdown($pdo, $season_id, $season, $rs);
+    $rows = $accountFilter !== '' ? array_values(array_filter($accounts, fn($a) => $a['key'] === $accountFilter)) : $accounts;
+
+    $sumKind = fn(string $kind) => round(array_sum(array_map(fn($a) => $a['kind'] === $kind ? $a['montant'] : 0, $rows)), 2);
+    $totalEmployes = $sumKind('poste');
+    $totalJoueurs  = $sumKind('joueurs');
+    $totalPrimes   = $sumKind('primes');
+    $totalMasse    = round($totalEmployes + $totalJoueurs + $totalPrimes, 2);
+
+    $primesProjetees = (float) ($pdo->query('SELECT primes_projetees FROM payroll_season_settings WHERE season_id = ' . (int)$season_id)->fetchColumn() ?: 0);
+    // Projection saison : ce que donnerait le total masse si les primes atteignaient le montant
+    // projeté plutôt que le montant réel à date — jamais substituée au total réel, juste affichée
+    // à côté (demande explicite : "le dashboard montre quand même la valeur actuelle").
+    $projectionMasse = round($totalEmployes + $totalJoueurs + max($totalPrimes, $primesProjetees), 2);
 
     $teamsCount = (int) $pdo->query('SELECT COUNT(*) FROM teams WHERE active=1')->fetchColumn();
     $employeesCount = (int) $pdo->query('SELECT COUNT(*) FROM employees WHERE active=1')->fetchColumn();
     $playersCount = (int) $pdo->query('SELECT COUNT(*) FROM players WHERE active=1 AND is_guest=0')->fetchColumn();
     $pendingImports = (int) $pdo->query("SELECT COUNT(*) FROM imports WHERE status='pending_review'")->fetchColumn();
 
-    $byTeamSt = $pdo->prepare("
-      SELECT t.id, t.name, tc.name AS category_name, COUNT(DISTINCT ea.employee_id) AS employes
-      FROM teams t LEFT JOIN team_categories tc ON tc.id = t.category_id
-      LEFT JOIN employee_assignments ea ON ea.team_id=t.id AND ea.active=1 AND ea.season_id=?
-      WHERE t.active=1 GROUP BY t.id ORDER BY tc.sort_order, t.sort_order
-    ");
-    $byTeamSt->execute([$season_id]);
-    $byTeam = $byTeamSt->fetchAll();
+    $tasks = [];
+    if ($pendingImports > 0) $tasks[] = "$pendingImports import(s) de feuille de primes en attente de validation";
 
-    $alerts = $employeeData['alerts'];
-    if ($pendingImports > 0) $alerts[] = "$pendingImports import(s) de feuille de primes en attente de validation";
+    /* Évolution mensuelle de la saison (nouveau graphique) : réutilise compute_month_payments(),
+       déjà la somme "dû ce mois-ci" employés + joueurs + primes de match pour l'onglet Paiements.
+       Un point par mois du 1er au dernier mois de la saison (bornes incluses) — les mois passés
+       montrent ce qui a réellement été dû (primes déjà jouées), les mois à venir ce qui est déjà
+       budgété (indemnités/salaires), sans les primes qui ne sont pas encore connues. Volontairement
+       non filtré par compte comptable : ce graphique reste une vue d'ensemble de la saison. */
+    $shortMonths = ['01'=>'Jan','02'=>'Fév','03'=>'Mar','04'=>'Avr','05'=>'Mai','06'=>'Juin',
+                    '07'=>'Juil','08'=>'Août','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Déc'];
+    $evolution = [];
+    $cursor = new DateTimeImmutable(substr($season['start_date'], 0, 7) . '-01');
+    $endCursor = new DateTimeImmutable(substr($season['end_date'], 0, 7) . '-01');
+    while ($cursor <= $endCursor) {
+      $mm = $cursor->format('Y-m');
+      $monthRows = compute_month_payments($pdo, $mm, $season_id);
+      $evolution[] = [
+        'month' => $mm,
+        'label' => ($shortMonths[$cursor->format('m')] ?? $cursor->format('m')) . ' ' . $cursor->format('y'),
+        'montant' => round(array_sum(array_column($monthRows, 'montant')), 2),
+      ];
+      $cursor = $cursor->modify('+1 month');
+    }
 
     out([
-      'month' => $month,
       'season_id' => $season_id,
+      'season_label' => $season['label'],
+      'account_filter' => $accountFilter,
+      'accounts' => $accounts, // catalogue complet (non filtré) : sert à peupler le sélecteur
       'totaux' => [
-        'indemnites_employes' => round($totalEmployees, 2),
-        'salaires_joueurs' => round($totalSalaires, 2),
-        'primes_joueurs' => round($totalPrimes, 2),
-        'total_general' => round($totalEmployees + $totalSalaires + $totalPrimes, 2),
+        'employes' => $totalEmployes,
+        'joueurs' => $totalJoueurs,
+        'primes_actuelles' => $totalPrimes,
+        'primes_projetees' => round($primesProjetees, 2),
+        'total_masse' => $totalMasse,
+        'projection_masse' => $projectionMasse,
       ],
       'compteurs' => ['teams' => $teamsCount, 'employees' => $employeesCount, 'players' => $playersCount],
-      'par_equipe' => $byTeam,
-      'employes' => $employeeData['par_employee'],
-      'joueurs' => $playerData['joueurs'],
-      'alerts' => array_values($alerts),
+      'effectif' => [
+        'total' => $employeesCount + $playersCount,
+        'total_montant' => $totalMasse,
+        'par_compte' => array_map(fn($a) => ['label' => $a['label'], 'count' => $a['count'], 'montant' => $a['montant'], 'kind' => $a['kind']], $rows),
+      ],
+      'composition' => array_map(fn($a) => ['label' => $a['label'], 'montant' => $a['montant'], 'kind' => $a['kind']], $rows),
+      'evolution_saison' => $evolution,
+      'alerts' => [
+        'taches' => $tasks,
+        'anniversaires' => birthday_alerts($pdo),
+        'documents' => missing_documents_alerts($pdo),
+      ],
     ]);
+  }
+
+  /* Montant projeté des primes de match pour la saison (Dashboard) : un nombre par saison,
+     saisi à la main faute de formule fiable pour le déduire du calendrier restant. */
+  case 'season_primes_projetees': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $season_id = i($b, 'season_id'); if (!$season_id) fail('season_id requis');
+    $montant = f($b, 'montant');
+    $pdo->prepare('INSERT INTO payroll_season_settings (season_id, primes_projetees) VALUES (?,?)
+      ON CONFLICT(season_id) DO UPDATE SET primes_projetees=excluded.primes_projetees')
+      ->execute([$season_id, $montant]);
+    out(['ok' => true]);
   }
 
   /* ============ SUIVI DES PAIEMENTS (employés + joueurs, coché "Payé" par mois) ============ */
@@ -3577,6 +3797,27 @@ switch ($action) {
     $pdo->prepare('UPDATE payroll_payments SET sent_at=? WHERE person_type=? AND person_id=? AND period=?')
       ->execute([date('Y-m-d H:i:s'), $person_type, $person_id, $period]);
     out(['ok' => true, 'sent_to' => $person['email']]);
+  }
+
+  /* Retire une fiche de paie du dossier personnel (fichier + nom effacés de payroll_payments),
+     sans toucher au calcul verrouillé sous-jacent : sert à masquer un PDF généré pour tester
+     (le lien personnel de la personne le liste dès que payslip_filename est rempli, avant même
+     que le mois soit réellement dû), pas à annuler la validation elle-même. */
+  case 'payments_delete_file': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    $pdo = db();
+    $person_type = s($b, 'person_type'); $person_id = i($b, 'person_id'); $period = s($b, 'period');
+    if (!in_array($person_type, ['employee', 'player'], true)) fail('person_type invalide');
+    if (!$person_id || !$period) fail('person_id et period requis');
+
+    $st = $pdo->prepare('SELECT id, payslip_path FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
+    $st->execute([$person_type, $person_id, $period]);
+    $row = $st->fetch();
+    if (!$row) fail('Aucun document pour cette période.', 404);
+
+    if ($row['payslip_path'] && is_file($row['payslip_path'])) unlink($row['payslip_path']);
+    $pdo->prepare("UPDATE payroll_payments SET payslip_path='', payslip_filename='', sent_at=NULL WHERE id=?")->execute([$row['id']]);
+    out(['ok' => true]);
   }
 
   /* Lien permanent vers l'espace documents personnel (fiches de paie) d'un employé ou joueur.

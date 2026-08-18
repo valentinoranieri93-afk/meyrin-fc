@@ -109,7 +109,7 @@ if ($person) {
   <?php if (!$person): ?>
     <div class="error">Lien invalide ou expiré. Contacte le club pour en obtenir un nouveau.</div>
   <?php else: ?>
-    <p class="sub" style="margin-bottom:6px">Bonjour <?= esc($person['first_name']) ?>.</p>
+    <p class="sub" style="margin-bottom:6px">Salut <?= esc($person['first_name']) ?> ! Tu trouveras ici tous tes documents personnels.</p>
 
     <h2>Fiches de paie</h2>
     <div class="card">

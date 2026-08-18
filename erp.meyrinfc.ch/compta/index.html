@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Comptabilité — Meyrin FC</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -953,7 +954,7 @@ async function loadEntries() {
           <td style="color:var(--gris)">${esc(r.cost_center_code || '')}</td>
           <td class="num">${Number(r.debit) > 0 ? fmt(r.debit) : ''}</td>
           <td class="num">${Number(r.credit) > 0 ? fmt(r.credit) : ''}</td>
-          <td style="text-align:right">${clickable ? '<span class="btn btn-ghost btn-sm">Facture &rarr;</span>' : ''}</td>
+          <td style="text-align:right">${clickable ? '<span class="btn btn-ghost btn-sm">Facture &rarr;</span>' : ''}${MFC.journalEdit && !r.reversal_of_entry_id ? `<button class="icon-btn" title="Supprimer l'écriture" onclick="event.stopPropagation();deleteEntry(${r.entry_id})">✕</button>` : ''}</td>
         </tr>`;
       }).join('')}
       <tr class="totals-row"><td colspan="6">${rows.length} mouvement(s)</td>
@@ -1062,9 +1063,10 @@ async function rejectDraft(id) {
   } catch (e) { toast(e.message, 'err'); }
 }
 
-function draftLineRow(accOptions, l = {}) {
+function draftLineRow(accounts, l = {}) {
+  const opts = accounts.map(a => `<option value="${a.id}" ${String(a.id) === String(l.account_id || '') ? 'selected' : ''}>${esc(a.number)} — ${esc(a.name)}</option>`).join('');
   return `<div class="line-row drf-line-row">
-    <select class="field drf-line-account"><option value="">— Compte —</option>${accOptions.replace(`value="${l.account_id}"`, `value="${l.account_id}" selected`)}</select>
+    <select class="field drf-line-account"><option value="">— Compte —</option>${opts}</select>
     <input type="number" step="0.01" min="0" class="field drf-line-debit" placeholder="Débit" value="${l.debit > 0 ? l.debit : ''}">
     <input type="number" step="0.01" min="0" class="field drf-line-credit" placeholder="Crédit" value="${l.credit > 0 ? l.credit : ''}">
     <input class="field drf-line-label" placeholder="Libellé" value="${esc(l.label || '')}" style="max-width:160px">
@@ -1072,8 +1074,8 @@ function draftLineRow(accOptions, l = {}) {
   </div>`;
 }
 function addDraftLine() {
-  const accOptions = S.accounts.filter(a => a.active == 1).map(a => `<option value="${a.id}">${esc(a.number)} — ${esc(a.name)}</option>`).join('');
-  document.getElementById('mDrfLines').insertAdjacentHTML('beforeend', draftLineRow(accOptions));
+  const accounts = S.accounts.filter(a => a.active == 1);
+  document.getElementById('mDrfLines').insertAdjacentHTML('beforeend', draftLineRow(accounts));
 }
 function updateDraftEditTotals() {
   let debit = 0, credit = 0;
@@ -1091,7 +1093,7 @@ async function modalDraftEdit(id) {
   let draft;
   try { draft = await apiGet('draft', { id }); } catch (e) { toast(e.message, 'err'); return; }
 
-  const accOptions = S.accounts.filter(a => a.active == 1).map(a => `<option value="${a.id}">${esc(a.number)} — ${esc(a.name)}</option>`).join('');
+  const activeAccounts = S.accounts.filter(a => a.active == 1);
   openModal('Brouillon — ' + draft.label, `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
       <div><label class="lbl">Date</label><input type="date" class="field" id="mDrfDate" value="${esc(draft.entry_date)}"></div>
@@ -1103,7 +1105,7 @@ async function modalDraftEdit(id) {
     <div style="margin-bottom:12px"><label class="lbl">Libellé</label><input class="field" id="mDrfLabel" value="${esc(draft.label)}"></div>
     ${draft.warnings ? `<div class="empty" style="color:var(--rouge);margin-bottom:12px">⚠ ${esc(draft.warnings)}</div>` : ''}
     <label class="lbl">Lignes</label>
-    <div class="lines-editor" id="mDrfLines">${draft.lines.map(l => draftLineRow(accOptions, l)).join('')}</div>
+    <div class="lines-editor" id="mDrfLines">${draft.lines.map(l => draftLineRow(activeAccounts, l)).join('')}</div>
     <button class="btn btn-ghost btn-sm" type="button" onclick="addDraftLine()">+ Ajouter une ligne</button>
     <div class="line-totals" id="mDrfTotals" style="margin-top:10px">Débit 0.00 · Crédit 0.00</div>
   `, async () => {
@@ -1337,13 +1339,13 @@ async function loadReconcileList() {
     el.innerHTML = `<div class="panel"><div class="table-wrap"><table>
       <thead><tr><th>Date</th><th>Libellé</th><th>Tiers</th><th class="num">Montant</th><th>Statut</th><th></th></tr></thead>
       <tbody>${txns.map(t => `
-        <tr>
+        <tr style="cursor:pointer" data-obj="${esc(JSON.stringify(t))}" onclick="openBankTxnDetail(JSON.parse(this.dataset.obj))">
           <td>${t.booking_date}</td>
           <td>${esc(t.label)}</td>
           <td style="color:var(--gris)">${esc(t.counterparty||'—')}</td>
           <td class="num" style="color:${t.amount>=0?'var(--vert)':'var(--rouge)'}">${t.amount>=0?'+':''}${fmt(t.amount)}</td>
           <td><span class="badge b-${t.reconciled_state}">${({unmatched:'à rapprocher',matched:'rapprochée',ignored:'ignorée'})[t.reconciled_state]}</span></td>
-          <td style="text-align:right">${MFC.bankReconcile && t.reconciled_state==='unmatched' ? `<button class="btn btn-primary btn-sm" onclick="openReconcileModal(${t.id})">Rapprocher</button>` : ''}</td>
+          <td style="text-align:right">${MFC.bankReconcile && t.reconciled_state==='unmatched' ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openReconcileModal(${t.id})">Rapprocher</button>` : ''}</td>
         </tr>`).join('')}</tbody>
     </table></div></div>`;
   } catch (e) { toast(e.message, 'err'); }
@@ -1356,6 +1358,38 @@ async function loadReconcileList() {
  * sur le montant remontent en tête. Un virement groupé peut solder plusieurs
  * factures d'un coup, d'où les montants saisissables ligne par ligne.
  */
+/* Détail complet d'un mouvement bancaire, notamment pour les virements collectifs QR : le
+   libellé de tête ne montre qu'un résumé, alors que le camt.053 porte souvent une référence
+   QR structurée (et, pour un virement groupé, un sous-paiement par débiteur) qui permet de
+   retrouver la facture d'origine. Rien à recharger : les données sont déjà dans la ligne. */
+function openBankTxnDetail(t) {
+  let subTx = [];
+  if (t.details_json) { try { subTx = JSON.parse(t.details_json); } catch (e) { subTx = []; } }
+  openModal('Détail du mouvement bancaire', `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:14px">
+      <div><label class="lbl">Date comptable</label><div>${esc(t.booking_date)}</div></div>
+      <div><label class="lbl">Date valeur</label><div>${esc(t.value_date || '—')}</div></div>
+      <div><label class="lbl">Montant</label><div style="font-weight:800;color:${t.amount>=0?'var(--vert)':'var(--rouge)'}">${t.amount>=0?'+':''}${fmt(t.amount)} ${esc(t.currency||'CHF')}</div></div>
+      <div><label class="lbl">Statut</label><div>${({unmatched:'à rapprocher',matched:'rapprochée',ignored:'ignorée'})[t.reconciled_state] || esc(t.reconciled_state)}</div></div>
+      <div style="grid-column:1/-1"><label class="lbl">Tiers</label><div>${esc(t.counterparty || '—')}</div></div>
+      <div style="grid-column:1/-1"><label class="lbl">Libellé complet</label><div style="word-break:break-word">${esc(t.label || '—')}</div></div>
+      <div style="grid-column:1/-1"><label class="lbl">Référence (QR ou communication)</label><div style="word-break:break-word;font-family:Sora">${esc(t.reference || '—')}</div></div>
+      <div style="grid-column:1/-1"><label class="lbl">Référence banque (AcctSvcrRef)</label><div style="word-break:break-word;color:var(--gris)">${esc(t.bank_ref || '—')}</div></div>
+      ${t.addtl_info ? `<div style="grid-column:1/-1"><label class="lbl">Information additionnelle (AddtlNtryInf)</label><div style="word-break:break-word">${esc(t.addtl_info)}</div></div>` : ''}
+    </div>
+    ${subTx.length ? `
+      <label class="lbl">Détail du virement collectif (${subTx.length} paiement${subTx.length>1?'s':''})</label>
+      <div style="max-height:260px;overflow:auto;border:1.5px solid var(--ligne);border-radius:8px;margin-top:6px">
+        <table style="width:100%"><thead><tr><th>Débiteur</th><th class="num">Montant</th><th>Référence</th></tr></thead>
+        <tbody>${subTx.map(s => `<tr>
+          <td>${esc(s.name || '—')}</td>
+          <td class="num">${s.amount != null ? fmt(s.amount) : '—'}</td>
+          <td style="font-family:Sora;font-size:12.5px;word-break:break-word">${esc(s.reference || '—')}</td>
+        </tr>`).join('')}</tbody></table>
+      </div>` : ''}
+  `, async () => closeModal(), 'Fermer');
+}
+
 let RECONCILE_TXN = null;
 
 async function openReconcileModal(txnId) {
@@ -2199,7 +2233,7 @@ async function uploadInvFile() {
 async function deleteInvFile(id) {
   if (!confirm('Retirer cette pièce jointe ? Le fichier sera supprimé du serveur.')) return;
   try {
-    await api('invoice_attach_delete?id=' + id, 'DELETE');
+    await api('invoice_attach_delete&id=' + id, 'DELETE');
     toast('Pièce jointe retirée');
     F.invoice = await apiGet('invoice', { id: F.id });
     renderInvoiceView(document.getElementById('inv-form'), document.getElementById('inv-form-actions'));
@@ -2399,7 +2433,7 @@ function prodDirChanged(selected) {
 }
 async function deleteProduct(id) {
   try {
-    const r = await api('products?id=' + id, 'DELETE');
+    const r = await api('products&id=' + id, 'DELETE');
     toast(r.deactivated ? 'Produit désactivé (il figure sur des factures)' : 'Produit retiré');
     S.products = await apiGet('products');
     loadSettings();
@@ -2490,7 +2524,7 @@ async function setDefaultJournal(id) {
 }
 async function deleteJournal(id) {
   try {
-    const r = await api('journals?id=' + id, 'DELETE');
+    const r = await api('journals&id=' + id, 'DELETE');
     toast(r.deactivated ? 'Journal désactivé (des écritures le référencent)' : 'Journal retiré');
     S.journals = await apiGet('journals');
     loadSettings();
@@ -2535,7 +2569,7 @@ async function setDefaultTerm(id) {
 }
 async function deleteTerm(id) {
   try {
-    await api('payment_terms?id=' + id, 'DELETE');
+    await api('payment_terms&id=' + id, 'DELETE');
     toast('Condition retirée');
     S.paymentTerms = await apiGet('payment_terms');
     loadSettings();
@@ -2662,11 +2696,11 @@ function modalTdfnRate() {
   }, 'Ajouter');
 }
 async function deleteVatRate(id) {
-  try { const r = await api('vat_rates?id=' + id, 'DELETE'); toast(r.deactivated ? 'Taux désactivé (il est utilisé par des factures)' : 'Taux retiré'); loadSettings(); }
+  try { const r = await api('vat_rates&id=' + id, 'DELETE'); toast(r.deactivated ? 'Taux désactivé (il est utilisé par des factures)' : 'Taux retiré'); loadSettings(); }
   catch (e) { toast(e.message, 'err'); }
 }
 async function deleteTdfnRate(id) {
-  try { await api('vat_settlement_rates?id=' + id, 'DELETE'); toast('Taux retiré'); loadSettings(); }
+  try { await api('vat_settlement_rates&id=' + id, 'DELETE'); toast('Taux retiré'); loadSettings(); }
   catch (e) { toast(e.message, 'err'); }
 }
 async function setAccountTdfn(accountId, rateId) {
@@ -2707,7 +2741,7 @@ function modalCostCenter() {
   }, 'Ajouter');
 }
 async function deleteCostCenter(id) {
-  try { const r = await api('cost_centers?id=' + id, 'DELETE'); toast(r.deactivated ? 'Centre désactivé (il est utilisé par des écritures)' : 'Centre retiré'); loadSettings(); }
+  try { const r = await api('cost_centers&id=' + id, 'DELETE'); toast(r.deactivated ? 'Centre désactivé (il est utilisé par des écritures)' : 'Centre retiré'); loadSettings(); }
   catch (e) { toast(e.message, 'err'); }
 }
 

@@ -37,6 +37,15 @@ function payslip_month_label(string $month): string {
  * avant cette phase) ; le JSON de payslip_compute renvoie des nombres bruts, pas ce format. */
 function chf_fmt(?float $n): string { return number_format((float)($n ?? 0), 2, ',', "'"); }
 
+/** Affichage signé d'une ligne "Divers" sur le décompte PDF (2026-08-18) : une retenue (montant
+ * positif) se lit "− X", un complément ajouté à la main (montant négatif, ex. trop prélevé le
+ * mois précédent à rembourser) se lit "+ X" — jamais un signe "−" fixe, qui produirait "− -50,00"
+ * pour un complément. Équivalent serveur de diversAmountDisplay() dans index.html. */
+function divers_amount_fmt(?float $n): string {
+  $v = (float)($n ?? 0);
+  return ($v >= 0 ? '− ' : '+ ') . chf_fmt(abs($v));
+}
+
 /** Équivalent serveur de pctSmart() : jusqu'à 3 décimales, sans décimale superflue pour un
  * taux rond, nécessaire pour l'AMat genevois (0,029 %) sans écraser 5,3 % en "5". */
 function pct_fmt(float $n): string {
@@ -197,17 +206,29 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
     $revenueLines[] = ['label' => $indLabel, 'montant' => round((float)($l['montant'] ?? 0), 2),
       'account_number' => (string)($l['account_number'] ?? ''), 'account_label' => (string)($l['account_label'] ?? '')];
   }
-  // Regroupement par intitulé (compte comptable ou libellé de poste) : deux rôles ou une
-  // indemnité rattachés au même compte apparaissent en une seule ligne sur le document
-  // imprimé, plutôt qu'une ligne par affectation — comportement déjà en place côté écran
-  // avant cette phase (groupedRevenueLines dans index.html), repris ici côté serveur. Le
-  // compte comptable du premier élément rencontré pour ce libellé est conservé (deux lignes
-  // qui partagent déjà le même libellé partagent en pratique le même compte).
+  // Regroupement par compte comptable : deux rôles ou une indemnité rattachés au même compte
+  // apparaissent en une seule ligne sur le document imprimé, plutôt qu'une ligne par
+  // affectation — comportement déjà en place côté écran avant cette phase (groupedRevenueLines
+  // dans index.html), repris ici côté serveur. Regroupé par compte (account_number) et non par
+  // libellé (2026-08-18, corrigé sur signalement de Valentino) : un poste "Indemnités
+  // entraîneurs" et une indemnité ponctuelle "Indemnité entraîneurs" pointant sur le même
+  // compte comptable ne partagent pas forcément le même texte de libellé (pluriel, variante de
+  // saisie...), et restaient donc affichés en deux lignes malgré un seul compte. Sans compte
+  // renseigné, on retombe sur le libellé comme avant (rien à regrouper de façon fiable).
   $groupedRevenue = [];
   foreach ($revenueLines as $l) {
-    $key = $l['label'];
-    if (isset($groupedRevenue[$key])) $groupedRevenue[$key]['montant'] += $l['montant'];
-    else $groupedRevenue[$key] = $l;
+    $accountNumber = (string)($l['account_number'] ?? '');
+    $key = $accountNumber !== '' ? 'acct:' . $accountNumber : 'label:' . $l['label'];
+    if (isset($groupedRevenue[$key])) {
+      $groupedRevenue[$key]['montant'] += $l['montant'];
+      // Le libellé du compte comptable prévaut sur un texte de poste/indemnité divergent,
+      // pour ne pas afficher un intitulé différent selon l'ordre d'arrivée des lignes.
+      if ($accountNumber !== '' && (string)($l['account_label'] ?? '') !== '') {
+        $groupedRevenue[$key]['label'] = $l['account_label'];
+      }
+    } else {
+      $groupedRevenue[$key] = $l;
+    }
   }
   $revenueLines = array_values(array_map(fn($l) => [
     'label' => $l['label'], 'montant' => round($l['montant'], 2),
@@ -217,16 +238,20 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
   /* --- Statut AVS de la personne : franchise rentier / abattement minime importance -----
      Non cumulables (§6.2.4 SPEC, contrôle bloquant [9.2]).
 
-     L'abattement minime importance reste RÉSERVÉ AUX JOUEURS (players.avs_abatement, mécanisme
-     inchangé depuis avant cette phase), comme avant cette phase — pas de généralisation aux
-     employés. Revert du 2026-08-16 : la généralisation initiale traitait avs_minime_renonce=0
-     comme "abattement actif par défaut, sauf renonciation explicite", or aucune interface ne
-     permet de cocher cette renonciation → tout employé (y compris le personnel administratif,
-     jamais éligible à cet arrangement) se voyait abattu par défaut, sans recours. Découvert sur
-     la fiche de Valentino lui-même. La colonne `employees.avs_minime_renonce` reste en base
-     (migration additive déjà déployée, inoffensive) mais n'est plus lue ici. */
+     L'abattement minime importance était RÉSERVÉ AUX JOUEURS (players.avs_abatement) suite au
+     revert du 2026-08-16 : une première généralisation aux employés traitait "pas de renonciation
+     saisie" comme "abattement actif par défaut", or aucune interface ne permettait de cocher
+     cette renonciation → tout employé (y compris le personnel administratif, jamais éligible)
+     se voyait abattu par défaut, sans recours. Découvert sur la fiche de Valentino lui-même.
+
+     Ouvert aux employés le 2026-08-18 (les entraîneurs, qui sont des employés et non des
+     joueurs, doivent aussi pouvoir en bénéficier), mais sur le mode inverse cette fois :
+     `employees.avs_minime_abatement` est un flag explicite, DÉCOCHÉ par défaut comme
+     players.avs_abatement, à cocher à la main sur la fiche de la personne concernée
+     (onglet Assurances). Plus de risque d'abattement silencieux par défaut. */
   $isRentier = $personType === 'employee' && (int)($person['avs_rentier'] ?? 0) === 1 && (int)($person['avs_franchise_renonce'] ?? 0) !== 1;
-  $isMinimeAbated = $personType === 'player' && (int)($person['avs_abatement'] ?? 0) === 1;
+  $isMinimeAbated = ($personType === 'player' && (int)($person['avs_abatement'] ?? 0) === 1)
+                  || ($personType === 'employee' && (int)($person['avs_minime_abatement'] ?? 0) === 1);
   $nonCumulViolation = $isRentier && $isMinimeAbated;
   if ($nonCumulViolation) {
     $warnings[] = "Franchise rentier et abattement minime importance sont actifs en même temps sur cette personne : les deux ne peuvent pas se cumuler (§6.2.4). Corriger avant de valider.";
@@ -238,8 +263,8 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
     $chargeReduction = $periodDiv === 2 ? (float)$rs['avs_rentier_franchise_annual'] / 2 : (float)$rs['avs_rentier_franchise_monthly'];
     $chargeReductionLabel = 'Franchise rentier : − CHF ' . chf_fmt($chargeReduction);
   } elseif ($isMinimeAbated && !$nonCumulViolation) {
-    // Abattement joueur (players.avs_abatement, réservé à cette population, voir plus haut) :
-    // le montant est paramétré et daté (payroll_rate_settings.avs_minime_abatement_semestriel,
+    // Abattement minime importance (players.avs_abatement ou employees.avs_minime_abatement,
+    // voir plus haut) : le montant est paramétré et daté (payroll_rate_settings.avs_minime_abatement_semestriel,
     // modifiable dans Paramètres > Paie), plus une constante JS en dur. Périmètre : appliqué à
     // toutes les charges sociales à taux partagé (AVS, AC, AMat, AANP, LAAC, IJM), pas
     // seulement à l'AVS (confirmé par Valentino, 2026-08-16).
@@ -410,8 +435,12 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
     'net' => $net,
     'avs_reduction_applied' => $chargeReductionLabel,
     'warnings' => $warnings,
+    // Le N° AVS manquant/invalide reste un avertissement affiché (utile pour du personnel pas
+    // encore affilié, ex. un entraîneur récemment engagé), mais ne bloque plus la génération du
+    // PDF (2026-08-18, demande de Valentino) — seuls le cumul franchise/abattement et un net
+    // négatif restent des erreurs qui empêchent réellement de produire un décompte cohérent.
     'blocking' => array_values(array_filter($warnings, fn($w) =>
-      str_contains($w, 'Franchise rentier') || str_contains($w, 'N° AVS') || str_contains($w, 'Net négatif'))),
+      str_contains($w, 'Franchise rentier') || str_contains($w, 'Net négatif'))),
   ];
 }
 
@@ -424,19 +453,33 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
  * par une réécriture — la gestion complète des rectificatifs reste hors phase 1, ce refus
  * est le garde-fou minimal en attendant.
  *
+ * $forceAdmin (2026-08-18, demande explicite de Valentino, réservée au rôle admin par
+ * l'appelant) court-circuite ce refus : utile pour retirer un décompte de test ou reprendre
+ * un décompte dont les réglages ont changé depuis, sans attendre le futur rectificatif.
+ *
  * @return int L'id de la ligne payroll_payments.
- * @throws RuntimeException si un décompte verrouillé existe déjà pour cette période.
+ * @throws RuntimeException si un décompte verrouillé existe déjà pour cette période et que
+ *         $forceAdmin est faux.
  */
-function persist_payslip_lines(PDO $pdo, array $computed): int {
+function persist_payslip_lines(PDO $pdo, array $computed, bool $forceAdmin = false): int {
   $personType = $computed['person_type'];
   $personId = $computed['person_id'];
   $month = $computed['month'];
 
-  $existing = $pdo->prepare('SELECT id, locked FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
+  $existing = $pdo->prepare('SELECT id, locked, gross_total, net_amount FROM payroll_payments WHERE person_type=? AND person_id=? AND period=?');
   $existing->execute([$personType, $personId, $month]);
   $row = $existing->fetch();
-  if ($row && (int)$row['locked'] === 1) {
-    throw new RuntimeException('Ce décompte est déjà validé et verrouillé pour cette période. Une correction passe par un rectificatif (hors périmètre actuel).');
+  if ($row && (int)$row['locked'] === 1 && !$forceAdmin) {
+    /* Verrouillé ne doit bloquer qu'une vraie correction (montants différents de ceux déjà
+       validés), pas un simple nouveau tirage du même PDF (fiche perdue, réimpression demandée
+       par la personne...) : sans cette distinction, un décompte devenait illisible dès la
+       deuxième génération, y compris quand rien n'avait changé. Comparé au centime près pour
+       absorber l'arrondi flottant, pas de tolérance plus large qui masquerait une vraie dérive. */
+    $sameGross = $row['gross_total'] !== null && round((float)$row['gross_total'], 2) === round((float)$computed['gross_total'], 2);
+    $sameNet   = $row['net_amount']  !== null && round((float)$row['net_amount'],  2) === round((float)$computed['net'],  2);
+    if (!$sameGross || !$sameNet) {
+      throw new RuntimeException('Ce décompte est déjà validé et verrouillé pour cette période, et les montants recalculés diffèrent de ceux validés. Une correction passe par un rectificatif (hors périmètre actuel).');
+    }
   }
 
   // Référence légale AVS spécifiquement (ligne d'exposition la plus importante, base de

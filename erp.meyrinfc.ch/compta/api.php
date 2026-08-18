@@ -368,6 +368,15 @@ function init_schema(PDO $pdo): void {
        actuel, seule une facture créée depuis une base à jour peut valoir
        status='brouillon'. draft_id reste NULL pour tout l'historique. */
     ensure_column($pdo, 'invoices',        'draft_id',             'INTEGER');
+    /* Une écriture bancaire "globale" (virement collectif QR) porte plusieurs paiements
+       individuels sous une seule ligne de relevé : le libellé/référence de tête ne suffit
+       pas à retrouver la facture d'origine. details_json garde le détail par sous-paiement
+       (nom, montant, référence QR) extrait du camt.053, affiché à la demande dans une fenêtre
+       de détail plutôt que d'alourdir la liste (2026-08-18, demande de Valentino). */
+    ensure_column($pdo, 'bank_transactions', 'details_json',        "TEXT NOT NULL DEFAULT ''");
+    // AddtlNtryInf (2026-08-18) : porte souvent le nom lisible du commerçant/partenaire pour un
+    // encaissement carte/TWINT, absent de Ustrd et des parties structurées (RltdPties).
+    ensure_column($pdo, 'bank_transactions', 'addtl_info',          "TEXT NOT NULL DEFAULT ''");
 
     /* Index créés APRÈS les migrations, jamais dans le bloc CREATE TABLE :
        sur une base déjà en service, CREATE TABLE IF NOT EXISTS ne fait rien, si
@@ -845,20 +854,30 @@ case 'entries': {
 }
 
 /**
- * Suppression, volontairement étroite : elle ne sert qu'à rattraper une faute
- * de frappe fraîche, sur une écriture saisie à la main, dans un exercice
- * ouvert, encore rattachée à rien. Tout le reste passe par l'extourne, pour
- * que la numérotation des pièces reste continue et vérifiable.
+ * Suppression, volontairement étroite pour tout rôle non-admin : elle ne sert
+ * qu'à rattraper une faute de frappe fraîche, sur une écriture saisie à la
+ * main, dans un exercice ouvert, encore rattachée à rien. Tout le reste passe
+ * par l'extourne, pour que la numérotation des pièces reste continue et
+ * vérifiable.
+ *
+ * Le rôle admin (2026-08-18, demande explicite de Valentino, conscient que ce
+ * n'est pas la pratique comptable recommandée) peut forcer la suppression
+ * d'une écriture venue d'un autre module (ex. un brouillon de paie poussé
+ * pour un test) : utile pour nettoyer un essai sans laisser une extourne
+ * traîner. Les garde-fous d'intégrité (exercice/période clôturés, rapprochée,
+ * liée à une facture) restent absolus, admin ou non — les casser casserait
+ * réellement les données, pas seulement la politique de traçabilité.
  */
 case 'entry_delete': {
     $pdo = db();
     $id = i($_GET, 'id');
     if (!$id) fail('ID requis');
+    $isAdmin = ($session['role'] ?? '') === 'admin';
     $st = $pdo->prepare('SELECT * FROM journal_entries WHERE id = ?');
     $st->execute([$id]);
     $entry = $st->fetch();
     if (!$entry) fail('Écriture introuvable', 404);
-    if ($entry['source_module'] !== 'manuel') {
+    if ($entry['source_module'] !== 'manuel' && !$isAdmin) {
         fail("Cette écriture vient de « {$entry['source_module']} », elle ne se supprime pas ici. Utilisez l'extourne.", 409);
     }
     if ($entry['fiscal_year_id']) {
@@ -875,7 +894,9 @@ case 'entry_delete': {
     $invSt->execute([$id]);
     if ((int) $invSt->fetchColumn() > 0) fail("Cette écriture porte une facture, annulez la facture plutôt que l'écriture", 409);
     // Tracé AVANT la suppression physique : c'est la seule trace qui subsistera de cette écriture.
-    compta_audit_log($pdo, 'journal_entry', $id, 'delete', 'Écriture ' . ($entry['piece_ref'] ?: "#$id") . ' — ' . $entry['label'], $userName);
+    $auditNote = 'Écriture ' . ($entry['piece_ref'] ?: "#$id") . ' — ' . $entry['label']
+        . ($entry['source_module'] !== 'manuel' ? " (forcé par admin, source « {$entry['source_module']} »)" : '');
+    compta_audit_log($pdo, 'journal_entry', $id, 'delete', $auditNote, $userName);
     $pdo->prepare('DELETE FROM journal_entries WHERE id = ?')->execute([$id]);
     out(['ok' => true]);
 }
@@ -1820,13 +1841,13 @@ case 'bank_import_commit': {
         $batchId = (int) $pdo->lastInsertId();
 
         $insSt = $pdo->prepare('INSERT OR IGNORE INTO bank_transactions
-            (bank_account_id, batch_id, booking_date, value_date, amount, currency, label, counterparty, reference, bank_ref)
-            VALUES (?,?,?,?,?,?,?,?,?,?)');
+            (bank_account_id, batch_id, booking_date, value_date, amount, currency, label, counterparty, reference, bank_ref, details_json, addtl_info)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
         $imported = 0;
         foreach ($parsed['entries'] as $e) {
             $insSt->execute([
                 $bankAccountId, $batchId, $e['booking_date'], $e['value_date'], $e['amount'], $e['currency'],
-                $e['label'], $e['counterparty'], $e['reference'], $e['bank_ref'],
+                $e['label'], $e['counterparty'], $e['reference'], $e['bank_ref'], $e['details_json'] ?? '', $e['addtl_info'] ?? '',
             ]);
             if ($insSt->rowCount() > 0) $imported++;
         }
@@ -3615,14 +3636,53 @@ function parse_camt053(string $xmlContent): array {
         $acctSvcrRef = xp1($ntry, './n:AcctSvcrRef');
         $addtlInfo   = xp1($ntry, './n:AddtlNtryInf');
         $ustrd       = xp1($ntry, './/n:NtryDtls/n:TxDtls/n:RmtInf/n:Ustrd');
+        // Référence QR structurée (bulletin QR-facture) : c'est là, pas dans Ustrd, que se
+        // trouve le numéro à 27 chiffres qui permet de retrouver la facture émise.
+        $strdRef     = xp1($ntry, './/n:NtryDtls/n:TxDtls/n:RmtInf/n:Strd/n:CdtrRefInf/n:Ref');
+        // Communication libre accolée à la référence QR structurée (ex. "LOYER 2026",
+        // "Réparation vestiaire 3", "9000176701 / Sweat Alex") : souvent bien plus parlant que
+        // le numéro à 27 chiffres pour reconnaître la facture d'un coup d'œil, mais un champ
+        // à part du Ref — un décompte "Écriture globale QR" n'a parfois AUCUN Ustrd, seulement
+        // ceci, et jusqu'ici cette information n'était lue nulle part.
+        $strdAddtlInfo = xp1($ntry, './/n:NtryDtls/n:TxDtls/n:RmtInf/n:Strd/n:AddtlRmtInf');
 
-        $counterparty = xp1($ntry, './/n:NtryDtls/n:TxDtls/n:RltdPties/n:UltmtDbtr/n:Pty/n:Nm')
-            ?: xp1($ntry, './/n:NtryDtls/n:TxDtls/n:RltdPties/n:Dbtr/n:Pty/n:Nm')
-            ?: xp1($ntry, './/n:NtryDtls/n:TxDtls/n:RltdPties/n:UltmtCdtr/n:Pty/n:Nm')
-            ?: xp1($ntry, './/n:NtryDtls/n:TxDtls/n:RltdPties/n:Cdtr/n:Pty/n:Nm')
+        /* Le "tiers" dépend du SENS du mouvement, pas d'un empilement de fallbacks : sur une
+           entrée créditrice (argent reçu), le tiers est le débiteur (Dbtr) qui a payé ; sur une
+           entrée débitrice (argent versé), c'est le créditeur (Cdtr) qui a été payé. Le code
+           précédent essayait Dbtr PUIS Cdtr dans tous les cas — sur une entrée créditrice sans
+           nœud Dbtr renseigné (fréquent sur un encaissement via un partenaire de paiement type
+           TWINT/carte), il retombait sur le Cdtr, qui pour un encaissement est... le club
+           lui-même : c'est ce qui a créé le tiers "Football Club" au lieu du vrai payeur. */
+        $partyPrefix = $cdtDbt === 'DBIT' ? 'Cdtr' : 'Dbtr';
+        $counterparty = xp1($ntry, ".//n:NtryDtls/n:TxDtls/n:RltdPties/n:Ultmt{$partyPrefix}/n:Pty/n:Nm")
+            ?: xp1($ntry, ".//n:NtryDtls/n:TxDtls/n:RltdPties/n:{$partyPrefix}/n:Pty/n:Nm")
             ?: '';
 
-        $label = $ustrd ?: $addtlInfo ?: ($counterparty ?: 'Mouvement bancaire');
+        $reference = $strdRef ?: $ustrd;
+        // addtlInfo gardé à part (jamais absorbé silencieusement par le libellé) : c'est
+        // souvent là, pas dans Ustrd, que se trouve le nom lisible du commerçant/partenaire
+        // pour un encaissement carte/TWINT — la fenêtre de détail doit pouvoir le montrer même
+        // quand Ustrd gagne le libellé principal. La communication libre à côté du QR
+        // (strdAddtlInfo) passe avant : "LOYER 2026" ou "Réparation vestiaire 3" identifie la
+        // facture bien mieux qu'un ustrd absent ou qu'AddtlNtryInf ("Paiement X").
+        $label = $strdAddtlInfo ?: $ustrd ?: $addtlInfo ?: ($counterparty ?: 'Mouvement bancaire');
+
+        /* Virement collectif QR (BtchPmtInd) : une seule ligne de relevé, mais plusieurs
+           TxDtls dessous, un par paiement encaissé — chacun avec son propre débiteur, montant
+           et référence QR. On les extrait tous pour que la fenêtre de détail les liste, plutôt
+           que de ne garder que le premier (ce que faisait la lecture Ustrd/RltdPties ci-dessus,
+           qui ne prend que le tout premier nœud XPath). */
+        $subTx = [];
+        foreach ($ntry->xpath('.//n:NtryDtls/n:TxDtls') as $tx) {
+            $tx->registerXPathNamespace('n', $ns);
+            $subName = xp1($tx, "./n:RltdPties/n:Ultmt{$partyPrefix}/n:Pty/n:Nm") ?: xp1($tx, "./n:RltdPties/n:{$partyPrefix}/n:Pty/n:Nm") ?: '';
+            $subRef = xp1($tx, './n:RmtInf/n:Strd/n:CdtrRefInf/n:Ref') ?: xp1($tx, './n:RmtInf/n:Ustrd');
+            $subAmtNode = $tx->xpath('./n:Amt');
+            $subAmt = $subAmtNode ? (float) $subAmtNode[0] : null;
+            if ($subName !== '' || $subRef !== '' || $subAmt !== null) {
+                $subTx[] = ['name' => $subName, 'amount' => $subAmt, 'reference' => $subRef];
+            }
+        }
 
         if (!$bookDate) continue; // entrée sans date exploitable : ignorée plutôt que de planter tout l'import
 
@@ -3633,8 +3693,10 @@ function parse_camt053(string $xmlContent): array {
             'currency'     => $entryCcy,
             'label'        => $label,
             'counterparty' => $counterparty,
-            'reference'    => $ustrd,
+            'reference'    => $reference,
             'bank_ref'     => $acctSvcrRef,
+            'addtl_info'   => $addtlInfo,
+            'details_json' => count($subTx) > 1 ? json_encode($subTx, JSON_UNESCAPED_UNICODE) : '',
         ];
     }
 

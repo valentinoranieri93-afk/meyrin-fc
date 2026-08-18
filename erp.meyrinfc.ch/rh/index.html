@@ -213,6 +213,7 @@ tr:hover td{background:#FAFAF7}
 
 .scroll-list{max-height:400px;overflow-y:auto}
 @media (max-width:980px){.kpi-grid,.mini-grid{grid-template-columns:repeat(2,1fr)}.grid-2,.grid-3{grid-template-columns:1fr}}
+@media (max-width:600px){.kpi-grid,.mini-grid{grid-template-columns:1fr}.content{padding:16px 14px 60px}}
 </style>
 </head>
 <body>
@@ -440,25 +441,6 @@ async function loadRefData(){
 /* ============================================================ DASHBOARD */
 
 /* ===== Graphiques SVG, portés tels quels du module Events (mêmes fonctions) ===== */
-function barChart(el, data, opt = {}) {
-  const w = el.clientWidth || 520, h = opt.h || 190, pad = opt.pad || { t: 14, r: 8, b: 28, l: 38 };
-  const max = opt.max || Math.max(...data.map(x => Math.abs(x.v))) * 1.15;
-  const min = opt.min !== undefined ? opt.min : 0;
-  const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
-  const bw = iw / data.length * 0.58, gap = iw / data.length;
-  const y0 = min < 0 ? pad.t + ih * (max / (max - min)) : pad.t + ih;
-  let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">`;
-  for (let i = 0; i <= 4; i++) { const gy = pad.t + ih * i / 4; svg += `<line x1="${pad.l}" y1="${gy}" x2="${w - pad.r}" y2="${gy}" stroke="#F0EDE4" stroke-width="1"/>`; }
-  data.forEach((x, i) => {
-    const px = pad.l + gap * i + (gap - bw) / 2;
-    const hh = Math.abs(x.v) / (max - min) * ih;
-    const y = x.v >= 0 ? y0 - hh : y0;
-    const col = x.c || 'var(--jaune)';
-    svg += `<rect x="${px}" y="${y}" width="${bw}" height="${Math.max(hh, 1)}" rx="4" fill="${col}"><title>${esc(x.l)}: ${x.v}</title></rect>`;
-    svg += `<text x="${px + bw / 2}" y="${h - 9}" text-anchor="middle" font-size="10.5" fill="#9A988C" font-weight="600">${esc(x.l)}</text>`;
-  });
-  svg += `</svg>`; el.innerHTML = svg;
-}
 function donutChart(el, data, opt = {}) {
   const size = opt.size || 170, cx = size / 2, cy = size / 2, r = size / 2 - 6, ir = opt.ir || r * 0.6;
   const tot = data.reduce((a, x) => a + x.v, 0); let a0 = -Math.PI / 2;
@@ -477,68 +459,148 @@ function donutChart(el, data, opt = {}) {
   svg += `</div></div>`; el.innerHTML = svg;
 }
 
-const DASH_TREND_UP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M7 17L17 7M17 7H8M17 7v9"/></svg>`;
-const DASH_TREND_DOWN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M7 7l10 10M17 17H8M17 17V8"/></svg>`;
-/** Best-effort : {txt:'', cls:''} si la comparaison n'est pas disponible (mois précédent hors
- *  saison, panne réseau) plutôt que de bloquer le dashboard. */
-function dashTrend(curr, prev) {
-  if (prev === null || prev === undefined || prev === 0) return { txt: '', cls: '', icon: '' };
-  const pct = ((curr - prev) / prev) * 100;
-  if (Math.abs(pct) < 1) return { txt: '— stable', cls: 'trend-flat', icon: '' };
-  const isUp = pct > 0;
-  return { txt: `${isUp ? '+' : ''}${pct.toFixed(0)}%`, cls: isUp ? 'trend-up' : 'trend-down', icon: isUp ? DASH_TREND_UP : DASH_TREND_DOWN };
-}
-function dashKpi(icon, bg, col, val, lbl, curr, prev) {
-  const t = dashTrend(curr, prev);
+function dashKpi(icon, bg, col, val, lbl, extra) {
   return `<div class="kpi">
-    <div class="kpi-top"><div class="kpi-ico" style="background:${bg};color:${col}">${ic(icon)}</div>${t.txt ? `<div class="kpi-trend ${t.cls}">${t.icon}${t.txt}</div>` : ''}</div>
+    <div class="kpi-top"><div class="kpi-ico" style="background:${bg};color:${col}">${ic(icon)}</div></div>
     <div class="kpi-val">${val}</div>
     <div class="kpi-lbl">${lbl}</div>
+    ${extra || ''}
   </div>`;
 }
 function dashMini(icon, bg, col, val, lbl) {
   return `<div class="mini"><div class="mini-ico" style="background:${bg};color:${col}">${ic(icon)}</div><div><div class="mini-val">${val}</div><div class="mini-lbl">${lbl}</div></div></div>`;
 }
-/** Mois précédent au format YYYY-MM (franchit le changement d'année correctement). */
-function prevMonthOf(ym) {
-  const [y, m] = ym.split('-').map(Number);
-  const dt = new Date(y, m - 2, 1);
-  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+const DASH_ACCOUNT_COLORS = ['#3B6FE0', '#1F9D5B', '#7B59D8', '#E8902A', '#c5a900', '#D8463A', '#2AA7A0', '#B85C9E'];
+const DASH_ALERT_TABS = [['taches', 'Tâches'], ['anniversaires', 'Anniversaires'], ['documents', 'Documents manquants']];
+let DASH_ALERT_TAB = 'taches';
+let DASH_ACCOUNT_FILTER = '';
+let DASH_DATA = null;
+
+/** Petit éditeur inline du montant projeté de primes (Dashboard) : les primes réelles ne sont
+ * connues qu'au fil des matchs joués, la projection reste donc une estimation saisie à la main,
+ * affichée à côté du montant réel — jamais à sa place (demande explicite de Valentino). */
+function primesEditor(d) {
+  const pct = d.totaux.primes_projetees > 0 ? Math.round(d.totaux.primes_actuelles / d.totaux.primes_projetees * 100) : null;
+  return `
+    <div style="font-size:11px;color:var(--gris);margin-top:6px">
+      ${d.totaux.primes_projetees > 0 ? `Projeté : ${chf(d.totaux.primes_projetees)} CHF (${pct}% atteint)` : 'Aucun montant projeté pour l\'instant'}
+    </div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <input id="dash-primes-proj" type="number" step="0.05" value="${d.totaux.primes_projetees || ''}" placeholder="Projeté CHF" style="width:0;flex:1;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12px">
+      <button class="btn btn-ghost btn-sm" style="padding:6px 10px;font-size:12px" onclick="saveProjectedPrimes(${d.season_id})" title="Enregistrer le montant projeté">💾</button>
+    </div>
+  `;
 }
-const DASH_AVATAR_COLORS = ['#3B6FE0', '#1F9D5B', '#7B59D8', '#E8902A', '#c5a900', '#D8463A'];
-function dashInitials(name) {
-  return (name || '').trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+async function saveProjectedPrimes(seasonId) {
+  const montant = Number(document.getElementById('dash-primes-proj').value) || 0;
+  try { await api('season_primes_projetees', { method: 'POST', body: { season_id: seasonId, montant } }); renderPage(); }
+  catch (e) { alert('Échec : ' + e.message); }
+}
+
+/** Une seule ligne, quel que soit le nombre de comptes : défile horizontalement plutôt que de
+ * passer à la ligne (demande explicite), chaque carte gardant une largeur minimale lisible —
+ * c'est ce qui la rend utilisable en même temps sur petit écran (on scrolle la carte, jamais
+ * la page). Le budget saison de chaque compte est affiché sous l'effectif, pas à sa place. */
+function renderDashEffectif(el, eff) {
+  const cards = [{ label: 'Total', count: eff.total, montant: eff.total_montant, isTotal: true }, ...eff.par_compte];
+  el.innerHTML = `<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">
+    ${cards.map(c => `
+      <div style="flex:0 0 auto;min-width:128px;background:${c.isTotal ? 'var(--jaune-soft)' : 'var(--bg)'};border:1px solid var(--ligne);border-radius:10px;padding:14px 12px;text-align:center">
+        <div style="font-size:24px;font-weight:800;font-family:Sora,sans-serif">${c.count}</div>
+        <div style="font-size:11px;color:var(--gris);margin-top:2px;line-height:1.3">${esc(c.label)}</div>
+        <div style="font-size:11.5px;font-weight:700;color:var(--noir-3);margin-top:6px;border-top:1px solid var(--ligne-2);padding-top:6px">${chf(c.montant || 0)} CHF</div>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+/** Ouvre la fiche employé depuis une alerte "Documents manquants" : la liste complète n'est
+ * chargée qu'au clic (pas au chargement du Dashboard), la fiche employé se contente d'un
+ * objet employé complet, pas d'un simple id. */
+async function openEmployeeFiche(employeeId) {
+  try {
+    const list = await api('employees', { params: { season_id: STATE.seasonId } });
+    const ee = list.find(e => e.id === employeeId);
+    if (!ee) { alert("Cet employé n'existe plus ou a été désactivé."); return; }
+    employeeDetailModal(ee);
+  } catch (e) { alert('Échec : ' + e.message); }
+}
+
+function switchDashAlertTab(k) { DASH_ALERT_TAB = k; renderDashAlerts(); }
+function renderDashAlerts() {
+  if (!DASH_DATA) return;
+  const tabsEl = document.getElementById('dash-alert-tabs');
+  const bodyEl = document.getElementById('dash-alert-body');
+  tabsEl.innerHTML = DASH_ALERT_TABS.map(([k, l]) => {
+    const n = DASH_DATA.alerts[k].length;
+    return `<div class="tab ${DASH_ALERT_TAB === k ? 'active' : ''}" onclick="switchDashAlertTab('${k}')">${esc(l)}${n ? ` (${n})` : ''}</div>`;
+  }).join('');
+  const list = DASH_DATA.alerts[DASH_ALERT_TAB];
+  const isDocs = DASH_ALERT_TAB === 'documents';
+  bodyEl.innerHTML = list.length ? list.map(a => `
+    <div class="alert-item alert-o" ${isDocs ? `onclick="openEmployeeFiche(${a.employee_id})" style="cursor:pointer"` : ''}>
+      <div class="alert-ico" style="color:var(--orange)">${ic('alertTri')}</div>
+      <div class="alert-t" style="flex:1">${esc(isDocs ? a.text : a)}</div>
+      ${isDocs ? `<div style="color:var(--gris-2);font-size:11px;white-space:nowrap;flex-shrink:0">Ouvrir →</div>` : ''}
+    </div>`).join('') : `<div class="empty">Aucune alerte.</div>`;
+}
+
+/** Courbe d'évolution de la saison (montants dus par mois, réel pour les mois passés, budgété
+ * pour les mois à venir). SVG en viewBox + largeur 100% : redimensionne avec le conteneur, pas
+ * de recalcul JS nécessaire au redimensionnement de la fenêtre. */
+function lineChart(el, data, opt = {}) {
+  const w = el.clientWidth || 640, h = opt.h || 220, pad = { t: 18, r: 14, b: 30, l: 44 };
+  const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+  const max = Math.max(...data.map(x => x.v), 1) * 1.15;
+  const stepX = data.length > 1 ? iw / (data.length - 1) : 0;
+  const px = i => pad.l + stepX * i;
+  const py = v => pad.t + ih - (v / max) * ih;
+  const fmtK = v => v >= 1000 ? (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : Math.round(v);
+
+  let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="xMidYMid meet">`;
+  for (let i = 0; i <= 4; i++) {
+    const gy = pad.t + ih * i / 4;
+    svg += `<line x1="${pad.l}" y1="${gy}" x2="${w - pad.r}" y2="${gy}" stroke="#F0EDE4" stroke-width="1"/>`;
+    svg += `<text x="${pad.l - 8}" y="${gy + 3}" text-anchor="end" font-size="10" fill="#9A988C">${fmtK(max * (1 - i / 4))}</text>`;
+  }
+  const linePts = data.map((x, i) => `${px(i)},${py(x.v)}`).join(' ');
+  svg += `<polygon points="${px(0)},${pad.t + ih} ${linePts} ${px(data.length - 1)},${pad.t + ih}" fill="var(--jaune)" opacity="0.15"/>`;
+  svg += `<polyline points="${linePts}" fill="none" stroke="var(--jaune-2,#C9A200)" stroke-width="2.5"/>`;
+  data.forEach((x, i) => {
+    svg += `<circle cx="${px(i)}" cy="${py(x.v)}" r="3.5" fill="#fff" stroke="var(--jaune-2,#C9A200)" stroke-width="2"><title>${esc(x.l)} : ${chf(x.v)} CHF</title></circle>`;
+    svg += `<text x="${px(i)}" y="${h - 8}" text-anchor="middle" font-size="10" fill="#9A988C" font-weight="600">${esc(x.l)}</text>`;
+  });
+  svg += `</svg>`;
+  el.innerHTML = svg;
 }
 
 async function renderDashboard(c) {
   document.getElementById('topbar-actions').innerHTML = `
-    <div class="month-picker"><input type="month" id="dash-month" value="${STATE.month}"></div>
+    <select id="dash-account-filter" style="padding:7px 10px;border:1.5px solid var(--ligne);border-radius:9px;font-size:13px;background:#fff"></select>
     <button class="btn btn-dark btn-sm" onclick="exportCompta()">Export compta (CSV)</button>`;
-  document.getElementById('dash-month').onchange = e => { STATE.month = e.target.value; renderPage(); };
 
   c.innerHTML = `<div class="empty"><span class="spinner"></span> Chargement…</div>`;
   let d;
-  try { d = await api('dashboard', { params: { month: STATE.month, season_id: STATE.seasonId } }); }
+  try { d = await api('dashboard', { params: { season_id: STATE.seasonId, account: DASH_ACCOUNT_FILTER } }); }
   catch (e) { c.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  DASH_DATA = d;
 
-  // Comparaison au mois précédent : best-effort, le dashboard reste utilisable sans elle
-  // (ex : juillet, premier mois d'une nouvelle saison, où juin appartient à la saison d'avant).
-  let dPrev = null;
-  try { dPrev = await api('dashboard', { params: { month: prevMonthOf(STATE.month), season_id: STATE.seasonId } }); }
-  catch (e) { /* pas de comparaison ce mois-ci, ce n'est pas bloquant */ }
-  const pt = dPrev ? dPrev.totaux : {};
-  const prevByEmpId = {};
-  (dPrev ? dPrev.employes : []).forEach(e => { prevByEmpId[e.employee_id] = e.total; });
+  // Le sélecteur se peuple depuis d.accounts, toujours le catalogue COMPLET (non filtré) renvoyé
+  // par le serveur : sinon, une fois un filtre choisi, les autres comptes disparaîtraient de la liste.
+  const accSel = document.getElementById('dash-account-filter');
+  accSel.innerHTML = `<option value="">Tous les comptes</option>` +
+    d.accounts.map(a => `<option value="${esc(a.key)}" ${DASH_ACCOUNT_FILTER === a.key ? 'selected' : ''}>${esc(a.label)}</option>`).join('');
+  accSel.onchange = e => { DASH_ACCOUNT_FILTER = e.target.value; renderPage(); };
 
-  const total = d.totaux.total_general || 0;
-  const topTeams = [...d.par_equipe].sort((a, b) => b.employes - a.employes).slice(0, 8);
+  const showProjection = d.totaux.projection_masse !== d.totaux.total_masse;
 
   c.innerHTML = `
     <div class="kpi-grid">
-      ${dashKpi('wallet', 'var(--bleu-bg)', 'var(--bleu)', chf(d.totaux.indemnites_employes) + ' CHF', 'Indemnités employés', d.totaux.indemnites_employes, pt.indemnites_employes)}
-      ${dashKpi('players', 'var(--vert-bg)', 'var(--vert)', chf(d.totaux.salaires_joueurs) + ' CHF', 'Salaires joueurs', d.totaux.salaires_joueurs, pt.salaires_joueurs)}
-      ${dashKpi('primes', 'var(--violet-bg)', 'var(--violet)', chf(d.totaux.primes_joueurs) + ' CHF', 'Primes de match', d.totaux.primes_joueurs, pt.primes_joueurs)}
-      ${dashKpi('dashboard', 'var(--jaune-soft)', '#A07800', chf(d.totaux.total_general) + ' CHF', 'Total masse RH du mois', d.totaux.total_general, pt.total_general)}
+      ${dashKpi('wallet', 'var(--bleu-bg)', 'var(--bleu)', chf(d.totaux.employes) + ' CHF', 'Employés — saison ' + esc(d.season_label))}
+      ${dashKpi('players', 'var(--vert-bg)', 'var(--vert)', chf(d.totaux.joueurs) + ' CHF', 'Joueurs (1ère équipe) — saison')}
+      ${dashKpi('primes', 'var(--violet-bg)', 'var(--violet)', chf(d.totaux.primes_actuelles) + ' CHF', 'Primes de match — à ce jour', primesEditor(d))}
+      ${dashKpi('dashboard', 'var(--jaune-soft)', '#A07800', chf(d.totaux.total_masse) + ' CHF', 'Total masse RH — saison',
+        showProjection ? `<div style="font-size:11px;color:var(--gris);margin-top:6px">Avec primes projetées : ${chf(d.totaux.projection_masse)} CHF</div>` : '')}
     </div>
 
     <div class="mini-grid">
@@ -547,72 +609,47 @@ async function renderDashboard(c) {
       ${dashMini('players', 'var(--violet-bg)', 'var(--violet)', d.compteurs.players, 'Joueurs (1ère équipe)')}
     </div>
 
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-head"><h3>Composition de la masse RH</h3></div>
-        <div class="panel-body"><div id="ch-comp"></div></div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h3>Effectif RH par équipe</h3><div class="panel-act">Top 8</div></div>
-        <div class="panel-body"><div id="ch-teams"></div></div>
-      </div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-head"><h3>Effectif RH par compte comptable</h3></div>
+      <div class="panel-body"><div id="dash-effectif"></div></div>
     </div>
 
-    <div class="grid-3">
-      <div class="panel">
-        <div class="panel-head"><h3>Indemnités par employé</h3><div class="panel-act" onclick="goTo('employees')">Tout voir →</div></div>
-        <div class="panel-body scroll-list" style="padding-top:6px;padding-bottom:6px">
-          ${d.employes.length ? d.employes.map((ee, i) => {
-            const detail = ee.lignes.map(l => `${esc(l.label)} (${chf(l.montant)})`).join(', ');
-            const t = dashTrend(ee.total, prevByEmpId[ee.employee_id]);
-            return `<div class="row-item">
-              <div class="row-ico" style="background:${DASH_AVATAR_COLORS[i % DASH_AVATAR_COLORS.length]}">${dashInitials(ee.name)}</div>
-              <div class="row-main"><div class="row-t">${esc(ee.name)}</div><div class="row-s" title="${esc(detail)}">${detail}</div></div>
-              <div style="text-align:right">
-                <div class="row-meta">${chf(ee.total)} CHF</div>
-                ${t.txt ? `<div class="kpi-trend ${t.cls}" style="font-size:10px;padding:1px 6px;margin-top:3px;display:inline-flex">${t.txt}</div>` : ''}
-              </div>
-            </div>`;
-          }).join('') : `<div class="empty">Aucune affectation d'employé.</div>`}
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h3>Alertes</h3></div>
-        <div class="panel-body">
-          ${d.alerts.length ? d.alerts.map(a => {
-            const isImport = /import/i.test(a);
-            return `<div class="alert-item ${isImport ? 'alert-b' : 'alert-o'}">
-              <div class="alert-ico" style="color:${isImport ? 'var(--bleu)' : 'var(--orange)'}">${ic(isImport ? 'upload' : 'alertTri')}</div>
-              <div class="alert-t">${esc(a)}</div>
-            </div>`;
-          }).join('') : `<div class="empty">Aucune alerte.</div>`}
-        </div>
-      </div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-head"><h3>Composition de la masse RH (annuelle)</h3></div>
+      <div class="panel-body"><div id="ch-comp"></div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-head"><h3>Évolution de la saison ${esc(d.season_label)}</h3></div>
+      <div class="panel-body"><div id="dash-evolution" style="overflow-x:auto"></div></div>
     </div>
 
     <div class="panel" style="margin-bottom:20px">
-      <div class="panel-head"><h3>Salaires & primes joueurs</h3></div>
-      <div class="panel-body" style="padding:0">
-        ${d.joueurs.length ? `<table><thead><tr><th>Joueur</th><th>Salaire</th><th>Primes</th><th>Total</th></tr></thead><tbody>
-          ${d.joueurs.map(p => `<tr><td>${esc(p.name)}</td><td>${chf(p.salaire)} CHF</td><td>${chf(p.primes)} CHF</td><td><strong>${chf(p.total)} CHF</strong></td></tr>`).join('')}
-        </tbody></table>` : `<div class="empty">Aucun joueur enregistré.</div>`}
+      <div class="panel-head">
+        <h3>Alertes</h3>
+        <div class="tabs" id="dash-alert-tabs" style="border:none;margin:0;gap:2px"></div>
       </div>
+      <div class="panel-body" id="dash-alert-body" style="min-height:220px"></div>
     </div>
   `;
 
-  // Graphiques dessinés après insertion dans le DOM (besoin de clientWidth pour le bar chart)
-  donutChart(document.getElementById('ch-comp'), [
-    { l: 'Indemnités employés', v: d.totaux.indemnites_employes, c: '#3B6FE0' },
-    { l: 'Salaires joueurs', v: d.totaux.salaires_joueurs, c: '#1F9D5B' },
-    { l: 'Primes de match', v: Math.max(d.totaux.primes_joueurs, 0.01), c: '#7B59D8' },
-  ], { size: 170, center: chf(total), centerSub: 'CHF total', fmtVal: v => chf(v) + ' CHF' });
-
-  if (topTeams.length) {
-    barChart(document.getElementById('ch-teams'), topTeams.map(t => ({ l: t.name.slice(0, 7), v: t.employes })),
-      { h: 170, max: Math.max(...topTeams.map(t => t.employes)) * 1.3 });
+  // Graphique dessiné après insertion dans le DOM (besoin de clientWidth). Comptes à 0 CHF
+  // (poste configuré sans montant) écartés du donut, sinon la part de cercle correspondante
+  // est indéfinie — ils restent comptés dans l'effectif juste à côté, où le montant importe peu.
+  const compoNonZero = d.composition.filter(a => a.montant > 0);
+  if (compoNonZero.length) {
+    donutChart(document.getElementById('ch-comp'), compoNonZero.map((a, i) => ({ l: a.label, v: a.montant, c: DASH_ACCOUNT_COLORS[i % DASH_ACCOUNT_COLORS.length] })),
+      { size: 170, center: chf(d.totaux.total_masse), centerSub: 'CHF total', fmtVal: v => chf(v) + ' CHF' });
   } else {
-    document.getElementById('ch-teams').innerHTML = `<div class="empty">Aucune équipe active.</div>`;
+    document.getElementById('ch-comp').innerHTML = `<div class="empty">Aucun montant pour ce filtre.</div>`;
   }
+  renderDashEffectif(document.getElementById('dash-effectif'), d.effectif);
+  if (d.evolution_saison.length) {
+    lineChart(document.getElementById('dash-evolution'), d.evolution_saison.map(x => ({ l: x.label, v: x.montant })));
+  } else {
+    document.getElementById('dash-evolution').innerHTML = `<div class="empty">Pas encore de données pour cette saison.</div>`;
+  }
+  renderDashAlerts();
 }
 async function exportCompta(){
   const blob = await api('export_compta', { params: { month: STATE.month, season_id: STATE.seasonId } });
@@ -1297,6 +1334,7 @@ function employeeModal(ee){
   // Copie de travail : la fiche d'origine n'est modifiée qu'après un enregistrement réussi.
   EMP_FORM = {};
   const bools = ['active','is_frontalier','tax_at_source','tax_church','spouse_works',
+                 'avs_rentier','avs_franchise_renonce','avs_minime_abatement',
                  ...SOCIAL_LINES.map(l => l.k + '_subject')];
   // Clés attachées par le serveur qui ne sont pas des champs de formulaire — jamais recopiées
   // telles quelles dans EMP_FORM, sous peine d'écraser insurance_profile_id (un id) par l'objet
@@ -1309,7 +1347,7 @@ function employeeModal(ee){
       EMP_FORM[k] = bools.includes(k) ? Number(ee[k]) === 1 : ee[k];
     });
   } else {
-    EMP_FORM = { active: true, country: 'CH', lang: 'fr', paiement: 'mensuel', payments_per_year: 12, contract_type: 'cdi' };
+    EMP_FORM = { active: true, country: 'CH', lang: 'fr', paiement: 'semestriel', payments_per_year: 12, contract_type: 'cdi' };
   }
   EMP_FORM.__id = ee ? ee.id : null;
   EMP_FORM.__assignments = ee ? ee.assignments : [];
@@ -1502,6 +1540,11 @@ function empTabAssurances(canPayroll){
       </label>
     `).join('')}
     ${SHARED_SOCIAL_LINES.every(l => !Number(rs[l.k+'_rate'])) ? `<p class="hint" style="margin-top:8px;color:var(--orange,#b26a00)">Aucun taux saisi pour ${rs.year} — va les paramétrer dans Paramètres &gt; Paie.</p>` : ''}
+    <label style="display:flex;align-items:center;gap:8px;padding:10px 0 0;font-size:13px;cursor:pointer;margin:0">
+      <input type="checkbox" data-ef="avs_minime_abatement" ${EMP_FORM.avs_minime_abatement?'checked':''}>
+      <span>Abattement AVS minime importance (${chf(rs.avs_minime_abatement_semestriel || 0)}.-/semestre, réduit la base de calcul des charges ci-dessus)</span>
+    </label>
+    <p class="hint" style="margin-top:6px">Réservé aux personnes concernées (ex. entraîneurs) : ne pas cocher par défaut. Incompatible avec la franchise rentier sur la même personne (§6.2.4).</p>
 
     ${efSection('LPP et impôt à la source', 'Personnels : taux ou montant propres à cette personne. Le taux l\'emporte si les deux sont remplis.')}
     <div style="display:grid;grid-template-columns:1fr 110px 130px;gap:10px;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);padding-bottom:6px;border-bottom:1px solid var(--ligne-2)">
@@ -2486,14 +2529,25 @@ async function renderPaieTab(el){
     <div class="card">
       <div class="card-head"><h3>Comptabilisation</h3></div>
       <div class="card-body">
-        <p class="hint" style="margin-bottom:14px">Chaque décompte validé dépose un brouillon dans Compta (à valider depuis l'écran Brouillons) : le brut sur le compte du poste, les charges patronales et les retenues sur le compte du prestataire, le solde sur le compte du net à payer.</p>
+        <p class="hint" style="margin-bottom:14px">Chaque décompte validé dépose un brouillon dans Compta (à valider depuis l'écran Brouillons) : le brut sur le compte du poste, les charges patronales et les retenues sur le compte du prestataire, le solde sur le compte du net à payer. Une rubrique sans compte de dette part sur le compte de suspens ci-dessous.</p>
         ${payrollAccountingSettingsForm()}
-        <table style="margin-top:16px"><thead><tr><th>Rubrique</th><th>Compte de charge (employeur)</th><th>Compte de dette (prestataire)</th><th></th></tr></thead><tbody>
+        <p class="hint" style="margin:16px 0 0"><span id="pla-configured-count">${payrollLineAccountsConfiguredCount()} / ${PAIE_LINE_ACCOUNT_KEYS.length}</span> rubriques avec un compte de dette configuré — chaque champ s'enregistre tout seul dès que tu en sors (pas besoin du bouton pour une seule ligne)</p>
+        <table style="margin-top:8px"><thead><tr><th></th><th>Rubrique</th><th>Compte de charge (employeur)</th><th>Compte de dette (prestataire)</th></tr></thead><tbody>
           ${PAIE_LINE_ACCOUNT_KEYS.map(k => payrollLineAccountRow(k)).join('')}
         </tbody></table>
+        <div style="display:flex;justify-content:flex-end;margin-top:14px">
+          <button class="btn btn-primary" onclick="saveAllPayrollAccounting()">Enregistrer toute la comptabilisation</button>
+        </div>
       </div>
     </div>
   `;
+}
+function payrollLineAccountsConfigured(key){
+  const line = (STATE.payrollAccounting.lines || []).find(l => l.line_key === key);
+  return !!(line && line.payable_account_number);
+}
+function payrollLineAccountsConfiguredCount(){
+  return PAIE_LINE_ACCOUNT_KEYS.filter(payrollLineAccountsConfigured).length;
 }
 
 function payrollAccountingSettingsForm(){
@@ -2509,33 +2563,30 @@ function payrollAccountingSettingsForm(){
       <div class="field-row" style="grid-template-columns:repeat(3,1fr)">
         <div class="field">
           <label>Compte "Salaire à payer" (net)</label>
-          <input id="pas-net-account" list="pas-net-account-options" value="${esc(netAccText)}" placeholder="Rechercher un compte" autocomplete="off">
+          <input id="pas-net-account" list="pas-net-account-options" value="${esc(netAccText)}" placeholder="Rechercher un compte" autocomplete="off" onchange="savePayrollAccountingSettings(this)">
           ${comptaAccountsDatalist('pas-net-account-options')}
         </div>
         <div class="field">
           <label>Compte de suspens (retenue sans compte propre)</label>
-          <input id="pas-suspense-account" list="pas-suspense-account-options" value="${esc(suspAccText)}" placeholder="Rechercher un compte" autocomplete="off">
+          <input id="pas-suspense-account" list="pas-suspense-account-options" value="${esc(suspAccText)}" placeholder="Rechercher un compte" autocomplete="off" onchange="savePayrollAccountingSettings(this)">
           ${comptaAccountsDatalist('pas-suspense-account-options')}
         </div>
         <div class="field">
           <label>Journal Compta</label>
-          <select id="pas-journal-code">
+          <select id="pas-journal-code" onchange="savePayrollAccountingSettings(this)">
             <option value="">— Automatique —</option>
             ${journals.map(j => `<option value="${esc(j.code)}" ${s.journal_code === j.code ? 'selected' : ''}>${esc(j.code)} — ${esc(j.label)}</option>`).join('')}
           </select>
         </div>
       </div>
       <div class="field check-row" style="margin-top:10px">
-        <input type="checkbox" id="pas-push-enabled" ${s.push_enabled === undefined || Number(s.push_enabled) === 1 ? 'checked' : ''}>
+        <input type="checkbox" id="pas-push-enabled" ${s.push_enabled === undefined || Number(s.push_enabled) === 1 ? 'checked' : ''} onchange="savePayrollAccountingSettings(this)">
         <label style="margin:0" for="pas-push-enabled">Pousser automatiquement chaque décompte validé vers Compta (comme brouillon)</label>
-      </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:10px">
-        <button class="btn btn-primary btn-sm" onclick="savePayrollAccountingSettings()">Enregistrer</button>
       </div>
     </div>
   `;
 }
-async function savePayrollAccountingSettings(){
+async function savePayrollAccountingSettings(fieldEl){
   const netAcc = resolveComptaAccount(document.getElementById('pas-net-account').value);
   const suspAcc = resolveComptaAccount(document.getElementById('pas-suspense-account').value);
   const body = {
@@ -2548,6 +2599,11 @@ async function savePayrollAccountingSettings(){
   };
   try {
     await api('payroll_accounting_settings', { method: 'PUT', body });
+    if (fieldEl) {
+      fieldEl.style.transition = 'background-color .2s';
+      fieldEl.style.backgroundColor = '#e3f6e8';
+      setTimeout(() => { fieldEl.style.backgroundColor = ''; }, 800);
+    }
     STATE.payrollAccounting = null;
     await refreshSettings();
   } catch (e) { alert(e.message); }
@@ -2560,33 +2616,81 @@ function payrollLineAccountRow(key){
   const chargeText = chargeAcc ? accountOptionText(chargeAcc) : (line.charge_account_label || '');
   const payableAcc = line.payable_account_number ? accounts.find(a => a.number === line.payable_account_number) : null;
   const payableText = payableAcc ? accountOptionText(payableAcc) : (line.payable_account_label || '');
+  const configured = !!line.payable_account_number;
   return `<tr>
+    <td id="pla-status-${key}" title="${configured ? 'Compte de dette configuré' : 'Compte de dette manquant'}">${configured ? '✅' : '⚠️'}</td>
     <td style="font-weight:600">${esc(line.label || key)}</td>
     <td>
-      <input id="pla-charge-${key}" list="pla-charge-${key}-options" value="${esc(chargeText)}" placeholder="Aucune part employeur" autocomplete="off" style="width:100%">
+      <input id="pla-charge-${key}" list="pla-charge-${key}-options" value="${esc(chargeText)}" placeholder="Aucune part employeur" autocomplete="off" style="width:100%" onchange="savePayrollLineAccountRow('${key}', this)">
       ${comptaAccountsDatalist('pla-charge-' + key + '-options')}
     </td>
     <td>
-      <input id="pla-payable-${key}" list="pla-payable-${key}-options" value="${esc(payableText)}" placeholder="Rechercher un compte" autocomplete="off" style="width:100%">
+      <input id="pla-payable-${key}" list="pla-payable-${key}-options" value="${esc(payableText)}" placeholder="Rechercher un compte" autocomplete="off" style="width:100%" onchange="savePayrollLineAccountRow('${key}', this)">
       ${comptaAccountsDatalist('pla-payable-' + key + '-options')}
     </td>
-    <td><button class="icon-btn" onclick="savePayrollLineAccount('${key}')" title="Enregistrer">✓</button></td>
   </tr>`;
 }
-async function savePayrollLineAccount(key){
+/* Enregistre la ligne dès que le champ perd le focus (onchange), pour ne rien
+   perdre si Valentino change d'onglet avant de cliquer sur le bouton global
+   en bas du tableau — celui-ci reste utile pour tout re-sauver d'un coup,
+   mais n'est plus la seule façon de ne pas perdre une saisie. */
+async function savePayrollLineAccountRow(key, fieldEl){
   const chargeAcc = resolveComptaAccount(document.getElementById('pla-charge-' + key).value);
   const payableAcc = resolveComptaAccount(document.getElementById('pla-payable-' + key).value);
-  const body = {
-    line_key: key,
-    charge_account_number: chargeAcc ? chargeAcc.number : '',
-    charge_account_label: chargeAcc ? chargeAcc.name : '',
-    payable_account_number: payableAcc ? payableAcc.number : '',
-    payable_account_label: payableAcc ? payableAcc.name : '',
-  };
   try {
-    await api('payroll_accounting_settings', { method: 'PUT', body });
+    await api('payroll_accounting_settings', { method: 'PUT', body: {
+      line_key: key,
+      charge_account_number: chargeAcc ? chargeAcc.number : '',
+      charge_account_label: chargeAcc ? chargeAcc.name : '',
+      payable_account_number: payableAcc ? payableAcc.number : '',
+      payable_account_label: payableAcc ? payableAcc.name : '',
+    }});
+    if (STATE.payrollAccounting && Array.isArray(STATE.payrollAccounting.lines)) {
+      const line = STATE.payrollAccounting.lines.find(l => l.line_key === key);
+      if (line) {
+        line.charge_account_number = chargeAcc ? chargeAcc.number : '';
+        line.charge_account_label = chargeAcc ? chargeAcc.name : '';
+        line.payable_account_number = payableAcc ? payableAcc.number : '';
+        line.payable_account_label = payableAcc ? payableAcc.name : '';
+      }
+    }
+    if (fieldEl) {
+      fieldEl.style.transition = 'background-color .2s';
+      fieldEl.style.backgroundColor = '#e3f6e8';
+      setTimeout(() => { fieldEl.style.backgroundColor = ''; }, 800);
+    }
+    const countEl = document.getElementById('pla-configured-count');
+    if (countEl) countEl.textContent = payrollLineAccountsConfiguredCount() + ' / ' + PAIE_LINE_ACCOUNT_KEYS.length;
+    const statusEl = document.getElementById('pla-status-' + key);
+    if (statusEl) statusEl.textContent = payrollLineAccountsConfigured(key) ? '✅' : '⚠️';
+  } catch (e) { alert(e.message); }
+}
+async function saveAllPayrollAccounting(){
+  const netAcc = resolveComptaAccount(document.getElementById('pas-net-account').value);
+  const suspAcc = resolveComptaAccount(document.getElementById('pas-suspense-account').value);
+  try {
+    await api('payroll_accounting_settings', { method: 'PUT', body: {
+      net_payable_account_number: netAcc ? netAcc.number : '2002',
+      net_payable_account_label: netAcc ? netAcc.name : 'Salaire à payer',
+      suspense_account_number: suspAcc ? suspAcc.number : '',
+      suspense_account_label: suspAcc ? suspAcc.name : '',
+      journal_code: document.getElementById('pas-journal-code').value,
+      push_enabled: document.getElementById('pas-push-enabled').checked,
+    }});
+    for (const key of PAIE_LINE_ACCOUNT_KEYS) {
+      const chargeAcc = resolveComptaAccount(document.getElementById('pla-charge-' + key).value);
+      const payableAcc = resolveComptaAccount(document.getElementById('pla-payable-' + key).value);
+      await api('payroll_accounting_settings', { method: 'PUT', body: {
+        line_key: key,
+        charge_account_number: chargeAcc ? chargeAcc.number : '',
+        charge_account_label: chargeAcc ? chargeAcc.name : '',
+        payable_account_number: payableAcc ? payableAcc.number : '',
+        payable_account_label: payableAcc ? payableAcc.name : '',
+      }});
+    }
     STATE.payrollAccounting = null;
     await refreshSettings();
+    alert('Comptabilisation enregistrée.');
   } catch (e) { alert(e.message); }
 }
 
@@ -2928,6 +3032,7 @@ function paymentSlipCell(r){
           <input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadPayslip('${r.person_type}',${r.person_id},this)">
         </label>
         ${r.payslip_filename ? `<button class="btn btn-primary btn-sm" onclick="sendPayslipEmail('${r.person_type}',${r.person_id})">Envoyer</button>` : ''}
+        ${r.payslip_filename ? `<button class="icon-btn" onclick="deletePayslipFile('${r.person_type}',${r.person_id})" title="Retirer ce document du dossier personnel" style="color:var(--rouge)">✕</button>` : ''}
       </div>
       ${sentInfo}
       ${r.payslip_filename ? `<div style="font-size:11px;color:var(--gris);margin-top:2px">Disponible sur le dossier personnel</div>` : ''}
@@ -2959,6 +3064,15 @@ async function sendPayslipEmail(personType, personId){
     alert('Fiche de paie envoyée à ' + res.sent_to + '.');
     await renderPayments(document.getElementById('content'));
   } catch (e) { alert('Échec de l\'envoi : ' + e.message); }
+}
+
+async function deletePayslipFile(personType, personId){
+  const r = findPaymentRow(personType, personId);
+  if (!confirm(`Retirer ce document du dossier personnel de ${r ? r.name : 'cette personne'} ?\n\nElle ne pourra plus le voir ni le télécharger tant qu'un nouveau document n'aura pas été généré ou déposé.`)) return;
+  try {
+    await api('payments_delete_file', { method: 'POST', body: { person_type: personType, person_id: personId, period: PAYMENTS_DATA.month } });
+    await renderPayments(document.getElementById('content'));
+  } catch (e) { alert('Échec : ' + e.message); }
 }
 
 async function togglePaymentPaid(personType, personId, paid){
@@ -3022,7 +3136,12 @@ async function changePayslipMonth(value){
   await renderPayslipDoc();
 }
 
-function addPayslipLine(type){ PS[type].push({ label: '', montant: 0, account_number: '', account_label: '' }); renderPayslipDoc(); }
+function addPayslipLine(type){
+  const line = { label: '', montant: 0, account_number: '', account_label: '' };
+  if (type === 'retenues') line.sign = 'retenue'; // 'retenue' réduit le net (défaut), 'complement' l'augmente
+  PS[type].push(line);
+  renderPayslipDoc();
+}
 
 /* Rattacher une indemnité ajoutée à la main sur ce décompte à un compte du plan comptable,
    pour qu'elle se regroupe avec les rôles du même compte sur le document imprimé (ex: une
@@ -3056,6 +3175,23 @@ function updatePayslipLine(type, i, field, el){
 
 const PAYSLIP_MONTH_LABELS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 
+/* Une retenue ajoutée à la main se saisit toujours en positif à l'écran (plus naturel), le
+ * sélecteur "Retenue / Complément" en fixe le signe réel envoyé au serveur : une "Retenue"
+ * (par défaut) réduit le net comme avant, un "Complément" l'augmente (ex: trop prélevé le mois
+ * précédent, à rembourser sur ce décompte). Le moteur de calcul (lib_payroll_engine.php) somme
+ * déjà les montants de 'divers_lines' tels quels dans le net — un montant négatif l'augmente
+ * naturellement, aucun changement nécessaire côté serveur, seul le signe transmis change. */
+function signedRetenues(list){
+  return list.map(l => ({ ...l, montant: Math.abs(Number(l.montant) || 0) * (l.sign === 'complement' ? -1 : 1) }));
+}
+/** Affichage d'un montant "Divers" avec son signe réel : une retenue (montant positif après
+ * signedRetenues) se lit "− X", un complément (montant négatif) se lit "+ X" — jamais un signe
+ * fixe qui produirait "− -50.00" pour un complément. */
+function diversAmountDisplay(montant){
+  const v = Number(montant) || 0;
+  return (v >= 0 ? '− ' : '+ ') + chf(Math.abs(v));
+}
+
 /* Seule source de vérité du calcul (bases, plafonds, franchise/abattement, net) : le serveur
  * (lib_payroll_engine.php, action payslip_compute), pas ce fichier. Rappelé à chaque
  * changement (mois, indemnité, retenue, override) par renderPayslipDoc(). */
@@ -3063,7 +3199,7 @@ async function fetchPayslipComputed(){
   try {
     PS.computed = await api('payslip_compute', { method: 'POST', body: {
       person_type: 'employee', person_id: PS.employeeId, month: PS.month, season_id: PS.seasonId,
-      indemnites: PS.indemnites, retenues: PS.retenues, overrides: PS.overrides,
+      indemnites: PS.indemnites, retenues: signedRetenues(PS.retenues), overrides: PS.overrides,
     }});
     PS.computeError = null;
   } catch (e) { PS.computed = null; PS.computeError = e.message; }
@@ -3078,7 +3214,7 @@ async function generatePayslipPdf(btn){
     // montant transmis par l'écran.
     const blob = await api('payslip_pdf', { method: 'POST', body: {
       employee_id: PS.employeeId, month: PS.month, season_id: PS.seasonId,
-      indemnites: PS.indemnites, retenues: PS.retenues, overrides: PS.overrides,
+      indemnites: PS.indemnites, retenues: signedRetenues(PS.retenues), overrides: PS.overrides,
     }});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -3147,14 +3283,23 @@ async function renderPayslipDoc(){
           <input class="ps-input" list="ps-account-options" value="${esc(current(l))}" placeholder="Compte (facultatif) : recherche..." autocomplete="off"
                  style="width:100%;margin-top:4px;padding:5px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:11.5px;color:var(--gris)"
                  onchange="setPayslipLineAccount(${i}, this.value)" title="Compte du plan comptable : détermine l'intitulé regroupé imprimé">` : '';
+      // Une retenue ajoutée à la main : "Retenue" (défaut) réduit le net, "Complément" l'augmente
+      // (ex: trop prélevé le mois précédent, à rembourser sur ce décompte). Le montant se saisit
+      // toujours en positif ci-dessous, ce sélecteur en fixe le signe réel (voir signedRetenues()).
+      const signPicker = type === 'retenues' ? `
+          <select class="ps-input" style="width:100%;margin-top:4px;padding:5px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:11.5px;color:var(--gris)"
+                  onchange="updatePayslipLine('${type}',${i},'sign',this)">
+            <option value="retenue" ${l.sign!=='complement'?'selected':''}>Retenue (− réduit le net)</option>
+            <option value="complement" ${l.sign==='complement'?'selected':''}>Complément (+ augmente le net)</option>
+          </select>` : '';
       return `<tr>
         <td style="padding:5px 10px 5px 0" colspan="3">
           <input class="ps-input" value="${esc(l.label)}" placeholder="Libellé" style="width:100%;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px" onchange="updatePayslipLine('${type}',${i},'label',this)">
-          ${accountPicker}
+          ${accountPicker}${signPicker}
         </td>
         <td style="padding:5px 0;text-align:right;vertical-align:top">
           <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
-            <input class="ps-input" type="number" step="0.05" value="${l.montant||''}" placeholder="0.00" style="width:90px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right" onchange="updatePayslipLine('${type}',${i},'montant',this)">
+            <input class="ps-input" type="number" step="0.05" min="0" value="${l.montant||''}" placeholder="0.00" style="width:90px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right" onchange="updatePayslipLine('${type}',${i},'montant',this)">
             <button onclick="removePayslipLine('${type}',${i})" style="color:var(--rouge)" title="Retirer">✕</button>
           </div>
         </td>
@@ -3235,10 +3380,10 @@ async function renderPayslipDoc(){
               ${(c.divers_lines.length || PS.retenues.length) ? `
                 ${row('Divers', '', '', '', { bold: true, pad: '22px' })}
                 ${editable
-                  ? `${c.divers_lines.slice(0, Math.max(0, c.divers_lines.length - PS.retenues.length)).map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
+                  ? `${c.divers_lines.slice(0, Math.max(0, c.divers_lines.length - PS.retenues.length)).map(l => row(esc(l.label) || '—', '', '', diversAmountDisplay(l.montant))).join('')}
                      ${PS.retenues.map((l,i) => customRow('retenues', i)).join('')}`
-                  : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
-                ${row('', '', '', '− ' + chf(c.divers_total), { bold: true, topBorder: true })}
+                  : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', diversAmountDisplay(l.montant))).join('')}
+                ${row('', '', '', diversAmountDisplay(c.divers_total), { bold: true, topBorder: true })}
               ` : ''}
             </tbody>
           </table>
@@ -3302,9 +3447,11 @@ async function renderPayslipDoc(){
 /* ============================================================ DÉCOMPTE DE PAIE JOUEUR (page autonome, nouvel onglet)
  *
  * Même principe que le décompte employé : seule source de vérité du calcul, le serveur
- * (payslip_compute / player_payslip_pdf), pas ce fichier. Deux particularités propres aux
- * joueurs (et non aux employés), gérées par le moteur : l'abattement AVS minime importance
- * (paramétré et daté, Paramètres > Paie) et la retenue lavage automatique.
+ * (payslip_compute / player_payslip_pdf), pas ce fichier. Une particularité propre aux
+ * joueurs (et non aux employés), gérée par le moteur : la retenue lavage automatique.
+ * L'abattement AVS minime importance (paramétré et daté, Paramètres > Paie) est disponible
+ * aussi côté employés depuis le 2026-08-18 (employees.avs_minime_abatement, case à cocher
+ * dans l'onglet Assurances de la fiche employé — utile notamment pour les entraîneurs).
  */
 let PSP = { player: null, playerId: null, retenues: [], overrides: {}, month: new Date().toISOString().slice(0,7), computed: null };
 
@@ -3333,7 +3480,7 @@ async function changePlayerPayslipMonth(value){
   await renderPlayerPayslipDoc();
 }
 
-function addPlayerPayslipLine(){ PSP.retenues.push({ label: '', montant: 0 }); renderPlayerPayslipDoc(); }
+function addPlayerPayslipLine(){ PSP.retenues.push({ label: '', montant: 0, sign: 'retenue' }); renderPlayerPayslipDoc(); }
 function removePlayerPayslipLine(i){ PSP.retenues.splice(i, 1); renderPlayerPayslipDoc(); }
 function updatePlayerPayslipLine(i, field, el){
   PSP.retenues[i][field] = field === 'montant' ? (Number(el.value) || 0) : el.value;
@@ -3351,7 +3498,7 @@ async function fetchPlayerPayslipComputed(){
   try {
     PSP.computed = await api('payslip_compute', { method: 'POST', body: {
       person_type: 'player', person_id: PSP.playerId, month: PSP.month,
-      retenues: PSP.retenues, overrides: PSP.overrides,
+      retenues: signedRetenues(PSP.retenues), overrides: PSP.overrides,
     }});
     PSP.computeError = null;
   } catch (e) { PSP.computed = null; PSP.computeError = e.message; }
@@ -3362,7 +3509,7 @@ async function generatePlayerPayslipPdf(btn){
   if (btn) { btn.disabled = true; btn.textContent = 'Génération…'; }
   try {
     const blob = await api('player_payslip_pdf', { method: 'POST', body: {
-      player_id: PSP.playerId, month: PSP.month, retenues: PSP.retenues, overrides: PSP.overrides,
+      player_id: PSP.playerId, month: PSP.month, retenues: signedRetenues(PSP.retenues), overrides: PSP.overrides,
     }});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -3426,10 +3573,15 @@ async function renderPlayerPayslipDoc(){
       return `<tr>
         <td style="padding:5px 10px 5px 0" colspan="3">
           <input class="ps-input" value="${esc(l.label)}" placeholder="Libellé" style="width:100%;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px" onchange="updatePlayerPayslipLine(${i},'label',this)">
+          <select class="ps-input" style="width:100%;margin-top:4px;padding:5px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:11.5px;color:var(--gris)"
+                  onchange="updatePlayerPayslipLine(${i},'sign',this)">
+            <option value="retenue" ${l.sign!=='complement'?'selected':''}>Retenue (− réduit le net)</option>
+            <option value="complement" ${l.sign==='complement'?'selected':''}>Complément (+ augmente le net)</option>
+          </select>
         </td>
-        <td style="padding:5px 0;text-align:right">
+        <td style="padding:5px 0;text-align:right;vertical-align:top">
           <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
-            <input class="ps-input" type="number" step="0.05" value="${l.montant||''}" placeholder="0.00" style="width:90px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right" onchange="updatePlayerPayslipLine(${i},'montant',this)">
+            <input class="ps-input" type="number" step="0.05" min="0" value="${l.montant||''}" placeholder="0.00" style="width:90px;padding:6px 8px;border:1.5px solid var(--ligne);border-radius:8px;font-size:12.5px;text-align:right" onchange="updatePlayerPayslipLine(${i},'montant',this)">
             <button onclick="removePlayerPayslipLine(${i})" style="color:var(--rouge)" title="Retirer">✕</button>
           </div>
         </td>
@@ -3485,10 +3637,10 @@ async function renderPlayerPayslipDoc(){
               ${(c.divers_lines.length || PSP.retenues.length) ? `
                 ${row('Divers', '', '', '', { bold: true, pad: '22px' })}
                 ${editable
-                  ? `${c.divers_lines.slice(0, Math.max(0, c.divers_lines.length - PSP.retenues.length)).map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
+                  ? `${c.divers_lines.slice(0, Math.max(0, c.divers_lines.length - PSP.retenues.length)).map(l => row(esc(l.label) || '—', '', '', diversAmountDisplay(l.montant))).join('')}
                      ${PSP.retenues.map((l,i) => retenueRow(i)).join('')}`
-                  : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', '− ' + chf(l.montant))).join('')}
-                ${row('', '', '', '− ' + chf(c.divers_total), { bold: true, topBorder: true })}
+                  : c.divers_lines.map(l => row(esc(l.label) || '—', '', '', diversAmountDisplay(l.montant))).join('')}
+                ${row('', '', '', diversAmountDisplay(c.divers_total), { bold: true, topBorder: true })}
               ` : ''}
             </tbody>
           </table>

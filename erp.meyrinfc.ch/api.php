@@ -121,20 +121,20 @@ switch ($action) {
 
     case 'create_user':
         require_admin();
-        $login = trim($input['login'] ?? '');
         $name  = trim($input['name'] ?? '');
         $pw    = $input['password'] ?? '';
         $role  = $input['role'] ?? 'stagiaire';
         $email = strtolower(trim($input['email'] ?? ''));
-        if (!$login || !$name || strlen($pw) < 6) {
-            json_die(400, 'Login, nom et mot de passe (6 car. min) requis.');
+        if (!$email || !$name || strlen($pw) < 6) {
+            json_die(400, 'E-mail, nom et mot de passe (6 car. min) requis.');
         }
-        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             json_die(400, 'Adresse e-mail invalide.');
         }
+        $login = $email;
         $users = read_json('users.json');
         foreach ($users as $u) {
-            if ($u['login'] === $login) json_die(409, 'Ce login existe déjà.');
+            if ($u['login'] === $login) json_die(409, 'Un compte avec cet e-mail existe déjà.');
         }
         $roles = read_json('roles.json');
         if (!isset($roles[$role])) json_die(400, 'Rôle invalide.');
@@ -162,6 +162,15 @@ switch ($action) {
         if ($idx === -1) json_die(404, 'Utilisateur introuvable.');
         $revoke = false;   // le changement doit-il couper les sessions en cours ?
         if (isset($input['name']))   $users[$idx]['name']   = trim($input['name']);
+        if (isset($input['login'])) {
+            $login = trim($input['login']);
+            if (!$login) json_die(400, 'Le login ne peut pas être vide.');
+            foreach ($users as $i => $u) {
+                if ($i !== $idx && $u['login'] === $login) json_die(409, 'Ce login existe déjà.');
+            }
+            if ($users[$idx]['login'] !== $login) $revoke = true;
+            $users[$idx]['login'] = $login;
+        }
         if (isset($input['email'])) {
             $email = strtolower(trim($input['email']));
             if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {

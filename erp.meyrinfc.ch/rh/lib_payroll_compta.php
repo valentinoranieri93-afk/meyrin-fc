@@ -127,6 +127,26 @@ function payroll_push_draft(PDO $rhPdo, int $paymentId): ?int {
         $suspenseLabel  = (string) ($accSettings['suspense_account_label'] ?? 'Suspens paie');
 
         foreach ($lines as $l) {
+            /* 'divers' est le seul type de ligne qui peut être négatif (2026-08-18) : un
+               "complément" ajouté à la main sur le décompte (ex: trop prélevé le mois précédent,
+               remboursé sur celui-ci) réduit ce que l'employeur doit sur ce compte plutôt que
+               d'augmenter la retenue — donc un débit, symétrique de la retenue normale (crédit).
+               Traité à part, avant le filtre générique "$amount <= 0" ci-dessous, qui écarterait
+               sinon silencieusement tout complément (aucune ligne comptable, écriture déséquilibrée). */
+            if ($l['kind'] === 'divers') {
+                $amt = round((float) $l['amount'], 2);
+                if ($amt == 0.0) continue;
+                $side = $amt > 0 ? 'credit' : 'debit';
+                $absAmt = abs($amt);
+                if ((string) $l['account_number'] === '') {
+                    $warnings[] = "Retenue « {$l['label']} » sans compte comptable, affectée au compte de suspens.";
+                    $addAmount($suspenseNumber, $suspenseLabel, $side, $absAmt);
+                } else {
+                    $addAmount((string) $l['account_number'], (string) $l['account_label'], $side, $absAmt);
+                }
+                continue;
+            }
+
             $amount = round((float) $l['amount'], 2);
             if ($amount <= 0) continue;
 
@@ -136,16 +156,6 @@ function payroll_push_draft(PDO $rhPdo, int $paymentId): ?int {
                     $addAmount($suspenseNumber, $suspenseLabel, 'debit', $amount);
                 } else {
                     $addAmount((string) $l['account_number'], (string) $l['account_label'], 'debit', $amount);
-                }
-                continue;
-            }
-
-            if ($l['kind'] === 'divers') {
-                if ((string) $l['account_number'] === '') {
-                    $warnings[] = "Retenue « {$l['label']} » sans compte comptable, affectée au compte de suspens.";
-                    $addAmount($suspenseNumber, $suspenseLabel, 'credit', $amount);
-                } else {
-                    $addAmount((string) $l['account_number'], (string) $l['account_label'], 'credit', $amount);
                 }
                 continue;
             }

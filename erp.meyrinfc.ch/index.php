@@ -751,8 +751,7 @@ $role_info  = $roles_data[$session['role']] ?? ['label' => $session['role'], 'co
     <h3>Ajouter un utilisateur</h3>
     <div class="modal-error" id="add-user-error"></div>
     <div class="m-field"><label>Prénom Nom</label><input type="text" id="add-name" placeholder="Jean Dupont"></div>
-    <div class="m-field"><label>Login</label><input type="text" id="add-login" placeholder="jean.dupont"><small>Identifiant de connexion, sans espaces.</small></div>
-    <div class="m-field"><label>E-mail</label><input type="email" id="add-email" placeholder="jean.dupont@meyrinfc.ch"><small>Sert à relier ce compte à ses données dans les applications.</small></div>
+    <div class="m-field"><label>E-mail</label><input type="email" id="add-email" placeholder="jean.dupont@meyrinfc.ch"><small>Sert d'identifiant de connexion et relie ce compte à ses données dans les applications.</small></div>
     <div class="m-field"><label>Mot de passe</label><input type="password" id="add-pw" placeholder="Min. 6 caractères"></div>
     <div class="m-field">
       <label>Rôle</label>
@@ -775,6 +774,7 @@ $role_info  = $roles_data[$session['role']] ?? ['label' => $session['role'], 'co
     <div class="modal-error" id="edit-user-error"></div>
     <input type="hidden" id="edit-id">
     <div class="m-field"><label>Prénom Nom</label><input type="text" id="edit-name"></div>
+    <div class="m-field"><label>Login</label><input type="text" id="edit-login" placeholder="jean.dupont@meyrinfc.ch"><small>Identifiant de connexion, sans espaces. Recommandé : l'e-mail.</small></div>
     <div class="m-field"><label>E-mail</label><input type="email" id="edit-email" placeholder="jean.dupont@meyrinfc.ch"><small>Sert à relier ce compte à ses données dans les applications.</small></div>
     <div class="m-field">
       <label>Rôle</label>
@@ -1030,6 +1030,7 @@ async function editUser(u) {
   fillRoleSelects(u.role);
   document.getElementById('edit-id').value = u.id;
   document.getElementById('edit-name').value = u.name;
+  document.getElementById('edit-login').value = u.login || '';
   document.getElementById('edit-email').value = u.email || '';
   document.getElementById('edit-role').value = u.role;
   document.getElementById('edit-active').checked = !!u.active;
@@ -1040,7 +1041,7 @@ async function editUser(u) {
 
 async function createUser() {
   const err = document.getElementById('add-user-error');
-  const data = { name: document.getElementById('add-name').value, login: document.getElementById('add-login').value, email: document.getElementById('add-email').value, password: document.getElementById('add-pw').value, role: document.getElementById('add-role').value };
+  const data = { name: document.getElementById('add-name').value, email: document.getElementById('add-email').value, password: document.getElementById('add-pw').value, role: document.getElementById('add-role').value };
   const res = await api('create_user', data, 'POST');
   if (!res.ok) { err.textContent = res.error; err.style.display='block'; return; }
   closeModal('modal-add-user');
@@ -1068,7 +1069,7 @@ async function updateUser() {
       if (!ok) return;
     }
   }
-  const data = { id: document.getElementById('edit-id').value, name: document.getElementById('edit-name').value, email: document.getElementById('edit-email').value, role: document.getElementById('edit-role').value, active: document.getElementById('edit-active').checked, password: document.getElementById('edit-pw').value };
+  const data = { id: document.getElementById('edit-id').value, name: document.getElementById('edit-name').value, login: document.getElementById('edit-login').value, email: document.getElementById('edit-email').value, role: document.getElementById('edit-role').value, active: document.getElementById('edit-active').checked, password: document.getElementById('edit-pw').value };
   const res = await api('update_user', data, 'POST');
   if (!res.ok) { err.textContent = res.error; err.style.display='block'; return; }
   closeModal('modal-edit-user');
