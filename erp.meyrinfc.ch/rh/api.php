@@ -27,6 +27,7 @@ register_shutdown_function(function () {
 require_once __DIR__ . '/mfc_boot.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib_payroll_engine.php';
+require_once __DIR__ . '/lib_payroll_taxsource.php';
 require_once __DIR__ . '/lib_payroll_compta.php';
 
 /* Session ERP + accès au module. Répond 401/403 en JSON si besoin.
@@ -375,6 +376,60 @@ function init_schema(PDO $pdo): void {
   ensure_column($pdo, 'payroll_rate_settings', 'lfp_rate',         'REAL NOT NULL DEFAULT 0');
   ensure_column($pdo, 'payroll_rate_settings', 'cpe_rate',         'REAL NOT NULL DEFAULT 0');
   ensure_column($pdo, 'payroll_rate_settings', 'frais_admin_rate', 'REAL NOT NULL DEFAULT 0');
+
+  /* Barème d'impôt à la source officiel (fichier ESTV Recordart 06), une grille par
+     canton et par année civile, importée dans Paramètres > Paie. Le moteur de paie y
+     lit le taux mensuel applicable au revenu déterminant, à la place du taux saisi à la
+     main (voir lib_payroll_taxsource.php). Montants en centimes, taux en pourcent.
+     income_to NULL = tranche ouverte (taux plafond au-delà). */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS is_bareme_rates (
+    canton TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    income_from INTEGER NOT NULL,
+    income_to INTEGER,
+    min_tax INTEGER NOT NULL DEFAULT 0,
+    rate_pct REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (canton, year, code, income_from)
+  )");
+  $pdo->exec("CREATE INDEX IF NOT EXISTS idx_is_bareme_lookup ON is_bareme_rates (canton, year, code, income_from)");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS is_bareme_imports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    canton TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    filename TEXT NOT NULL DEFAULT '',
+    generated_at TEXT NOT NULL DEFAULT '',
+    rows_imported INTEGER NOT NULL DEFAULT 0,
+    codes_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )");
+  /* Revenu brut mensuel réalisé chez un autre employeur : sert uniquement à choisir la
+     tranche du barème (revenu déterminant pour le taux), jamais à l'assiette. La personne
+     doit le déclarer, l'employeur ne peut pas le deviner. Idem côté joueurs plus bas. */
+  ensure_column($pdo, 'employees', 'is_rate_determining_income', 'REAL NOT NULL DEFAULT 0');
+
+  /* Impôt à la source côté joueurs (2026-08-28) : les joueurs n'avaient aucun champ IS
+     (population historiquement sous le seuil d'imposition). Même mécanisme que les
+     employés : assujettissement + code de barème personnel, avec repli sur un taux ou
+     montant manuel. tax_canton par défaut GE (canton de travail du club). */
+  ensure_column($pdo, 'players', 'tax_at_source',              'INTEGER NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'tax_bareme',                 "TEXT NOT NULL DEFAULT ''");
+  ensure_column($pdo, 'players', 'tax_canton',                 "TEXT NOT NULL DEFAULT 'GE'");
+  ensure_column($pdo, 'players', 'is_rate',                    'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'is_amount',                  'REAL NOT NULL DEFAULT 0');
+  ensure_column($pdo, 'players', 'is_rate_determining_income', 'REAL NOT NULL DEFAULT 0');
+
+  /* Case unique d'assujettissement (2026-08-28) : le moteur lisait employees.is_subject
+     (onglet Assurances), la fiche portait aussi tax_at_source (section Impôt à la source)
+     avec le code de barème. Les deux fusionnent sur tax_at_source. Reprise unique de
+     l'ancien interrupteur là où le nouveau n'a jamais été coché. is_subject reste en base
+     mais n'est plus lu ni écrit. */
+  $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
+  $migratedTaxAtSource = (bool) $pdo->query("SELECT 1 FROM schema_migrations WHERE name = 'is_single_tax_at_source_2026_08'")->fetchColumn();
+  if (!$migratedTaxAtSource) {
+    $pdo->exec("UPDATE employees SET tax_at_source = 1 WHERE tax_at_source = 0 AND is_subject = 1");
+    $pdo->prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)')->execute(['is_single_tax_at_source_2026_08']);
+  }
 
   /* Références administratives des assureurs et de la prévoyance (assureur LAA, n° de
      police, groupe LAA, institution et plan LPP, caisse d'allocations familiales) :
@@ -1719,9 +1774,10 @@ function employee_fiche_fields(): array {
     // Séjour
     'permit_type' => 'str', 'permit_expiry' => 'str', 'is_frontalier' => 'bool',
     'residence_country' => 'str', 'arrival_ch_date' => 'str',
-    // Impôt à la source
+    // Impôt à la source (case unique : tax_at_source, l'ancien is_subject n'est plus écrit)
     'tax_at_source' => 'bool', 'tax_canton' => 'str', 'tax_bareme' => 'str',
     'tax_church' => 'bool', 'spouse_works' => 'bool', 'tax_children' => 'int',
+    'is_rate_determining_income' => 'float',
     // Contrat
     'contract_start' => 'str', 'contract_end' => 'str', 'contract_type' => 'str',
     'activity_rate' => 'float', 'workplace' => 'str', 'department' => 'str', 'job_title' => 'str',
@@ -1734,7 +1790,8 @@ function employee_fiche_fields(): array {
     'aanp_subject' => 'bool', 'laac_subject' => 'bool', 'ijm_subject' => 'bool',
     // LPP et impôt à la source : personnels (âge/plan, situation familiale)
     'lpp_subject' => 'bool',  'lpp_rate' => 'float',  'lpp_amount' => 'float',
-    'is_subject' => 'bool',   'is_rate' => 'float',   'is_amount' => 'float',
+    // is_rate / is_amount : override manuel du barème (taux OU montant fixe)
+    'is_rate' => 'float',   'is_amount' => 'float',
     // Profil d'assurance (assureur LAA, institution LPP...) choisi dans une liste
     // paramétrée une fois pour tout le club ; seuls le n° d'affilié et la part
     // employeur restent propres à la personne. 'nullint' et non 'int' : la colonne est
@@ -1782,11 +1839,11 @@ function employee_document_types(): array {
  * la rémunération et les retenues, plus le numéro AVS, qui est un identifiant d'État. */
 function employee_payroll_only_fields(): array {
   return ['avs_number', 'tax_at_source', 'tax_canton', 'tax_bareme', 'tax_church',
-          'spouse_works', 'tax_children', 'payments_per_year',
+          'spouse_works', 'tax_children', 'is_rate_determining_income', 'payments_per_year',
           'insurance_profile_id', 'lpp_member_number', 'lpp_employer_amount',
           'avs_subject', 'ac_subject', 'amat_subject', 'aanp_subject', 'laac_subject', 'ijm_subject',
           'lpp_subject', 'lpp_rate', 'lpp_amount',
-          'is_subject', 'is_rate', 'is_amount',
+          'is_rate', 'is_amount',
           'avs_rentier', 'avs_rentier_since', 'avs_franchise_renonce', 'avs_minime_abatement'];
 }
 
@@ -2242,6 +2299,10 @@ const RH_PERMS = [
   'import_validate'        => 'imports.run',
   'import_discard'         => 'imports.run',
   'import_employees_file'  => 'imports.run',
+  /* Barème d'impôt à la source : un import « métier » de paramètre de paie
+     (grille officielle AFC), pas un relevé courant -> payroll.edit, pas imports.run. */
+  'taxsource_bareme'       => ['GET' => 'payroll.view', 'write' => 'payroll.edit'],
+  'taxsource_import'       => 'payroll.edit',
   'export_compta'          => 'export.compta',
 
   /* --- Paiements et fiches de paie (ajoutes le 30.07.2026) ---------------
@@ -3242,9 +3303,11 @@ switch ($action) {
       $poste = s($b, 'poste');
       if ($poste !== '' && !in_array($poste, ['gardien', 'defenseur', 'milieu', 'attaquant'], true)) fail('poste invalide');
       $st = db()->prepare('INSERT INTO players (first_name,last_name,email,phone,iban,salaire_mensuel,is_guest,poste,date_naissance,adresse,npa,ville,
-        avs_subject,ac_subject,amat_subject,aanp_subject,laac_subject,ijm_subject,avs_abatement) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        avs_subject,ac_subject,amat_subject,aanp_subject,laac_subject,ijm_subject,avs_abatement,
+        tax_at_source,tax_bareme,tax_canton,is_rate,is_amount,is_rate_determining_income) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
       $st->execute([s($b,'first_name'), $ln, s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'is_guest',false)?1:0, $poste, s($b,'date_naissance'), s($b,'adresse'), s($b,'npa'), s($b,'ville'),
-        bo($b,'avs_subject',false)?1:0, bo($b,'ac_subject',false)?1:0, bo($b,'amat_subject',false)?1:0, bo($b,'aanp_subject',false)?1:0, bo($b,'laac_subject',false)?1:0, bo($b,'ijm_subject',false)?1:0, bo($b,'avs_abatement',false)?1:0]);
+        bo($b,'avs_subject',false)?1:0, bo($b,'ac_subject',false)?1:0, bo($b,'amat_subject',false)?1:0, bo($b,'aanp_subject',false)?1:0, bo($b,'laac_subject',false)?1:0, bo($b,'ijm_subject',false)?1:0, bo($b,'avs_abatement',false)?1:0,
+        bo($b,'tax_at_source',false)?1:0, s($b,'tax_bareme'), s($b,'tax_canton') ?: 'GE', f($b,'is_rate'), f($b,'is_amount'), f($b,'is_rate_determining_income')]);
       out(['id' => (int)db()->lastInsertId()]);
     }
     if ($method === 'PUT') {
@@ -3252,9 +3315,11 @@ switch ($action) {
       $poste = s($b, 'poste');
       if ($poste !== '' && !in_array($poste, ['gardien', 'defenseur', 'milieu', 'attaquant'], true)) fail('poste invalide');
       $st = db()->prepare('UPDATE players SET first_name=?,last_name=?,email=?,phone=?,iban=?,salaire_mensuel=?,active=?,poste=?,date_naissance=?,adresse=?,npa=?,ville=?,
-        avs_subject=?,ac_subject=?,amat_subject=?,aanp_subject=?,laac_subject=?,ijm_subject=?,avs_abatement=? WHERE id=?');
+        avs_subject=?,ac_subject=?,amat_subject=?,aanp_subject=?,laac_subject=?,ijm_subject=?,avs_abatement=?,
+        tax_at_source=?,tax_bareme=?,tax_canton=?,is_rate=?,is_amount=?,is_rate_determining_income=? WHERE id=?');
       $st->execute([s($b,'first_name'), s($b,'last_name'), s($b,'email'), s($b,'phone'), s($b,'iban'), f($b,'salaire_mensuel'), bo($b,'active',true)?1:0, $poste, s($b,'date_naissance'), s($b,'adresse'), s($b,'npa'), s($b,'ville'),
-        bo($b,'avs_subject',false)?1:0, bo($b,'ac_subject',false)?1:0, bo($b,'amat_subject',false)?1:0, bo($b,'aanp_subject',false)?1:0, bo($b,'laac_subject',false)?1:0, bo($b,'ijm_subject',false)?1:0, bo($b,'avs_abatement',false)?1:0, $id]);
+        bo($b,'avs_subject',false)?1:0, bo($b,'ac_subject',false)?1:0, bo($b,'amat_subject',false)?1:0, bo($b,'aanp_subject',false)?1:0, bo($b,'laac_subject',false)?1:0, bo($b,'ijm_subject',false)?1:0, bo($b,'avs_abatement',false)?1:0,
+        bo($b,'tax_at_source',false)?1:0, s($b,'tax_bareme'), s($b,'tax_canton') ?: 'GE', f($b,'is_rate'), f($b,'is_amount'), f($b,'is_rate_determining_income'), $id]);
       out(['ok' => true]);
     }
     if ($method === 'DELETE') {
@@ -3526,6 +3591,68 @@ switch ($action) {
     } catch (Throwable $e) { $pdo->rollBack(); fail('Échec import : ' . $e->getMessage(), 500); }
     out(['created' => $created, 'updated' => $updated, 'skipped' => $skipped, 'assignments' => $assignments,
       'players_created' => $players_created, 'players_updated' => $players_updated, 'total_lignes' => count($rows)]);
+  }
+
+  /* ============ BARÈME IMPÔT À LA SOURCE (Paramètres > Paie) ============ */
+
+  /* Grilles déjà importées + codes de barème disponibles par année, pour l'écran de
+     réglage et pour peupler le menu déroulant des fiches. */
+  case 'taxsource_bareme': {
+    $pdo = db();
+    if ($method !== 'GET') fail('Méthode non supportée', 405);
+    $imports = $pdo->query('SELECT * FROM is_bareme_imports ORDER BY year DESC, canton')->fetchAll();
+    $codesByYear = [];
+    foreach ($imports as $imp) {
+      $codesByYear[(string)$imp['year']] = taxsource_available_codes($pdo, $imp['canton'], (int)$imp['year']);
+    }
+    out(['imports' => $imports, 'codes_by_year' => $codesByYear]);
+  }
+
+  /* Import du fichier officiel ESTV (Recordart 06). ?preview=1 : parse et renvoie
+     l'aperçu sans rien écrire. Sinon : sauvegarde datée du sqlite, remplacement complet
+     de la grille (canton, année), copie du fichier brut sous data/tax_baremes/. */
+  case 'taxsource_import': {
+    if ($method !== 'POST') fail('Méthode non supportée', 405);
+    if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) fail('Fichier requis.');
+    $raw = file_get_contents($_FILES['file']['tmp_name']);
+    if ($raw === false || $raw === '') fail('Fichier vide ou illisible.');
+    $origName = (string) ($_FILES['file']['name'] ?? 'bareme.txt');
+
+    $parsed = taxsource_parse_estv($raw);
+    $preview = [
+      'canton'       => $parsed['canton'],
+      'year'         => $parsed['year'],
+      'generated_at' => $parsed['generated_at'],
+      'rows'         => $parsed['line_count'],
+      'rates'        => count($parsed['rates']),
+      'codes'        => $parsed['codes'],
+      'ignored'      => $parsed['ignored'],
+      'errors'       => $parsed['errors'],
+      'ok'           => $parsed['ok'],
+    ];
+
+    if (isset($_GET['preview'])) out($preview);
+
+    if (!$parsed['ok']) fail('Fichier invalide : ' . implode(' ', $parsed['errors']));
+
+    $pdo = db();
+    // Sauvegarde datée avant toute écriture destructive (même pratique que les autres
+    // reprises RH : on peut revenir en arrière si l'import s'avère faux).
+    $backup = DB_DIR . '/rh.sqlite.bak-' . date('Ymd-His');
+    if (!@copy(DB_FILE, $backup)) fail('Impossible de sauvegarder la base avant import.', 500);
+
+    $storeDir = DB_DIR . '/tax_baremes';
+    if (!is_dir($storeDir)) mkdir($storeDir, 0775, true);
+    $ht = $storeDir . '/.htaccess';
+    if (!file_exists($ht)) file_put_contents($ht, "Require all denied\n");
+    file_put_contents($storeDir . '/' . $parsed['canton'] . '-' . $parsed['year'] . '.txt', $raw);
+
+    try {
+      $inserted = taxsource_store($pdo, $parsed, $origName);
+    } catch (Throwable $e) {
+      fail('Échec de l\'import : ' . $e->getMessage(), 500);
+    }
+    out($preview + ['inserted' => $inserted, 'backup' => basename($backup)]);
   }
 
   /* ============ DASHBOARD ============ */

@@ -429,13 +429,31 @@ async function loadRefData(){
      Équipes, Employés et Paramètres, comme c'était le cas quand le lot partait d'un bloc. */
   /* La saison est transmise : sous référentiel club, le nom et la catégorie
      d'une équipe dépendent de la saison consultée. */
-  [STATE.teams, STATE.categories, STATE.postes, STATE.rateSettings, STATE.insuranceProfiles] = await Promise.all([
+  [STATE.teams, STATE.categories, STATE.postes, STATE.rateSettings, STATE.insuranceProfiles, STATE.taxsource] = await Promise.all([
     apiSoft('teams', [], true, { season_id: STATE.seasonId }),
     apiSoft('team_categories', []),
     apiSoft('postes', []),
     apiSoft('payroll_rate_settings', [], !!MFC.payrollView),
     apiSoft('insurance_profiles', [], !!MFC.payrollView),
+    apiSoft('taxsource_bareme', { imports: [], codes_by_year: {} }, !!MFC.payrollView),
   ]);
+}
+
+/** Codes de barème d'impôt à la source disponibles pour une année (grille importée dans
+ * Paramètres > Paie), ou liste vide si aucune grille pour cette année. */
+function taxsourceCodes(year){
+  const map = (STATE.taxsource && STATE.taxsource.codes_by_year) || {};
+  return map[String(year)] || [];
+}
+
+/** Code de barème suggéré d'après la situation familiale saisie sur la fiche. Genève
+ * n'émet que des codes « N » (sans impôt ecclésiastique). Miroir de taxsource_suggest_code()
+ * côté serveur. */
+function taxsourceSuggestCode(civilStatus, spouseWorks, children){
+  const n = Math.max(0, Math.min(9, Number(children) || 0));
+  if (civilStatus === 'marie' || civilStatus === 'partenariat') return (spouseWorks ? 'C' : 'B') + n + 'N';
+  if (['celibataire','divorce','separe','veuf'].includes(civilStatus) && n > 0) return 'H' + Math.max(1, n) + 'N';
+  return 'A' + n + 'N';
 }
 
 /* ============================================================ DASHBOARD */
@@ -1006,6 +1024,33 @@ async function importFile(action, file, onDone){
   } catch (e) { alert('Échec de l\'import : ' + e.message); }
 }
 
+/** Import d'une grille de barème d'impôt à la source (Paramètres > Paie). Aperçu d'abord
+ * (parse sans écrire), confirmation, puis import réel qui remplace la grille du même
+ * canton et de la même année. */
+async function taxsourceImportFile(file){
+  const fd = new FormData(); fd.append('file', file);
+  let preview;
+  try {
+    preview = await api('taxsource_import', { method: 'POST', form: fd, params: { preview: 1 } });
+  } catch (e) { alert('Fichier illisible : ' + e.message); return; }
+  if (!preview.ok) { alert('Fichier invalide :\n' + (preview.errors || []).join('\n')); return; }
+  const ign = Object.entries(preview.ignored || {}).map(([k, v]) => `${v} ligne(s) type ${k}`).join(', ');
+  const ok = confirm(
+    `Barème ${preview.canton} ${preview.year}\n` +
+    `Généré le ${preview.generated_at || '?'}\n` +
+    `${preview.rates} tranches, ${preview.codes.length} codes : ${preview.codes.join(', ')}\n` +
+    (ign ? `Ignoré : ${ign}\n` : '') +
+    `\nRemplace la grille ${preview.canton} ${preview.year} existante. Continuer ?`);
+  if (!ok) return;
+  const fd2 = new FormData(); fd2.append('file', file);
+  try {
+    const res = await api('taxsource_import', { method: 'POST', form: fd2 });
+    alert(`Barème ${res.canton} ${res.year} importé : ${res.inserted} tranches. Sauvegarde : ${res.backup}`);
+    await loadRefData();
+    renderPage();
+  } catch (e) { alert('Échec de l\'import : ' + e.message); }
+}
+
 /* ============================================================ EMPLOYÉS */
 
 let EMP_FILTER = { search: '', poste: '', team: '', season: '', paiement: '' };
@@ -1120,6 +1165,16 @@ async function employeeDetailModal(ee, seasonId){
     return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
       <span>${esc(l.label)}</span><span style="color:${rate>0||amt>0?'var(--noir)':'var(--orange,#b26a00)'}">${val}</span></div>`;
   }).join('') : '';
+  // Impôt à la source : porté par tax_at_source + code de barème (le taux réel est
+  // recalculé chaque mois par le moteur de paie selon le revenu).
+  const isBlock = (MFC.payrollView && Number(ee.tax_at_source) === 1) ? (() => {
+    const manual = Number(ee.is_rate) > 0 ? chf(ee.is_rate) + ' % (manuel)'
+      : (Number(ee.is_amount) > 0 ? chf(ee.is_amount) + ' CHF (manuel)' : '');
+    const val = manual || (ee.tax_bareme ? 'barème ' + esc(ee.tax_bareme) : 'à définir');
+    const ok = manual || ee.tax_bareme;
+    return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--ligne-2);font-size:13px">
+      <span>Impôt à la source</span><span style="color:${ok?'var(--noir)':'var(--orange,#b26a00)'}">${val}</span></div>`;
+  })() : '';
   const missingDocs = DOC_TYPES.filter(t => t.required &&
     Number(((ee.documents || []).find(d => d.doc_type === t.k) || {}).received) !== 1);
   // person_link exige payroll.view côté serveur : sans ce droit, inutile de tenter l'appel.
@@ -1166,7 +1221,7 @@ async function employeeDetailModal(ee, seasonId){
     </div>` : ''}
     ${MFC.payrollView ? `<details style="margin:16px 0 8px">
       <summary style="font-size:13px;font-weight:700;cursor:pointer">Assurances sociales retenues</summary>
-      <div style="margin-top:8px">${socialBlock || `<div class="empty" style="padding:10px 0">Aucune affiliation renseignée (fiche employé &gt; Assurances sociales).</div>`}</div>
+      <div style="margin-top:8px">${(socialBlock + isBlock) || `<div class="empty" style="padding:10px 0">Aucune affiliation renseignée (fiche employé &gt; Assurances sociales).</div>`}</div>
     </details>` : ''}
     <h4 style="font-size:13px;font-weight:700;margin:16px 0 8px">Dossier personnel</h4>
     <div style="padding:4px 0">
@@ -1244,7 +1299,6 @@ const SHARED_SOCIAL_LINES = [
 ];
 const PERSONAL_SOCIAL_LINES = [
   { k: 'lpp', label: 'Prévoyance professionnelle (LPP)' },
-  { k: 'is',  label: 'Impôt à la source' },
 ];
 const SOCIAL_LINES = [...SHARED_SOCIAL_LINES, ...PERSONAL_SOCIAL_LINES];
 
@@ -1452,17 +1506,32 @@ function empTabSejour(canPayroll){
       ${efText('arrival_ch_date', 'Date d\'arrivée en Suisse', { type: 'date' })}
     </div>
 
-    ${efSection('Imposition à la source', canPayroll ? 'Un frontalier est imposé dans le canton de travail, les autres dans leur canton de domicile.' : '')}
-    ${!canPayroll ? empNoRight() : `
+    ${efSection('Imposition à la source', canPayroll ? 'Un frontalier est imposé dans le canton de travail, les autres dans leur canton de domicile. Le taux est recalculé chaque mois par le moteur de paie selon le revenu du mois et le barème choisi.' : '')}
+    ${!canPayroll ? empNoRight() : (() => {
+      const year = new Date().getFullYear();
+      const codes = taxsourceCodes(year);
+      const suggestion = taxsourceSuggestCode(EMP_FORM.civil_status, !!EMP_FORM.spouse_works, EMP_FORM.tax_children);
+      const baremeField = codes.length
+        ? efSelect('tax_bareme', 'Code de barème',
+            codes.map(c => [c, c + (c === suggestion ? '  (suggéré)' : '')]),
+            { hint: `Grille ${year} importée. Suggestion d'après la situation familiale : ${suggestion}.` })
+        : efText('tax_bareme', 'Code de barème', { ph: suggestion,
+            hint: `Aucune grille ${year} importée (Paramètres > Paie). Le taux devra être saisi manuellement ci-dessous.` });
+      return `
       ${efCheck('tax_at_source', 'Assujetti à l\'impôt à la source')}
       <div class="field-row">
         ${efText('tax_canton', 'Canton d\'imposition', { ph: 'GE' })}
-        ${efText('tax_bareme', 'Code de barème', { ph: 'A0N', hint: 'Lettre du tarif, nombre de charges, puis Y ou N pour l\'impôt ecclésiastique.' })}
+        ${baremeField}
       </div>
-      ${efCheck('tax_church', 'Soumis à l\'impôt ecclésiastique')}
       ${efCheck('spouse_works', 'Le conjoint exerce une activité lucrative')}
       ${efText('tax_children', 'Nombre de charges reconnues', { type: 'number', hint: 'Se recoupe avec l\'onglet Enfants, qui sert lui aux allocations familiales.' })}
-    `}
+      ${efText('is_rate_determining_income', 'Revenu brut mensuel chez un autre employeur (CHF)', { type: 'number', step: '0.05', hint: 'Pour la détermination du taux uniquement. À déclarer par la personne. Laisser vide si Meyrin FC est le seul employeur.' })}
+      <div class="field-row">
+        ${efText('is_rate', 'Taux manuel (%)', { type: 'number', step: '0.01', hint: 'Remplace le barème pour cette personne.' })}
+        ${efText('is_amount', 'ou montant fixe manuel (CHF)', { type: 'number', step: '0.05' })}
+      </div>
+    `;
+    })()}
   `;
 }
 
@@ -1530,7 +1599,7 @@ function empTabAssurances(canPayroll){
   const rs = currentRateSettings();
   const profile = (STATE.insuranceProfiles || []).find(p => p.id === Number(EMP_FORM.insurance_profile_id));
   return `
-    <p class="hint" style="margin-bottom:14px">Les six premières lignes ont le même taux pour tout le monde, révisé une fois par année civile (Paramètres &gt; Paie) : coche seulement si la personne y est assujettie. LPP et impôt à la source restent propres à chacun.</p>
+    <p class="hint" style="margin-bottom:14px">Les six premières lignes ont le même taux pour tout le monde, révisé une fois par année civile (Paramètres &gt; Paie) : coche seulement si la personne y est assujettie. La LPP reste propre à chacun ; l'impôt à la source se règle dans l'onglet Identité, section Imposition à la source.</p>
 
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);margin-bottom:6px">Taux partagés — année ${rs.year}</div>
     ${SHARED_SOCIAL_LINES.map(l => `
@@ -1546,7 +1615,7 @@ function empTabAssurances(canPayroll){
     </label>
     <p class="hint" style="margin-top:6px">Réservé aux personnes concernées (ex. entraîneurs) : ne pas cocher par défaut. Incompatible avec la franchise rentier sur la même personne (§6.2.4).</p>
 
-    ${efSection('LPP et impôt à la source', 'Personnels : taux ou montant propres à cette personne. Le taux l\'emporte si les deux sont remplis.')}
+    ${efSection('LPP', 'Personnelle : taux ou montant propres à cette personne. Le taux l\'emporte si les deux sont remplis.')}
     <div style="display:grid;grid-template-columns:1fr 110px 130px;gap:10px;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gris-2);padding-bottom:6px;border-bottom:1px solid var(--ligne-2)">
       <span>Affiliation</span><span>Taux (%)</span><span>ou montant (CHF)</span>
     </div>
@@ -1951,6 +2020,30 @@ function playerModal(p){
         <input type="checkbox" id="pm-avs-abatement" ${p&&p.avs_abatement?'checked':''}>
         <span>Abattement AVS (2500.-/semestre, réduit la base de calcul des charges ci-dessus)</span>
       </label>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--ligne);border-radius:10px;padding:14px;margin-top:12px">
+      <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-2);margin-bottom:10px">Impôt à la source</h4>
+      <p class="hint" style="margin-bottom:10px">Le taux est recalculé chaque mois selon le revenu (salaire + primes) et le barème. Un joueur sous le seuil d'imposition ressort à 0 automatiquement.</p>
+      <label style="display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px;cursor:pointer;margin:0">
+        <input type="checkbox" id="pm-tax-at-source" ${p&&p.tax_at_source?'checked':''}>
+        <span>Assujetti à l'impôt à la source</span>
+      </label>
+      <div class="field-row" style="margin-top:8px">
+        <div class="field"><label>Canton</label><input id="pm-tax-canton" value="${p&&p.tax_canton?esc(p.tax_canton):'GE'}"></div>
+        <div class="field"><label>Code de barème</label>${(() => {
+          const year = new Date().getFullYear();
+          const codes = taxsourceCodes(year);
+          const cur = p && p.tax_bareme ? String(p.tax_bareme) : '';
+          return codes.length
+            ? `<select id="pm-tax-bareme"><option value="">—</option>${codes.map(c => `<option value="${esc(c)}" ${cur===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`
+            : `<input id="pm-tax-bareme" placeholder="A0N" value="${esc(cur)}">`;
+        })()}</div>
+      </div>
+      <div class="field"><label>Revenu brut mensuel chez un autre employeur (CHF)</label><input id="pm-is-rdi" type="number" step="0.05" value="${p&&Number(p.is_rate_determining_income)?p.is_rate_determining_income:''}"></div>
+      <div class="field-row">
+        <div class="field"><label>Taux manuel (%)</label><input id="pm-is-rate" type="number" step="0.01" value="${p&&Number(p.is_rate)?p.is_rate:''}"></div>
+        <div class="field"><label>ou montant fixe manuel (CHF)</label><input id="pm-is-amount" type="number" step="0.05" value="${p&&Number(p.is_amount)?p.is_amount:''}"></div>
+      </div>
     </div>` : ''}
     ${p ? `<div class="field check-row" style="margin-top:12px"><input type="checkbox" id="pm-active" ${p.active==1?'checked':''}><label style="margin:0" for="pm-active">Joueur actif</label></div>` : ''}
     <div class="modal-actions">
@@ -1970,6 +2063,12 @@ async function savePlayer(id){
   if (MFC.payrollView) {
     SHARED_SOCIAL_LINES.forEach(l => { payload[l.k + '_subject'] = document.getElementById('pm-' + l.k).checked; });
     payload.avs_abatement = document.getElementById('pm-avs-abatement').checked;
+    payload.tax_at_source = document.getElementById('pm-tax-at-source').checked;
+    payload.tax_canton = document.getElementById('pm-tax-canton').value.trim() || 'GE';
+    payload.tax_bareme = document.getElementById('pm-tax-bareme').value.trim();
+    payload.is_rate_determining_income = Number(document.getElementById('pm-is-rdi').value) || 0;
+    payload.is_rate = Number(document.getElementById('pm-is-rate').value) || 0;
+    payload.is_amount = Number(document.getElementById('pm-is-amount').value) || 0;
   }
   try {
     if (id) { payload.id = id; payload.active = document.getElementById('pm-active').checked; await api('players', { method: 'PUT', body: payload }); }
@@ -2523,6 +2622,24 @@ async function renderPaieTab(el){
           </tr>`).join('')}
         </tbody></table>` : `<div class="empty">Aucun profil configuré.</div>`}
         <div style="padding:14px 18px"><button class="btn btn-primary btn-sm" onclick="insuranceProfileModal(null)">+ Ajouter un profil</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Barème d'impôt à la source</h3></div>
+      <div class="card-body">
+        <p class="hint" style="margin-bottom:14px">Fichier officiel de l'Administration fédérale des contributions (format ESTV, Recordart 06), une grille par canton et par année civile. À réimporter une fois par an. Le moteur de paie y lit le taux mensuel selon le revenu et le code de barème de chaque personne, à la place d'un taux saisi à la main.</p>
+        ${((STATE.taxsource && STATE.taxsource.imports) || []).length ? `<table style="margin-bottom:14px"><thead><tr><th>Année</th><th>Canton</th><th>Généré le</th><th>Lignes</th><th>Codes</th></tr></thead><tbody>
+          ${STATE.taxsource.imports.map(im => `<tr>
+            <td style="font-weight:700">${im.year}</td>
+            <td>${esc(im.canton)}</td>
+            <td>${im.generated_at ? esc(im.generated_at.slice(6,8)+'.'+im.generated_at.slice(4,6)+'.'+im.generated_at.slice(0,4)) : '—'}</td>
+            <td>${im.rows_imported}</td>
+            <td style="font-size:12px;color:var(--gris)">${(() => { try { return JSON.parse(im.codes_json).join(', '); } catch(e){ return ''; } })()}</td>
+          </tr>`).join('')}
+        </tbody></table>` : `<div class="empty" style="margin-bottom:14px">Aucune grille importée. L'impôt à la source retombe sur le taux saisi manuellement sur chaque fiche.</div>`}
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('taxsource-file').click()">${ic('upload')} Importer un fichier de barème</button>
+        <input type="file" id="taxsource-file" accept=".txt" style="display:none" onchange="if(this.files[0]) taxsourceImportFile(this.files[0]); this.value='';">
       </div>
     </div>
 

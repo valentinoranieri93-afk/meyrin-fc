@@ -21,6 +21,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/lib_payroll_taxsource.php';
+
 /** Libellé français d'un mois ("2026-07" -> "Juillet 2026"), miroir de PAYSLIP_MONTH_LABELS
  * dans index.html, pour l'en-tête du PDF. */
 function payslip_month_label(string $month): string {
@@ -379,15 +381,47 @@ function compute_payslip(PDO $pdo, string $personType, int $personId, string $mo
     }
   }
 
-  /* --- Impôt à la source : hors phase 1, saisie personnelle reprise telle quelle --------- */
-  if ($personType === 'employee' && (int)($person['is_subject'] ?? 0) === 1) {
-    $rate = (float)($person['is_rate'] ?? 0);
-    $amount = $rate > 0 ? round($grossTotal * $rate / 100, 2) : round((float)($person['is_amount'] ?? 0), 2);
+  /* --- Impôt à la source (§6.4) : barème officiel AFC importé, sinon repli manuel --------
+     Modèle mensuel genevois : le taux dépend du revenu brut du mois ($grossTotal, primes
+     et indemnités comprises) ; il est choisi sur le "revenu déterminant pour le taux"
+     (= revenu du mois + éventuel revenu déclaré chez un autre employeur), puis appliqué
+     au seul revenu Meyrin. Employés et joueurs : même mécanisme (case unique tax_at_source).
+     Repli inchangé si le barème n'est pas importé ou si un taux/montant manuel est saisi. */
+  if ((int)($person['tax_at_source'] ?? 0) === 1) {
+    $canton       = trim((string)($person['tax_canton'] ?? '')) ?: 'GE';
+    $baremeCode   = trim((string)($person['tax_bareme'] ?? ''));
+    $manualRate   = (float)($person['is_rate'] ?? 0);
+    $manualAmount = (float)($person['is_amount'] ?? 0);
+    $otherIncome  = (float)($person['is_rate_determining_income'] ?? 0);
+    $determining  = max($grossTotal, $otherIncome);
+
+    $scale = ($baremeCode !== '' && $manualRate <= 0 && $manualAmount <= 0)
+      ? taxsource_rate($pdo, $canton, $year, $baremeCode, (int)round($determining * 100))
+      : null;
+
+    if ($scale !== null) {
+      $rate = $scale['rate_pct'];
+      $amount = max(round($grossTotal * $rate / 100, 2), round($scale['min_tax'] / 100, 2));
+    } elseif ($manualRate > 0) {
+      $rate = $manualRate;
+      $amount = round($grossTotal * $rate / 100, 2);
+      $warnings[] = 'Impôt à la source : taux saisi manuellement (le barème importé n\'est pas utilisé pour cette personne).';
+    } elseif ($manualAmount > 0) {
+      $rate = 0.0;
+      $amount = round($manualAmount, 2);
+      $warnings[] = 'Impôt à la source : montant fixe saisi manuellement.';
+    } else {
+      $rate = 0.0;
+      $amount = 0.0;
+      $warnings[] = "Impôt à la source coché mais aucun barème $canton $year importé pour le code «\u{202f}"
+        . ($baremeCode !== '' ? $baremeCode : '(non renseigné)') . "\u{202f}» et aucun taux manuel : retenue nulle. "
+        . 'Importer la grille dans Paramètres > Paie ou saisir un taux.';
+    }
+
     if (array_key_exists('is', $overrides) && $overrides['is'] !== null && $overrides['is'] !== '') {
       $amount = round((float)$overrides['is'], 2);
     }
     $chargeLines[] = ['key' => 'is', 'label' => 'Impôt à la source', 'base' => round($grossTotal, 2), 'rate' => $rate, 'amount' => $amount];
-    $warnings[] = 'Impôt à la source calculé sur un taux/montant saisi manuellement : le modèle annuel genevois (barème AFC-GE) n\'est pas encore implémenté (§6.4 SPEC).';
   }
 
   /* --- Retenue lavage (joueurs, déjà paramétrée depuis le 2026-08-14) --------------------- */
