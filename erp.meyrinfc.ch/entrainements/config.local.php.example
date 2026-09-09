@@ -1,0 +1,30 @@
+<?php
+/**
+ * config.local.php — Réglages propres au serveur, NON versionnés.
+ *
+ * Copier ce fichier en `config.local.php` sur le serveur et renseigner la clé.
+ * Si le fichier est absent ou la clé vide, le module fonctionne quand même :
+ * le moteur de séance passe simplement en mode déterministe (sans IA).
+ */
+
+return [
+    /* Clé API Anthropic. Laisser vide pour désactiver complètement l'IA. */
+    'anthropic_api_key' => '',
+
+    /* Modèle utilisé pour l'adaptation et la rédaction des consignes. */
+    'ia_modele' => 'claude-sonnet-5',
+
+    /* Tarifs publics au 2026-09, en USD par million de tokens. Servent au
+       calcul du coût estimé et au contrôle des plafonds budgétaires. */
+    'ia_prix_input_usd_mtok'  => 2.0,
+    'ia_prix_output_usd_mtok' => 10.0,
+
+    /* Taux de conversion USD vers CHF pour l'affichage et les plafonds.
+       Volontairement statique : une approximation suffit pour un garde-fou
+       de coût, pas besoin d'un appel de change à chaque séance. */
+    'ia_taux_usd_chf' => 0.90,
+
+    /* Délai maximum d'un appel IA, en secondes. Au-delà, on abandonne l'appel
+       et on rend la séance en mode déterministe. Le coach ne doit pas attendre. */
+    'ia_timeout' => 8,
+];

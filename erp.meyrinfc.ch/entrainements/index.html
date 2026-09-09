@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Entraînements · FC Meyrin</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F6F5F1; --surface:#FFFFFF; --sunken:#F1EFE8;
+  --border:#E7E4DC; --border-strong:#D9D5C9;
+  --ink:#1C1B17; --ink-2:#57544B; --muted:#6B6759;
+  --gold:#E5B02E; --gold-press:#D3A020; --gold-soft:#FBEFCE; --on-gold:#221B06;
+  --black:#17150F;
+  --green:#1E9E5A; --green-soft:#E5F3EB;
+  --amber:#B97E1C; --amber-soft:#F8EED9;
+  --red:#CE4A3B; --red-soft:#FAE7E3;
+  --blue:#2F6FE0; --blue-soft:#E7EEFB;
+  --r:10px; --r-lg:14px;
+  --sh-card:0 1px 2px rgba(20,18,10,.04),0 1px 3px rgba(20,18,10,.05);
+  --sh-pop:0 6px 24px rgba(20,18,10,.14);
+  --sb:248px;
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:400 14px/1.5 "Inter",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:"Sora","Inter",sans-serif;font-weight:600;line-height:1.25;letter-spacing:-.01em}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:none;background:none}
+a{color:inherit;text-decoration:none}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+.tnum{font-variant-numeric:tabular-nums}
+.mut{color:var(--muted)}
+.s12{font-size:12px}.s13{font-size:13px}
+
+/* ---------- shell ---------- */
+#root{min-height:100%}
+.shell-staff{display:grid;grid-template-columns:var(--sb) 1fr;min-height:100vh}
+.shell-coach{max-width:520px;margin:0 auto;min-height:100vh;background:var(--surface);border-inline:1px solid var(--border);display:flex;flex-direction:column}
+
+/* sidebar (staff) */
+.sidebar{background:var(--black);color:#E9E7DE;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;padding:18px 12px}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 16px}
+.brand .crest{width:30px;height:30px;flex:none}
+.brand b{font-family:"Sora";font-size:14px;font-weight:700;letter-spacing:.02em}
+.nav{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.nav a{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:var(--r);color:#B7B4A7;font-size:13.5px;font-weight:500}
+.nav a svg{width:18px;height:18px;flex:none;opacity:.85}
+.nav a:hover{background:rgba(255,255,255,.06);color:#EBE9E0}
+.nav a.on{background:rgba(255,255,255,.10);color:#fff}
+.nav a.on svg{color:var(--gold);opacity:1}
+.nav .badge-n{margin-left:auto;background:rgba(255,255,255,.14);color:#EBE9E0;font-size:11px;font-weight:600;min-width:20px;height:20px;border-radius:999px;display:grid;place-items:center;padding:0 5px}
+.nav .grp{font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#77746A;padding:14px 10px 5px}
+.sidebar .foot{margin-top:auto;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}
+.sidebar .foot a{color:#9A978C;font-size:12.5px;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--r)}
+.sidebar .foot a:hover{background:rgba(255,255,255,.06);color:#D6D3C8}
+
+/* appbar + tabbar (coach) */
+.appbar{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:12px 16px}
+.appbar .crest{width:26px;height:26px}
+.appbar b{font-family:"Sora";font-size:14px;font-weight:700}
+.appbar .sp{margin-left:auto}
+.tabbar{position:sticky;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(4,1fr);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.tabbar button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:var(--r);color:var(--muted);font-size:11px;font-weight:500}
+.tabbar button svg{width:21px;height:21px}
+.tabbar button.on{color:var(--ink)}
+.tabbar button.on svg{color:var(--gold)}
+
+/* content */
+.main{padding:22px 28px 40px;max-width:1100px}
+.coach-main{flex:1;padding:18px 16px 24px;overflow-y:auto}
+.page-h{display:flex;align-items:flex-end;gap:14px;margin-bottom:18px}
+.page-h h1{font-size:22px}
+.page-h .sub{color:var(--muted);font-size:13px;margin-top:2px}
+.page-h .sp{margin-left:auto}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;padding:0 16px;border-radius:var(--r);font-size:13.5px;font-weight:600;white-space:nowrap;transition:background .14s ease-out,opacity .14s ease-out}
+.btn svg{width:16px;height:16px}
+.btn-primary{background:var(--gold);color:var(--on-gold)}
+.btn-primary:hover{background:var(--gold-press)}
+.btn-dark{background:var(--black);color:#F1EFE6}
+.btn-dark:hover{opacity:.9}
+.btn-ghost{background:var(--surface);border:1px solid var(--border-strong);color:var(--ink)}
+.btn-ghost:hover{background:var(--sunken)}
+.btn-quiet{background:transparent;color:var(--ink-2)}
+.btn-quiet:hover{background:var(--sunken)}
+.btn-danger{background:var(--red-soft);color:var(--red)}
+.btn-danger:hover{background:#f4d6d0}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:hover{opacity:.92}
+.btn-lg{height:46px;font-size:14.5px;padding:0 20px;width:100%}
+.btn-sm{height:32px;font-size:12.5px;padding:0 12px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* card */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh-card)}
+.card-p{padding:18px}
+.stack>*+*{margin-top:12px}
+.grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+
+/* filter pills */
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.pill{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border:1px solid var(--border-strong);border-radius:999px;background:var(--surface);font-size:12.5px;font-weight:500;color:var(--ink-2)}
+.pill svg{width:13px;height:13px;opacity:.6}
+.pill.on{background:var(--ink);color:#F3F1E8;border-color:var(--ink)}
+.search{position:relative}
+.search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--muted)}
+.search input{width:100%;height:40px;padding:0 12px 0 36px;border:1px solid var(--border-strong);border-radius:var(--r);background:var(--surface)}
+.search input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+
+/* exercise list */
+.list{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;background:var(--surface);box-shadow:var(--sh-card)}
+.exrow{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border);text-align:left;width:100%}
+.exrow:last-child{border-bottom:none}
+.exrow:hover{background:var(--sunken)}
+.thumb{width:54px;height:40px;border-radius:8px;overflow:hidden;flex:none;background:var(--sunken);border:1px solid var(--border)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.exrow .tt{font-weight:600;font-size:13.5px}
+.exrow .mt{display:flex;gap:8px;align-items:center;margin-top:3px}
+.exrow .chev{margin-left:auto;color:var(--muted)}
+.exrow .chev svg{width:16px;height:16px}
+
+.badge{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;background:var(--sunken);color:var(--ink-2)}
+.badge .dot{width:6px;height:6px;border-radius:999px;background:currentColor}
+.b-en_revue{background:var(--amber-soft);color:var(--amber)}
+.b-valide{background:var(--blue-soft);color:var(--blue)}
+.b-publie{background:var(--green-soft);color:var(--green)}
+.b-archive{background:var(--red-soft);color:var(--red)}
+.b-brouillon{background:var(--sunken);color:var(--muted)}
+
+.empty{text-align:left;padding:40px 22px;border:1px dashed var(--border-strong);border-radius:var(--r-lg);background:var(--surface)}
+.empty h3{font-size:15px;margin-bottom:4px}
+.empty p{color:var(--muted);font-size:13px;max-width:42ch;margin-bottom:14px}
+.pager{display:flex;align-items:center;gap:12px;justify-content:center;margin-top:16px;color:var(--muted);font-size:13px}
+
+/* stat card */
+.stat h4{font-size:12px;font-weight:600;color:var(--muted)}
+.stat .v{font-family:"Sora";font-size:22px;font-weight:700;margin-top:6px;display:flex;align-items:baseline;gap:6px}
+.stat .v small{font-size:12px;font-weight:600;color:var(--muted)}
+.bar{height:6px;background:var(--sunken);border-radius:999px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;background:var(--green);border-radius:999px}
+.bar.low i{background:var(--gold)}
+
+/* table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-weight:500;font-size:12px;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border)}
+.tbl td{padding:11px 12px;border-bottom:1px solid var(--border);line-height:1.4}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:var(--sunken)}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(23,21,15,.44);z-index:60;display:flex;justify-content:flex-end}
+.sheet{background:var(--bg);width:min(540px,100%);height:100%;display:flex;flex-direction:column;box-shadow:var(--sh-pop)}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+.sheet-h h2{font-size:16px;flex:1}
+.sheet-b{flex:1;overflow-y:auto;padding:16px}
+.sheet-f{padding:12px 16px;background:var(--surface);border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:560px){.scrim{align-items:flex-end}.sheet{width:100%;height:94vh;border-radius:16px 16px 0 0}}
+
+.schema{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.schema img{display:block;width:100%}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:8px 12px;font-size:13px;margin:14px 0}
+.kv dt{color:var(--muted)}
+.sec{margin-top:16px}
+.sec h4{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.sec p{white-space:pre-wrap;font-size:13.5px}
+.tl{list-style:none;border-left:2px solid var(--border);padding-left:12px;margin-top:6px}
+.tl li{margin-bottom:10px;font-size:12.5px}
+.tl b{font-weight:600}
+
+/* form */
+.fld{margin-bottom:14px}
+.fld>label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px}
+.fld input,.fld select,.fld textarea{width:100%;height:38px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--r);background:var(--surface)}
+.fld textarea{height:auto;min-height:66px;padding:9px 12px;resize:vertical}
+.fld textarea.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;min-height:120px}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:6px 11px;border:1px solid var(--border-strong);border-radius:999px;font-size:12px;font-weight:500;user-select:none}
+.chip.on{background:var(--ink);color:#F3F1E8;border-color:var(--ink)}
+
+/* generator */
+.stepper{display:flex;align-items:center;gap:14px}
+.stepper button{width:40px;height:40px;border-radius:var(--r);border:1px solid var(--border-strong);background:var(--surface);font-size:20px;display:grid;place-items:center}
+.stepper .n{font-family:"Sora";font-size:26px;font-weight:700;min-width:52px;text-align:center}
+.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.choice{border:1.5px solid var(--border-strong);border-radius:var(--r);padding:12px 10px;text-align:center;background:var(--surface)}
+.choice svg{width:26px;height:22px;margin:0 auto 6px;display:block;color:var(--ink-2)}
+.choice .l{font-size:12.5px;font-weight:600}
+.choice .d{font-size:11px;color:var(--muted);margin-top:1px}
+.choice.on{border-color:var(--gold);background:var(--gold-soft)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface);font-size:13px;font-weight:600;color:var(--ink-2)}
+.seg button.on{background:var(--gold);border-color:var(--gold);color:var(--on-gold)}
+.accent-card{background:var(--gold-soft);border:1px solid #EFDCA6;border-radius:var(--r);padding:14px;display:flex;align-items:center;gap:12px}
+.accent-card svg{width:18px;height:18px;color:var(--amber);flex:none}
+
+.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,90px);background:var(--black);color:#F1EFE6;padding:11px 18px;border-radius:var(--r);font-size:13px;box-shadow:var(--sh-pop);z-index:200;opacity:0;transition:transform .18s ease-out,opacity .18s ease-out;max-width:92vw}
+.toast.show{transform:translate(-50%,0);opacity:1}
+.toast.err{background:var(--red)}
+.load{padding:36px;color:var(--muted);font-size:13px}
+.skel{height:62px;border-radius:var(--r);background:linear-gradient(90deg,var(--sunken),#EDEBE3,var(--sunken));background-size:200% 100%;animation:sk 1.3s linear infinite}
+@keyframes sk{to{background-position:-200% 0}}
+
+@media(max-width:900px){
+  .shell-staff{grid-template-columns:1fr}
+  .sidebar{position:static;height:auto;flex-direction:row;align-items:center;padding:10px 12px;overflow-x:auto}
+  .sidebar .brand{padding:0 12px 0 4px}
+  .sidebar .nav{flex-direction:row;margin:0}
+  .sidebar .nav .grp,.sidebar .foot{display:none}
+  .nav a .badge-n{margin-left:6px}
+  .main{padding:16px}
+  .row2{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div id="root"><div class="load">Chargement…</div></div>
+<div id="overlay"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const MFC = window.MFC || {};
+const CREST = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#E5B02E"/><text x="20" y="27" font-family="Sora,Arial" font-size="20" font-weight="800" fill="#17150F" text-anchor="middle">M</text></svg>');
+
+const $ = (s, r = document) => r.querySelector(s);
+const h = (t, a = {}, ...k) => {
+  const n = document.createElement(t);
+  for (const [key, v] of Object.entries(a)) {
+    if (v == null || v === false) continue;
+    if (key === "class") n.className = v;
+    else if (key === "html") n.innerHTML = v;
+    else if (key[0] === "o" && key[1] === "n") n.addEventListener(key.slice(2), v);
+    else n.setAttribute(key, v === true ? "" : v);
+  }
+  for (const c of k.flat()) if (c != null && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return n;
+};
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const cap = s => { s = String(s || "").replace(/_/g, " "); return s.charAt(0).toUpperCase() + s.slice(1); };
+const fdate = s => { const d = new Date(String(s || "").replace(" ", "T")); return isNaN(d) ? (s || "") : d.toLocaleDateString("fr-CH", { day: "2-digit", month: "short", year: "numeric" }); };
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+/* icons — one set, stroke 1.6, 24 viewport */
+const I = {
+  home: 'M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5',
+  book: 'M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm0 0v13m3-9h7M8 12h7',
+  cal: 'M4 6h16v15H4zM4 10h16M8 3v4M16 3v4',
+  user: 'M4 20a8 8 0 0 1 16 0M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
+  users: 'M2 20a6 6 0 0 1 12 0M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM16 13a5 5 0 0 1 6 7M16 12a3 3 0 1 0 0-6',
+  search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM21 21l-4.3-4.3',
+  chev: 'M9 6l6 6-6 6',
+  chevD: 'M6 9l6 6 6-6',
+  plus: 'M12 5v14M5 12h14',
+  check: 'M5 13l4 4L19 7',
+  back: 'M15 6l-6 6 6 6',
+  bell: 'M6 16V11a6 6 0 1 1 12 0v5l2 3H4l2-3ZM10 21a2 2 0 0 0 4 0',
+  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3ZM9 12l2 2 4-4',
+  chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  cog: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.2A1.6 1.6 0 0 0 7 19.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.6 14H4a2 2 0 0 1 0-4h.2A1.6 1.6 0 0 0 5.7 7L5.6 7a2 2 0 1 1 2.8-2.9l.1.1A1.6 1.6 0 0 0 11 5.4V4a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-1.1 2.7',
+  spark: 'M12 3v6M12 15v6M3 12h6M15 12h6M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3',
+  q4: 'M4 5h16v14H4zM12 5v14',
+  q2: 'M4 5h16v14H4zM4 12h16',
+  qf: 'M4 5h16v14H4zM12 5v14M4 9h3M4 15h3M17 9h3M17 15h3',
+};
+const ic = (name, cls) => `<svg class="${cls || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${I[name] || ''}"/></svg>`;
+
+let toastT;
+function toast(msg, err) {
+  const t = $("#toast"); t.textContent = msg;
+  t.className = "toast show" + (err ? " err" : "");
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = "toast", 3400);
+}
+
+async function api(action, o = {}) {
+  const url = "api.php?action=" + action + (o.query ? "&" + new URLSearchParams(o.query) : "");
+  const init = { credentials: "same-origin" };
+  if (o.body) { init.method = "POST"; init.headers = { "Content-Type": "application/json" }; init.body = JSON.stringify(o.body); }
+  const r = await fetch(url, init);
+  if (o.raw) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); }
+  const d = await r.json().catch(() => ({ ok: false, error: "Réponse illisible." }));
+  if (!r.ok || !d.ok) throw new Error(d.error || ("Erreur " + r.status));
+  return d;
+}
+
+const STL = { brouillon: "Brouillon", en_revue: "En revue", valide: "Validé", publie: "Publié", archive: "Archivé" };
+const PHASE_N = { echauffement: "Échauffement", analytique: "EASI 1", situatif: "EASI 2", integre: "EASI 3" };
+const state = { ref: null, view: "", filters: {}, page: 0, val: { list: null, i: 0 },
+  gen: { joueurs: 14, surface: "demi", duree: 75, accent: "" } };
+const perim = id => (state.ref.perimetres || []).find(p => +p.id === +id);
+const isCoach = () => state.ref.profil === "coach";
+
+function thumb(id) {
+  return h("span", { class: "thumb" }, h("img", { loading: "lazy", alt: "", src: "api.php?action=schema&id=" + id + "&fixe=1" }));
+}
+function statBadge(st, v) { return h("span", { class: "badge b-" + st }, h("span", { class: "dot" }), STL[st] + (v > 1 ? " · v" + v : "")); }
+
+/* ============================================================ SHELL */
+function nav() {
+  if (isCoach()) return [
+    ["accueil", "Accueil", "home"], ["biblio", "Bibliothèque", "book"],
+    ["seances", "Séances", "cal"], ["profil", "Profil", "user"],
+  ];
+  const r = state.ref, out = [];
+  if (r.profil === "admin" || r.profil === "directeur_technique") out.push(["avancement", "Tableau de bord", "chart"]);
+  out.push(["biblio", "Bibliothèque", "book"], ["seances", "Séances", "cal"]);
+  if (r.peutValider) out.push(["validation", "Validation", "shield"]);
+  if (r.profil === "admin") out.push(["equipes", "Équipes", "users"], ["admin", "Administration", "cog"]);
+  return out;
+}
+
+function renderShell() {
+  const root = $("#root");
+  root.innerHTML = "";
+  const items = nav();
+  if (!state.view || !items.some(i => i[0] === state.view)) state.view = items[0][0];
+
+  if (isCoach()) {
+    const shell = h("div", { class: "shell-coach" });
+    shell.append(
+      h("header", { class: "appbar" },
+        h("img", { class: "crest", src: CREST, alt: "" }),
+        h("b", {}, "FC Meyrin"),
+        h("span", { class: "sp" }),
+        h("button", { class: "btn-quiet", style: "width:34px;height:34px;border-radius:8px", "aria-label": "Notifications", html: ic("bell") })),
+      h("main", { class: "coach-main", id: "view" }),
+      h("nav", { class: "tabbar" }, items.map(([k, lbl, i]) =>
+        h("button", { class: state.view === k ? "on" : "", onclick: () => go(k), html: ic(i) + "<span>" + lbl + "</span>" }))));
+    root.append(shell);
+  } else {
+    const side = h("aside", { class: "sidebar" },
+      h("div", { class: "brand" }, h("img", { class: "crest", src: CREST, alt: "" }), h("b", {}, "Entraînements")),
+      h("nav", { class: "nav" }, items.map(([k, lbl, i]) => {
+        const a = h("a", { href: "#" + k, class: state.view === k ? "on" : "", onclick: e => { e.preventDefault(); go(k); },
+          html: ic(i) + "<span>" + lbl + "</span>" });
+        if (k === "validation" && state.ref._valCount != null)
+          a.append(h("span", { class: "badge-n" }, state.ref._valCount));
+        return a;
+      })),
+      h("div", { class: "foot" }, h("a", { href: MFC.erpUrl || "/" }, ic("back"), "Retour à l'ERP")));
+    root.append(h("div", { class: "shell-staff" }, side, h("main", { class: "main", id: "view" })));
+  }
+  paint();
+}
+function go(v) { state.view = v; state.page = 0; renderShell(); }
+
+async function paint() {
+  const v = $("#view");
+  v.innerHTML = '<div class="load">Chargement…</div>';
+  try {
+    const f = { accueil: vAccueil, biblio: vBiblio, seances: vSeances, profil: vProfil,
+      validation: vValidation, avancement: vAvancement, admin: vAdmin, equipes: vEquipes }[state.view];
+    await f(v);
+  } catch (e) {
+    v.innerHTML = "";
+    v.append(h("div", { class: "empty" }, h("h3", {}, "Impossible d'afficher cette page"), h("p", {}, e.message),
+      h("button", { class: "btn btn-ghost btn-sm", onclick: paint }, "Réessayer")));
+  }
+}
+
+/* ============================================================ ACCUEIL (coach) */
+async function vAccueil(v) {
+  v.innerHTML = "";
+  const first = (MFC.nom || "").split(" ")[0] || "";
+  v.append(h("div", { style: "margin-bottom:18px" },
+    h("h1", { style: "font-size:20px" }, "Bonjour " + first),
+    h("p", { class: "mut s13", style: "margin-top:2px" }, "Prépare ta prochaine séance en moins de deux minutes.")));
+
+  v.append(h("button", { class: "btn btn-primary btn-lg", style: "margin-bottom:16px", onclick: () => go("seances"),
+    html: ic("spark") + "Générer une séance" }));
+
+  v.append(h("div", { class: "card card-p", style: "margin-bottom:12px" },
+    h("h4", { class: "s12 mut", style: "font-weight:600;margin-bottom:8px" }, "Bibliothèque d'exercices"),
+    h("p", { class: "s13 mut", style: "margin-bottom:12px" }, "Parcours les exercices publiés de tes catégories."),
+    h("button", { class: "btn btn-ghost btn-sm", onclick: () => go("biblio"), html: "Ouvrir la bibliothèque " + ic("chev") })));
+}
+
+/* ============================================================ BIBLIOTHÈQUE */
+async function vBiblio(v) {
+  const f = state.filters;
+  v.innerHTML = "";
+  v.append(h("div", { class: "page-h" },
+    h("div", {}, h("h1", {}, "Bibliothèque"),
+      h("div", { class: "sub" }, isCoach() ? "Exercices publiés de tes catégories" : "Tous les exercices")),
+    h("span", { class: "sp" }),
+    !isCoach() || true ? h("button", { class: "btn btn-primary btn-sm", onclick: () => sheetForm(null),
+      html: ic("plus") + (isCoach() ? "Proposer" : "Nouvel exercice") }) : null));
+
+  const sb = h("div", { class: "search" }, ic("search"),
+    h("input", { type: "search", placeholder: "Rechercher un exercice…", value: f.q || "",
+      oninput: debounce(e => { f.q = e.target.value; state.page = 0; paint(); }, 350) }));
+  v.append(sb);
+
+  const pills = h("div", { class: "pills" });
+  const pill = (key, label, opts) => {
+    const wrap = h("label", { class: "pill" + (f[key] ? " on" : "") });
+    const sel = h("select", { style: "all:unset;cursor:pointer", onchange: e => { f[key] = e.target.value; state.page = 0; paint(); } },
+      h("option", { value: "" }, label), opts.map(o => h("option", { value: o[0], selected: f[key] === o[0] }, o[1])));
+    wrap.append(sel, h("span", { html: ic("chevD") }));
+    return wrap;
+  };
+  if (!isCoach()) pills.append(pill("statut", "Statut", state.ref.statuts.map(s => [s, STL[s]])));
+  pills.append(pill("phase_easi", "Phase", state.ref.phases.map(p => [p, PHASE_N[p] || cap(p)])));
+  pills.append(pill("categorie_technique", "Catégorie", state.ref.categories.map(c => [c, cap(c)])));
+  pills.append(pill("perimetre_id", "Périmètre", state.ref.perimetres.map(p => [String(p.id), p.libelle])));
+  v.append(pills);
+
+  const box = h("div", {}); v.append(box);
+  box.append(h("div", { class: "list" }, Array.from({ length: 4 }, () => h("div", { class: "skel", style: "margin:1px" }))));
+
+  const d = await api("exercices", { query: {
+    ...(f.q ? { q: f.q } : {}), ...(f.statut ? { statut: f.statut } : {}),
+    ...(f.phase_easi ? { phase_easi: f.phase_easi } : {}),
+    ...(f.categorie_technique ? { categorie_technique: f.categorie_technique } : {}),
+    ...(f.perimetre_id ? { perimetre_id: f.perimetre_id } : {}),
+    limit: 20, offset: state.page * 20 } });
+
+  box.innerHTML = "";
+  if (!d.exercices.length) {
+    const anyFilter = Object.values(f).some(Boolean);
+    box.append(h("div", { class: "empty" },
+      h("h3", {}, anyFilter ? "Aucun exercice ne correspond" : "La bibliothèque est vide"),
+      h("p", {}, anyFilter ? "Aucun exercice ne correspond à ces filtres." : "Les exercices apparaîtront ici une fois créés et publiés."),
+      anyFilter
+        ? h("button", { class: "btn btn-ghost btn-sm", onclick: () => { state.filters = {}; paint(); } }, "Effacer les filtres")
+        : (!isCoach() ? h("button", { class: "btn btn-primary btn-sm", onclick: () => sheetForm(null), html: ic("plus") + "Nouvel exercice" }) : null)));
+    return;
+  }
+  box.append(h("div", { class: "list" }, d.exercices.map(x =>
+    h("button", { class: "exrow", onclick: () => sheetExercice(x.id) },
+      thumb(x.id),
+      h("div", { style: "min-width:0" },
+        h("div", { class: "tt" }, x.titre),
+        h("div", { class: "mt" },
+          h("span", { class: "badge" }, PHASE_N[x.phase_easi] || cap(x.phase_easi)),
+          !isCoach() ? statBadge(x.statut, x.version) : null,
+          h("span", { class: "s12 mut tnum" }, (x.duree_min === x.duree_max ? x.duree_min : x.duree_min + "-" + x.duree_max) + " min"))),
+      h("span", { class: "chev", html: ic("chev") })))));
+
+  const pages = Math.ceil(d.total / 20);
+  if (pages > 1) v.append(h("div", { class: "pager" },
+    h("button", { class: "btn btn-ghost btn-sm", disabled: state.page === 0, onclick: () => { state.page--; paint(); } }, "Précédent"),
+    h("span", { class: "tnum" }, (state.page + 1) + " / " + pages),
+    h("button", { class: "btn btn-ghost btn-sm", disabled: state.page + 1 >= pages, onclick: () => { state.page++; paint(); } }, "Suivant")));
+}
+
+/* ============================================================ FICHE (sheet) */
+function openSheet(node) {
+  const o = $("#overlay"); o.innerHTML = "";
+  const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) closeSheet(); } });
+  scrim.append(node); o.append(scrim);
+  document.addEventListener("keydown", escClose);
+}
+function closeSheet() { $("#overlay").innerHTML = ""; document.removeEventListener("keydown", escClose); }
+function escClose(e) { if (e.key === "Escape") closeSheet(); }
+
+async function sheetExercice(id) {
+  const sheet = h("div", { class: "sheet" }, h("div", { class: "load" }, "Chargement…"));
+  openSheet(sheet);
+  let x;
+  try { x = (await api("exercice", { query: { id } })).exercice; }
+  catch (e) { sheet.innerHTML = ""; sheet.append(h("div", { class: "sheet-b" }, e.message)); return; }
+
+  const canAct = !isCoach() && exerciceInScope(x);
+  sheet.innerHTML = "";
+  sheet.append(h("div", { class: "sheet-h" },
+    h("button", { class: "btn-quiet", style: "width:32px;height:32px;border-radius:8px", "aria-label": "Fermer", onclick: closeSheet, html: ic("back") }),
+    h("h2", {}, x.titre),
+    !isCoach() ? statBadge(x.statut, x.version) : null));
+
+  const b = h("div", { class: "sheet-b" });
+  const sc = h("div", { class: "schema" }, h("img", { alt: "Schéma animé", src: "api.php?action=schema&id=" + x.id }));
+  b.append(sc);
+  b.append(h("dl", { class: "kv", html:
+    `<dt>Objectif</dt><dd>${esc(x.objectif_principal) || "—"}</dd>
+     <dt>Phase</dt><dd>${PHASE_N[x.phase_easi] || cap(x.phase_easi)}</dd>
+     <dt>Catégorie</dt><dd>${cap(x.categorie_technique)}</dd>
+     <dt>Joueurs</dt><dd class="tnum">${x.joueurs_min}–${x.joueurs_max}</dd>
+     <dt>Durée</dt><dd class="tnum">${x.duree_min}–${x.duree_max} min</dd>
+     <dt>Accents</dt><dd>${(x.accents || []).join(", ") || "—"}</dd>
+     <dt>Tranches</dt><dd>${(x.tranches_age || []).join(", ") || "—"}</dd>
+     <dt>Périmètres</dt><dd>${x.perimetres.map(p => (perim(p) || {}).libelle || p).join(", ") || "—"}</dd>
+     <dt>Source</dt><dd>${cap(x.source)}</dd>` }));
+  const sec = (t, val) => val && b.append(h("div", { class: "sec" }, h("h4", {}, t), h("p", {}, val)));
+  sec("Déroulement", x.description_deroulement);
+  sec("Consignes du coach", x.consignes_coach);
+  sec("Critères de réussite", x.criteres_reussite);
+  sec("Variante facile", x.variante_facile);
+  sec("Variante difficile", x.variante_difficile);
+  if (x.revisions && x.revisions.length) b.append(h("div", { class: "sec" }, h("h4", {}, "Historique"),
+    h("ul", { class: "tl" }, x.revisions.map(r => h("li", {},
+      h("b", {}, cap(r.action)), " · " + (r.utilisateur || "—") + " · " + fdate(r.date),
+      r.commentaire ? h("div", { class: "mut" }, r.commentaire) : null)))));
+  sheet.append(b);
+
+  const acts = [];
+  if (!isCoach()) acts.push(h("button", { class: "btn btn-ghost", onclick: () => { closeSheet(); sheetForm(x.id); } }, "Modifier"));
+  else if (x.cree_par === MFC.erpId && x.statut === "brouillon")
+    acts.push(h("button", { class: "btn btn-ghost", onclick: () => { closeSheet(); sheetForm(x.id); } }, "Modifier"));
+  const T = (label, cls, tr, comment) => h("button", { class: "btn " + cls, onclick: () => doTransition(x.id, tr, comment) }, label);
+  if (x.statut === "brouillon" && (canAct || x.cree_par === MFC.erpId)) acts.push(T("Soumettre", "btn-dark", "soumis"));
+  if (x.statut === "en_revue" && canAct) { acts.push(T("Valider", "btn-green", "valide"), T("Renvoyer", "btn-danger", "renvoye", true)); }
+  if (x.statut === "valide" && canAct) acts.push(T("Publier", "btn-primary", "publie"));
+  if (x.statut === "publie" && canAct) acts.push(T("Archiver", "btn-quiet", "archive", true));
+  if (x.statut === "archive" && canAct) acts.push(T("Restaurer", "btn-quiet", "restaure"));
+  if (acts.length) sheet.append(h("div", { class: "sheet-f" }, acts));
+}
+function exerciceInScope(x) {
+  const p = state.ref.profil;
+  if (p === "admin" || p === "directeur_technique") return true;
+  if (p === "responsable_categorie") return (x.perimetres || []).some(id => (state.ref.perimetres_validation || []).map(Number).includes(+id));
+  return false;
+}
+async function doTransition(id, transition, needComment) {
+  let commentaire = "";
+  if (needComment) { commentaire = (prompt(transition === "renvoye" ? "Commentaire pour le coach :" : "Commentaire :") || "").trim(); if (!commentaire) return; }
+  try { await api("exercice_transition", { body: { id, transition, commentaire } }); toast("Exercice mis à jour."); closeSheet(); refreshCounts(); paint(); }
+  catch (e) { toast(e.message, true); }
+}
+
+/* ============================================================ FORMULAIRE */
+async function sheetForm(id) {
+  const sheet = h("div", { class: "sheet" }, h("div", { class: "load" }, "Chargement…"));
+  openSheet(sheet);
+  const R = state.ref;
+  let x = { perimetres: [], accents: [], tranches_age: [], filieres: [], genre: "mixte",
+    categorie_technique: "technique", phase_easi: "analytique", surface_type: "quart",
+    joueurs_min: 6, joueurs_max: 12, duree_min: 10, duree_max: 15, geometrie: {} };
+  if (id) { try { x = (await api("exercice", { query: { id } })).exercice; } catch (e) { toast(e.message, true); return closeSheet(); } }
+
+  sheet.innerHTML = "";
+  sheet.append(h("div", { class: "sheet-h" },
+    h("button", { class: "btn-quiet", style: "width:32px;height:32px;border-radius:8px", "aria-label": "Fermer", onclick: closeSheet, html: ic("back") }),
+    h("h2", {}, id ? "Modifier l'exercice" : (isCoach() ? "Proposer un exercice" : "Nouvel exercice"))));
+
+  const b = h("div", { class: "sheet-b" }); sheet.append(b);
+  const get = {};
+  const fld = (label, node) => { b.append(h("div", { class: "fld" }, h("label", {}, label), node)); return node; };
+  const inp = (key, type = "text") => { const n = h("input", { type, value: x[key] ?? "" }); get[key] = () => type === "number" ? (+n.value || 0) : n.value; return n; };
+  const area = key => { const n = h("textarea", {}, x[key] || ""); get[key] = () => n.value; return n; };
+  const one = (key, opts) => { const s = h("select", {}, opts.map(o => h("option", { value: o, selected: x[key] === o }, cap(o)))); get[key] = () => s.value; return s; };
+  const many = (key, opts, num) => {
+    const norm = opts.map(o => (o && typeof o === "object") ? o : { v: String(o), l: cap(String(o)) });
+    const chosen = new Set((x[key] || []).map(String));
+    const box = h("div", { class: "chips" }, norm.map(o => h("span", {
+      class: "chip" + (chosen.has(String(o.v)) ? " on" : ""),
+      onclick: e => { const k = String(o.v); chosen.has(k) ? chosen.delete(k) : chosen.add(k); e.currentTarget.classList.toggle("on"); } }, o.l)));
+    get[key] = () => [...chosen].map(x => num ? +x : x);
+    return box;
+  };
+  fld("Titre", inp("titre"));
+  fld("Objectif principal", inp("objectif_principal"));
+  fld("Catégorie technique", one("categorie_technique", R.categories));
+  fld("Phase EASI", one("phase_easi", R.phases));
+  fld("Accents", many("accents", R.accents));
+  b.append(h("div", { class: "row2" },
+    h("div", { class: "fld" }, h("label", {}, "Joueurs min"), inp("joueurs_min", "number")),
+    h("div", { class: "fld" }, h("label", {}, "Joueurs max"), inp("joueurs_max", "number"))));
+  b.append(h("div", { class: "row2" },
+    h("div", { class: "fld" }, h("label", {}, "Durée min"), inp("duree_min", "number")),
+    h("div", { class: "fld" }, h("label", {}, "Durée max"), inp("duree_max", "number"))));
+  fld("Type de surface", one("surface_type", R.surfaces));
+  b.append(h("div", { class: "row2" },
+    h("div", { class: "fld" }, h("label", {}, "Largeur (m)"), inp("surface_largeur", "number")),
+    h("div", { class: "fld" }, h("label", {}, "Longueur (m)"), inp("surface_longueur", "number"))));
+  fld("Genre", one("genre", R.genres));
+  fld("Tranches d'âge", many("tranches_age", R.tranches_age));
+  fld("Filières", many("filieres", R.filieres));
+  fld("Périmètres", many("perimetres", R.perimetres.map(p => ({ v: p.id, l: p.libelle })), true));
+  fld("Déroulement", area("description_deroulement"));
+  fld("Consignes du coach", area("consignes_coach"));
+  fld("Critères de réussite", area("criteres_reussite"));
+  fld("Variante facile", area("variante_facile"));
+  fld("Variante difficile", area("variante_difficile"));
+  const geo = h("textarea", { class: "mono" }, JSON.stringify(x.geometrie || {}, null, 1));
+  get.geometrie = () => { try { return JSON.parse(geo.value || "{}"); } catch { throw new Error("Géométrie : JSON invalide."); } };
+  fld("Géométrie (JSON)", geo);
+  const prev = h("div", { class: "schema", style: "margin-top:8px", hidden: true });
+  b.append(h("button", { class: "btn btn-ghost btn-sm", type: "button", onclick: async () => {
+    let g; try { g = JSON.parse(geo.value || "{}"); } catch { return toast("JSON invalide.", true); }
+    try { prev.innerHTML = await api("schema", { body: { geometrie: g }, raw: true }); prev.hidden = false; }
+    catch (e) { toast(e.message, true); } }, html: ic("spark") + "Aperçu animé" }));
+  b.append(prev);
+
+  sheet.append(h("div", { class: "sheet-f" },
+    h("button", { class: "btn btn-ghost", onclick: closeSheet }, "Annuler"),
+    h("button", { class: "btn btn-primary", onclick: async () => {
+      const body = { id: id || 0 };
+      try { for (const k in get) body[k] = get[k](); } catch (e) { return toast(e.message, true); }
+      try { await api("exercice_save", { body }); toast("Exercice enregistré."); closeSheet(); refreshCounts(); paint(); }
+      catch (e) { toast(e.message, true); } }, html: ic("check") + "Enregistrer" })));
+}
+
+/* ============================================================ VALIDATION */
+async function vValidation(v) {
+  if (!state.val.list) { const d = await api("file_validation"); state.val.list = d.file; state.val.i = 0; }
+  const L = state.val.list, i = state.val.i;
+  v.innerHTML = "";
+  v.append(h("div", { class: "page-h" }, h("div", {}, h("h1", {}, "Validation"),
+    h("div", { class: "sub" }, "Un exercice à la fois. V valider · P valider + publier · R renvoyer · ← → naviguer"))));
+
+  if (!L.length) { v.append(h("div", { class: "empty" }, h("h3", {}, "File vide"),
+    h("p", {}, "Aucun exercice en attente dans tes périmètres. Reviens quand des coachs ou des responsables auront soumis du contenu."))); return; }
+
+  const x = L[i];
+  const full = await api("exercice", { query: { id: x.id } }).then(d => d.exercice).catch(() => x);
+  v.append(h("div", { style: "display:flex;align-items:center;gap:12px;margin-bottom:14px" },
+    h("span", { class: "tnum", style: "font-family:Sora;font-weight:700" }, (i + 1) + " / " + L.length),
+    h("div", { class: "bar", style: "flex:1;max-width:260px" }, h("i", { style: "width:" + ((i + 1) / L.length * 100) + "%;background:var(--gold)" })),
+    h("span", { class: "sp", style: "margin-left:auto" }),
+    h("button", { class: "btn btn-ghost btn-sm", disabled: i === 0, onclick: () => { state.val.i--; paint(); } }, "Précédent"),
+    h("button", { class: "btn btn-ghost btn-sm", disabled: i + 1 >= L.length, onclick: () => { state.val.i++; paint(); } }, "Suivant")));
+
+  const card = h("div", { class: "card card-p", style: "max-width:680px" });
+  card.append(h("h2", { style: "font-size:17px" }, full.titre));
+  card.append(h("div", { class: "mt", style: "margin:6px 0 12px" },
+    h("span", { class: "badge" }, PHASE_N[full.phase_easi] || cap(full.phase_easi)),
+    h("span", { class: "badge" }, cap(full.categorie_technique)),
+    h("span", { class: "s12 mut tnum" }, full.joueurs_min + "-" + full.joueurs_max + " j · " + cap(full.source))));
+  card.append(h("div", { class: "schema" }, h("img", { alt: "", src: "api.php?action=schema&id=" + x.id })));
+  const sec = (t, val) => val && card.append(h("div", { class: "sec" }, h("h4", {}, t), h("p", {}, val)));
+  sec("Objectif", full.objectif_principal);
+  sec("Déroulement", full.description_deroulement);
+  sec("Consignes", full.consignes_coach);
+  sec("Critères de réussite", full.criteres_reussite);
+  if (x.dernier_commentaire) sec("Dernier commentaire", x.dernier_commentaire);
+  const com = h("input", { type: "text", placeholder: "Commentaire (obligatoire pour renvoyer)", style: "width:100%;height:38px;padding:0 12px;border:1px solid var(--border-strong);border-radius:10px;margin-top:14px" });
+  card.append(com);
+  card.append(h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;margin-top:12px" },
+    h("button", { class: "btn btn-green", onclick: () => valDo(x.id, "valide", ""), html: ic("check") + "Valider" }),
+    h("button", { class: "btn btn-primary", onclick: () => valDo(x.id, "publier", "") }, "Valider + publier"),
+    h("button", { class: "btn btn-ghost", onclick: () => { sheetForm(x.id); } }, "Modifier"),
+    h("button", { class: "btn btn-danger", onclick: () => valDo(x.id, "renvoye", com.value) }, "Renvoyer")));
+  v.append(card);
+  window.__valCom = com;
+}
+async function valDo(id, transition, commentaire) {
+  if (transition === "renvoye" && !commentaire.trim()) return toast("Commentaire obligatoire.", true);
+  try {
+    if (transition === "publier") {
+      await api("exercice_transition", { body: { id, transition: "valide" } });
+      await api("exercice_transition", { body: { id, transition: "publie" } });
+      toast("Validé et publié.");
+    } else {
+      await api("exercice_transition", { body: { id, transition, commentaire } });
+      toast(transition === "valide" ? "Validé." : "Renvoyé.");
+    }
+    state.val.list.splice(state.val.i, 1);
+    if (state.val.i >= state.val.list.length) state.val.i = Math.max(0, state.val.list.length - 1);
+    refreshCounts(); paint();
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ============================================================ AVANCEMENT */
+async function vAvancement(v) {
+  const d = await api("avancement");
+  v.innerHTML = "";
+  v.append(h("div", { class: "page-h" }, h("div", {}, h("h1", {}, "Tableau de bord"),
+    h("div", { class: "sub" }, "Une catégorie s'ouvre à ses coachs à 25 exercices publiés."))));
+  v.append(h("div", { class: "grid-stats" }, d.avancement.map(p => {
+    const pct = Math.min(100, Math.round(p.publies / p.seuil_ouverture * 100));
+    return h("div", { class: "card card-p stat" },
+      h("h4", {}, p.libelle),
+      h("div", { class: "v tnum" }, p.publies, h("small", {}, "/ " + p.seuil_ouverture + " publiés")),
+      h("div", { class: "bar" + (p.ouvert ? "" : " low") }, h("i", { style: "width:" + pct + "%" })),
+      h("div", { class: "s12 mut", style: "margin-top:8px" },
+        p.ouvert ? "Ouverte aux coachs" : "Encore " + p.ecart_seuil + " · " + p.en_revue + " en revue"));
+  })));
+
+  v.append(h("h2", { style: "font-size:15px;margin:24px 0 10px" }, "Derniers exercices proposés"));
+  const dr = await api("exercices", { query: { statut: "en_revue", source: "propose_coach", limit: 8 } }).catch(() => ({ exercices: [] }));
+  if (!dr.exercices.length) v.append(h("div", { class: "empty" }, h("p", {}, "Aucune proposition de coach en attente.")));
+  else v.append(h("div", { class: "card", style: "overflow:hidden" }, h("table", { class: "tbl" },
+    h("thead", {}, h("tr", {}, ["Exercice", "Catégorie", "Statut", ""].map(t => h("th", {}, t)))),
+    h("tbody", {}, dr.exercices.map(x => h("tr", { style: "cursor:pointer", onclick: () => sheetExercice(x.id) },
+      h("td", {}, x.titre),
+      h("td", {}, cap(x.categorie_technique)),
+      h("td", {}, statBadge(x.statut, x.version)),
+      h("td", { style: "text-align:right" }, h("span", { class: "chev", html: ic("chev") }))))))));
+}
+
+/* ============================================================ ADMIN */
+async function vAdmin(v) {
+  const [u, eqd] = await Promise.all([api("admin_users"), api("equipes").catch(() => ({ equipes: [] }))]);
+  const R = state.ref;
+  const teams = eqd.equipes || [];
+  v.innerHTML = "";
+  v.append(h("div", { class: "page-h" }, h("div", {}, h("h1", {}, "Administration"),
+    h("div", { class: "sub" }, "Profils, responsabilités et périmètres"))));
+
+  v.append(h("h2", { style: "font-size:14px;margin-bottom:8px" }, "Utilisateurs"));
+  const uc = h("div", { class: "card", style: "overflow:hidden;margin-bottom:24px" });
+  u.utilisateurs.forEach(usr => {
+    const chosen = new Set(usr.perimetres.map(Number));
+    const selP = h("select", { style: "height:34px;padding:0 8px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface)" },
+      u.profils.map(p => h("option", { value: p, selected: usr.profil === p }, cap(p))));
+    const pbox = h("div", { class: "chips", style: "margin-top:8px", hidden: usr.profil !== "responsable_categorie" },
+      R.perimetres.map(p => h("span", { class: "chip" + (chosen.has(+p.id) ? " on" : ""),
+        onclick: e => { chosen.has(+p.id) ? chosen.delete(+p.id) : chosen.add(+p.id); e.currentTarget.classList.toggle("on"); } }, p.code)));
+    const choTeams = new Set((usr.equipes || []).map(String));
+    const tbox = h("div", { class: "chips", style: "margin-top:8px", hidden: usr.profil !== "coach" },
+      teams.map(t => h("span", { class: "chip" + (choTeams.has(t.ref_id) ? " on" : ""),
+        onclick: e => { choTeams.has(t.ref_id) ? choTeams.delete(t.ref_id) : choTeams.add(t.ref_id); e.currentTarget.classList.toggle("on"); } }, t.nom)));
+    selP.addEventListener("change", () => { pbox.hidden = selP.value !== "responsable_categorie"; tbox.hidden = selP.value !== "coach"; });
+    uc.append(h("div", { style: "padding:12px 14px;border-bottom:1px solid var(--border)" },
+      h("div", { style: "display:flex;align-items:center;gap:12px;flex-wrap:wrap" },
+        h("div", { style: "min-width:150px" }, h("div", { style: "font-weight:600" }, usr.nom || usr.email),
+          h("div", { class: "s12 mut" }, usr.email)),
+        selP, h("span", { class: "sp", style: "margin-left:auto" }),
+        h("button", { class: "btn btn-dark btn-sm", onclick: async () => {
+          try {
+            await api("admin_set_profil", { body: { erp_id: usr.erp_id, profil: selP.value, perimetres: [...chosen] } });
+            if (selP.value === "coach") await api("coach_equipes_save", { body: { erp_id: usr.erp_id, equipes: [...choTeams] } });
+            toast("Profil mis à jour."); refreshCounts();
+          } catch (e) { toast(e.message, true); } } }, "Enregistrer")),
+      pbox, tbox));
+  });
+  v.append(uc);
+
+  v.append(h("h2", { style: "font-size:14px;margin-bottom:8px" }, "Périmètres"));
+  const pc = h("div", { class: "card", style: "overflow:hidden" });
+  R.perimetres.forEach(p => {
+    const lib = h("input", { value: p.libelle, style: "height:34px;padding:0 10px;border:1px solid var(--border-strong);border-radius:8px;min-width:200px" });
+    const seuil = h("input", { type: "number", value: p.seuil_ouverture, style: "width:70px;height:34px;padding:0 8px;border:1px solid var(--border-strong);border-radius:8px" });
+    const libre = h("input", { type: "checkbox", checked: +p.mode_libre || null });
+    pc.append(h("div", { style: "padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap" },
+      h("code", { class: "s12 mut", style: "min-width:110px" }, p.code), lib,
+      h("label", { class: "s12 mut", style: "display:flex;align-items:center;gap:5px" }, seuil, "seuil"),
+      h("label", { class: "s12 mut", style: "display:flex;align-items:center;gap:5px" }, libre, "mode libre"),
+      h("span", { class: "sp", style: "margin-left:auto" }),
+      h("button", { class: "btn btn-dark btn-sm", onclick: async () => {
+        try { const d = await api("admin_perimetre_save", { body: { id: p.id, libelle: lib.value, seuil_ouverture: +seuil.value, mode_libre: libre.checked ? 1 : 0 } });
+          Object.assign(p, d.perimetre); toast("Périmètre enregistré."); }
+        catch (e) { toast(e.message, true); } } }, "Enregistrer")));
+  });
+  v.append(pc);
+}
+
+/* ============================================================ STUBS (étape 5 / 7) */
+const ACCENT_L = { TE: "Technique", TA: "Tactique", CO: "Coordination", ME: "Mental" };
+const SURF_GEN = [
+  ["quart", "1/4 terrain", "~20 × 25 m", "q4"],
+  ["demi", "1/2 terrain", "~34 × 50 m", "q2"],
+  ["terrain", "Terrain entier", "~64 × 100 m", "qf"],
+];
+
+/* ---------------- SÉANCES (coach) : liste + générateur + résultat ---------------- */
+async function vSeances(v) {
+  const sub = state.seance || (state.seance = { view: "list" });
+  if (sub.view === "form") return genForm(v);
+  if (sub.view === "result") return genResult(v);
+
+  v.innerHTML = "";
+  v.append(h("div", { class: "page-h" },
+    h("div", {}, h("h1", {}, "Séances"), h("div", { class: "sub" }, "Tes séances générées")),
+    h("span", { class: "sp" }),
+    h("button", { class: "btn btn-primary btn-sm", onclick: () => { state.seance = { view: "form" }; paint(); }, html: ic("spark") + "Générer" })));
+
+  const d = await api("seances");
+  if (!d.seances.length) {
+    v.append(h("div", { class: "empty" },
+      h("h3", {}, "Aucune séance"),
+      h("p", {}, "Génère ta première séance : choisis l'équipe, le nombre de joueurs, la surface et la durée, le reste est automatique."),
+      h("button", { class: "btn btn-primary btn-sm", onclick: () => { state.seance = { view: "form" }; paint(); }, html: ic("spark") + "Générer une séance" })));
+    return;
+  }
+  v.append(h("div", { class: "list" }, d.seances.map(s =>
+    h("button", { class: "exrow", onclick: () => sheetSeance(s.id) },
+      h("div", { style: "min-width:0" },
+        h("div", { class: "tt" }, s.equipe_nom + " · " + fdate(s.date)),
+        h("div", { class: "mt" },
+          h("span", { class: "badge" }, s.nb_blocs + " blocs"),
+          h("span", { class: "s12 mut tnum" }, s.duree_totale + " min · " + s.nb_joueurs_prevus + " j"),
+          s.accent_principal ? h("span", { class: "s12 mut" }, ACCENT_L[s.accent_principal] || s.accent_principal) : null)),
+      h("span", { class: "chev", html: ic("chev") })))));
+}
+
+async function genForm(v) {
+  v.innerHTML = "";
+  const g = state.gen;
+  const back = () => { state.seance = { view: "list" }; paint(); };
+  v.append(h("div", { class: "page-h" },
+    h("button", { class: "btn-quiet", style: "width:34px;height:34px;border-radius:8px", "aria-label": "Retour", onclick: back, html: ic("back") }),
+    h("div", {}, h("h1", { style: "font-size:20px" }, "Générer une séance"))));
+
+  const d = await api("equipes").catch(() => ({ equipes: [], mes_equipes: [] }));
+  const mesRefs = new Set(d.mes_equipes || []);
+  let equipes = d.equipes.filter(e => e.config.configure);
+  if (mesRefs.size) equipes = equipes.filter(e => mesRefs.has(e.ref_id)).concat(equipes.filter(e => !mesRefs.has(e.ref_id)));
+  if (!equipes.length) {
+    v.append(h("div", { class: "empty" }, h("h3", {}, "Aucune équipe configurée"),
+      h("p", {}, "Ton administrateur doit d'abord relier au moins une équipe à une tranche d'âge, une filière et un genre.")));
+    return;
+  }
+  if (!g.equipe_ref_id || !equipes.some(e => e.ref_id === g.equipe_ref_id)) g.equipe_ref_id = equipes[0].ref_id;
+  const eq = () => equipes.find(e => e.ref_id === g.equipe_ref_id);
+  if (!g.accent) g.accent = (d.accent_defaut || {})[eq().config.tranche_age] || "";
+
+  const card = h("div", { class: "card card-p stack", style: "max-width:520px" });
+
+  // équipe
+  const fld = (label, node) => h("div", {}, h("div", { class: "s13", style: "font-weight:600;margin-bottom:6px" }, label), node);
+  const selEq = h("select", { class: "fld", style: "width:100%;height:40px;padding:0 12px;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface)",
+    onchange: e => { g.equipe_ref_id = e.target.value; g.accent = ""; paint(); } },
+    equipes.map(e => h("option", { value: e.ref_id, selected: e.ref_id === g.equipe_ref_id }, e.nom + " · " + cap(e.config.tranche_age) + "/" + e.config.filiere)));
+  card.append(fld("Équipe", selEq));
+
+  // date
+  const inpDate = h("input", { type: "date", value: g.date || new Date().toISOString().slice(0, 10),
+    style: "width:100%;height:40px;padding:0 12px;border:1px solid var(--border-strong);border-radius:10px", onchange: e => g.date = e.target.value });
+  card.append(fld("Date", inpDate));
+
+  // joueurs (stepper)
+  const nEl = h("span", { class: "n tnum" }, g.joueurs);
+  const step = d => { g.joueurs = Math.max(4, Math.min(30, g.joueurs + d)); nEl.textContent = g.joueurs; };
+  card.append(fld("Nombre de joueurs", h("div", { class: "stepper" },
+    h("button", { "aria-label": "Moins", onclick: () => step(-1) }, "–"), nEl,
+    h("button", { "aria-label": "Plus", onclick: () => step(1) }, "+"))));
+
+  // surface (3 cards)
+  card.append(fld("Surface de jeu", h("div", { class: "choices" }, SURF_GEN.map(([val, l, dim, icn]) =>
+    h("button", { class: "choice" + (g.surface === val ? " on" : ""), onclick: () => { g.surface = val; paint(); },
+      html: ic(icn) + '<div class="l">' + l + '</div><div class="d">' + dim + '</div>' })))));
+
+  // durée (pills)
+  card.append(fld("Durée totale", h("div", { class: "seg" }, [60, 75, 90, 105].map(m =>
+    h("button", { class: g.duree === m ? "on" : "", onclick: () => { g.duree = m; paint(); } }, m + " min")))));
+
+  // accent
+  card.append(h("div", { class: "accent-card" }, h("span", { html: ic("spark") }),
+    h("div", { style: "flex:1" },
+      h("div", { class: "s12 mut" }, "Accent proposé"),
+      h("div", { style: "font-weight:600" }, ACCENT_L[g.accent] || "Aucun")),
+    h("select", { style: "height:32px;border:1px solid #E3CE97;border-radius:8px;background:transparent;padding:0 6px",
+      onchange: e => { g.accent = e.target.value; paint(); } },
+      h("option", { value: "" }, "Aucun"),
+      Object.entries(ACCENT_L).map(([k, l]) => h("option", { value: k, selected: g.accent === k }, l)))));
+
+  card.append(h("button", { class: "btn btn-primary btn-lg", html: ic("spark") + "Générer la séance", onclick: async (ev) => {
+    const btn = ev.currentTarget; btn.disabled = true; btn.textContent = "Génération…";
+    try {
+      const r = await api("seance_generer", { body: {
+        equipe_ref_id: g.equipe_ref_id, date: inpDate.value, nb_joueurs: g.joueurs,
+        surface: g.surface, duree: g.duree, accent: g.accent } });
+      state.seance = { view: "result", data: r };
+      paint();
+    } catch (e) { toast(e.message, true); btn.disabled = false; btn.textContent = "Générer la séance"; }
+  } }));
+  v.append(card);
+}
+
+async function genResult(v) {
+  v.innerHTML = "";
+  const R = state.seance.data;
+  const back = () => { state.seance = { view: "form" }; paint(); };
+  v.append(h("div", { class: "page-h" },
+    h("button", { class: "btn-quiet", style: "width:34px;height:34px;border-radius:8px", "aria-label": "Retour", onclick: back, html: ic("back") }),
+    h("div", {}, h("h1", { style: "font-size:20px" }, R.seance.equipe_nom),
+      h("div", { class: "sub" }, fdate(R.seance.date) + " · " + R.seance.duree_totale + " min · " + R.seance.nb_joueurs_prevus + " joueurs"))));
+
+  if (R.avertissements.length) v.append(h("div", { class: "accent-card", style: "margin-bottom:14px;align-items:flex-start" },
+    h("span", { html: ic("spark") }),
+    h("div", {}, h("div", { style: "font-weight:600;margin-bottom:2px" }, "Ajustements du moteur"),
+      h("ul", { style: "margin:0;padding-left:16px" }, R.avertissements.map(a => h("li", { class: "s13" }, a))))));
+
+  R.blocs.forEach((b, i) => {
+    const card = h("div", { class: "card card-p", style: "max-width:560px;margin-bottom:12px" });
+    card.append(h("div", { style: "display:flex;align-items:center;gap:8px;margin-bottom:8px" },
+      h("span", { class: "badge" }, b.phase_label),
+      h("span", { class: "s12 mut" }, "Bloc " + (i + 1)),
+      h("span", { class: "sp", style: "margin-left:auto" }),
+      h("input", { type: "number", value: b.duree, style: "width:64px;height:32px;padding:0 8px;border:1px solid var(--border-strong);border-radius:8px;text-align:right",
+        onchange: e => { b.duree = Math.max(1, +e.target.value || 1); } }),
+      h("span", { class: "s12 mut" }, "min")));
+    card.append(h("h3", { style: "font-size:15px" }, b.titre));
+    if (b.objectif) card.append(h("p", { class: "s13 mut", style: "margin:2px 0 8px" }, b.objectif));
+    if (b.exercice_id) card.append(h("div", { class: "schema" }, h("img", { alt: "", src: "api.php?action=schema&id=" + b.exercice_id })));
+    if (b.consignes) card.append(h("div", { class: "sec" }, h("h4", {}, "Consignes"), h("p", {}, b.consignes)));
+    if (b.adaptations) card.append(h("p", { class: "s12", style: "color:var(--amber);margin-top:8px" }, b.adaptations));
+    v.append(card);
+  });
+
+  v.append(h("div", { style: "display:flex;gap:8px;max-width:560px" },
+    h("button", { class: "btn btn-ghost", onclick: back }, "Régénérer"),
+    h("button", { class: "btn btn-primary", style: "flex:1", html: ic("check") + "Enregistrer la séance", onclick: async () => {
+      try {
+        const s = await api("seance_save", { body: { seance: R.seance, blocs: R.blocs } });
+        toast("Séance enregistrée."); state.seance = { view: "list" }; paint();
+      } catch (e) { toast(e.message, true); }
+    } })));
+}
+
+async function sheetSeance(id) {
+  const sheet = h("div", { class: "sheet" }, h("div", { class: "load" }, "Chargement…"));
+  openSheet(sheet);
+  let s;
+  try { s = (await api("seance", { query: { id } })).seance; } catch (e) { sheet.innerHTML = ""; sheet.append(h("div", { class: "sheet-b" }, e.message)); return; }
+  sheet.innerHTML = "";
+  sheet.append(h("div", { class: "sheet-h" },
+    h("button", { class: "btn-quiet", style: "width:32px;height:32px;border-radius:8px", "aria-label": "Fermer", onclick: closeSheet, html: ic("back") }),
+    h("h2", {}, s.equipe_nom + " · " + fdate(s.date))));
+  const b = h("div", { class: "sheet-b" });
+  b.append(h("p", { class: "s13 mut", style: "margin-bottom:12px" }, s.duree_totale + " min · " + s.nb_joueurs_prevus + " joueurs · " + cap(s.surface_disponible) + (s.accent_principal ? " · " + (ACCENT_L[s.accent_principal] || s.accent_principal) : "")));
+  s.blocs.forEach((bl, i) => {
+    b.append(h("div", { class: "sec" },
+      h("div", { style: "display:flex;gap:8px;align-items:center" }, h("span", { class: "badge" }, bl.phase_label),
+        h("span", { class: "s12 mut tnum" }, bl.duree + " min")),
+      h("h3", { style: "font-size:14px;margin:6px 0" }, bl.titre),
+      bl.exercice_id ? h("div", { class: "schema" }, h("img", { alt: "", src: "api.php?action=schema&id=" + bl.exercice_id })) : null,
+      bl.consignes ? h("p", { class: "s13", style: "margin-top:6px" }, bl.consignes) : null));
+  });
+  sheet.append(b);
+  sheet.append(h("div", { class: "sheet-f" },
+    h("button", { class: "btn btn-danger", onclick: async () => {
+      if (!confirm("Supprimer cette séance ?")) return;
+      try { await api("seance_supprimer", { body: { id } }); toast("Séance supprimée."); closeSheet(); paint(); } catch (e) { toast(e.message, true); }
+    } }, "Supprimer")));
+}
+
+/* ---------------- ÉQUIPES (admin) ---------------- */
+async function vEquipes(v) {
+  const d = await api("equipes");
+  const R = state.ref;
+  v.innerHTML = "";
+  v.append(h("div", { class: "page-h" }, h("div", {}, h("h1", {}, "Équipes"),
+    h("div", { class: "sub" }, "Reliées au référentiel de l'ERP. Renseigne les trois axes pour que le générateur puisse composer."))));
+  if (!d.equipes.length) { v.append(h("div", { class: "empty" }, h("h3", {}, "Aucune équipe"),
+    h("p", {}, "Le référentiel club de l'ERP ne renvoie aucune équipe pour la saison en cours."))); return; }
+
+  const box = h("div", { class: "card", style: "overflow:hidden" });
+  d.equipes.forEach(e => {
+    const c = e.config;
+    const s = (val, opts, ph) => { const el = h("select", { style: "height:32px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);padding:0 6px" },
+      h("option", { value: "" }, ph), opts.map(o => h("option", { value: o, selected: val === o }, cap(o)))); return el; };
+    const tr = s(c.tranche_age, R.tranches_age, "Tranche");
+    const fi = s(c.filiere, R.filieres, "Filière");
+    const ge = s(c.genre, R.genres, "Genre"); ge.querySelector("option[value='']").remove();
+    const md = s(c.mode, ["guide", "libre"], "Mode"); md.querySelector("option[value='']").remove();
+    const pe = h("select", { style: "height:32px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);padding:0 6px" },
+      h("option", { value: "" }, "Périmètre"), R.perimetres.map(p => h("option", { value: p.id, selected: +c.perimetre_id === +p.id }, p.code)));
+    box.append(h("div", { style: "padding:12px 14px;border-bottom:1px solid var(--border)" },
+      h("div", { style: "display:flex;flex-wrap:wrap;gap:8px;align-items:center" },
+        h("div", { style: "min-width:150px" }, h("div", { style: "font-weight:600" }, e.nom),
+          h("div", { class: "s12 mut" }, e.categorie || "—"), !c.configure ? h("span", { class: "badge b-en_revue", style: "margin-top:3px" }, "À configurer") : null),
+        tr, fi, ge, md, pe,
+        h("span", { class: "sp", style: "margin-left:auto" }),
+        h("button", { class: "btn btn-dark btn-sm", onclick: async () => {
+          try { const r = await api("equipe_config_save", { body: { ref_id: e.ref_id, saison_id: d.saison,
+            tranche_age: tr.value, filiere: fi.value, genre: ge.value, mode: md.value, perimetre_id: pe.value } });
+            Object.assign(e, r.equipe); toast("Équipe configurée."); paint(); }
+          catch (err) { toast(err.message, true); } } }, "Enregistrer"))));
+  });
+  v.append(box);
+}
+async function vProfil(v) {
+  v.innerHTML = "";
+  v.append(h("div", { class: "page-h" }, h("div", {}, h("h1", {}, "Profil"))));
+  v.append(h("div", { class: "card card-p stack" },
+    h("div", {}, h("div", { class: "s12 mut" }, "Connecté"), h("div", { style: "font-weight:600" }, MFC.nom || "")),
+    h("div", {}, h("div", { class: "s12 mut" }, "Rôle dans le module"), h("div", {}, cap(state.ref.profil))),
+    h("a", { class: "btn btn-ghost btn-sm", href: MFC.erpUrl || "/", style: "align-self:flex-start" }, "Retour à l'ERP")));
+}
+
+/* ============================================================ counts / boot */
+async function refreshCounts() {
+  if (!state.ref.peutValider) return;
+  try {
+    const d = await api("file_validation");
+    state.ref._valCount = d.file.length;
+    if (state.view !== "validation") state.val.list = d.file;
+  } catch {}
+  const el = document.querySelector(".nav a[href='#validation'] .badge-n");
+  if (el) el.textContent = state.ref._valCount;
+}
+
+document.addEventListener("keydown", e => {
+  if (state.view !== "validation" || !state.val.list || !state.val.list.length) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+  const x = state.val.list[state.val.i]; if (!x) return;
+  if (e.key === "ArrowLeft" && state.val.i > 0) { state.val.i--; paint(); }
+  else if (e.key === "ArrowRight" && state.val.i + 1 < state.val.list.length) { state.val.i++; paint(); }
+  else if (e.key.toLowerCase() === "v") valDo(x.id, "valide", "");
+  else if (e.key.toLowerCase() === "p") valDo(x.id, "publier", "");
+  else if (e.key.toLowerCase() === "r") window.__valCom && window.__valCom.focus();
+});
+
+(async function boot() {
+  try {
+    state.ref = await api("referentiel");
+    if (state.ref.peutValider) { try { state.ref._valCount = (await api("file_validation")).file.length; } catch {} }
+    renderShell();
+  } catch (e) {
+    $("#root").innerHTML = '<div class="load">Impossible de charger le module : ' + esc(e.message) + "</div>";
+  }
+})();
+</script>
+</body>
+</html>

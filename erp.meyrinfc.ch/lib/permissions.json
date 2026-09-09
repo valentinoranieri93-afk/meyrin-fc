@@ -37,7 +37,7 @@
   },
 
   "sponsors": {
-    "label": "CRM Sponsoring",
+    "label": "Sponsoring",
     "permissions": {
       "partners.view":       "Consulter les sponsors et leurs contacts",
       "partners.edit":       "Creer et modifier les sponsors et leurs contacts",
@@ -52,7 +52,7 @@
   },
 
   "events": {
-    "label": "Hub Evenements",
+    "label": "Evenements",
     "permissions": {
       "planning.view":       "Consulter les evenements et le planning",
       "planning.edit":       "Creer et modifier les evenements",
@@ -64,7 +64,7 @@
   },
 
   "commandes": {
-    "label": "CRM Commande",
+    "label": "Commande",
     "permissions": {
       "catalog.view":      "Consulter le catalogue, les articles et les variantes",
       "catalog.edit":      "Creer et modifier les articles, variantes et attributs",
@@ -101,7 +101,7 @@
   },
 
   "caisse": {
-    "label": "Gestion Caisse",
+    "label": "Caisse",
     "permissions": {
       "register.use":     "Encaisser, enregistrer des depenses et des mouvements",
       "register.close":   "Cloturer une journee de caisse",
@@ -129,6 +129,14 @@
       "fiscalyear.close": "Creer un exercice, saisir l'ouverture et cloturer l'exercice",
       "settings.manage": "Modifier les reglages : comptes par defaut, taux de TVA, centres de cout",
       "audit.view": "Consulter le journal d'audit (tracabilite des ecritures, factures et parametres)"
+    }
+  },
+
+  "entrainements": {
+    "label": "Entrainements",
+    "permissions": {
+      "access": "Acceder au module : consulter la bibliotheque publiee de ses equipes, generer des seances, proposer des exercices",
+      "admin": "Administrer le module : perimetres, mapping des equipes, profils (DT, responsables, coachs) et plafonds de budget IA"
     }
   }
 }

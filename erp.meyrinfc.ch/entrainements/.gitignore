@@ -1,0 +1,9 @@
+# Serveur
+.user.ini
+.infomaniak-maintenance.html
+
+# Données vivantes : jamais versionnées, jamais écrasées par un déploiement
+data/
+
+# Secret IA (clé API Anthropic) : propre au serveur
+config.local.php
