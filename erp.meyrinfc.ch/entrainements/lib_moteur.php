@@ -331,31 +331,45 @@ function et_seance_save(array $session, array $in): array
     if (!et_equipe($refId)) throw new EtMoteurErreur('Équipe inconnue.');
 
     $tot = array_sum(array_map(fn($b) => max(0, (int) ($b['duree'] ?? 0)), $blocs));
+    $ia  = $in['ia'] ?? [];
 
     $db->prepare(
         'INSERT INTO seances (equipe_id, coach_id, date, duree_totale, nb_joueurs_prevus,
-            surface_disponible, accent_principal, mode, statut, cree_le)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            surface_disponible, accent_principal, mode, statut, cout_ia_chf, ia_utilisee, explication_ia, cree_le)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )->execute([
         $refId, (int) $u['id'],
         preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($s['date'] ?? '')) ? $s['date'] : date('Y-m-d'),
         $tot, max(0, (int) ($s['nb_joueurs_prevus'] ?? 0)),
         (string) ($s['surface_disponible'] ?? ''), (string) ($s['accent_principal'] ?? ''),
-        ($s['mode'] ?? 'guide') === 'libre' ? 'libre' : 'guide', 'planifiee', date('c'),
+        ($s['mode'] ?? 'guide') === 'libre' ? 'libre' : 'guide', 'planifiee',
+        (float) ($ia['cout_chf'] ?? 0), !empty($ia['utilisee']) ? 1 : 0,
+        (string) ($ia['explication'] ?? ''), date('c'),
     ]);
     $seanceId = (int) $db->lastInsertId();
+
+    // rattache la ligne de consommation IA à la séance désormais persistée
+    if (!empty($ia['usage_id'])) {
+        $db->prepare('UPDATE ia_usage SET seance_id = ? WHERE id = ?')->execute([$seanceId, (int) $ia['usage_id']]);
+    }
 
     $stB = $db->prepare(
         'INSERT INTO seance_blocs (seance_id, ordre, exercice_id, phase_easi, duree, adaptations, snapshot)
          VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     foreach ($blocs as $i => $b) {
+        $snap = is_array($b['snapshot'] ?? null) ? $b['snapshot'] : [];
+        // Les consignes affichées (éventuellement réécrites par l'IA) sont figées
+        // dans l'instantané, pour que la séance reste fidèle si l'exercice évolue.
+        if (isset($b['consignes']) && $b['consignes'] !== '') {
+            $snap['consignes_coach'] = (string) $b['consignes'];
+        }
         $stB->execute([
             $seanceId, (int) ($b['ordre'] ?? $i + 1),
             isset($b['exercice_id']) ? (int) $b['exercice_id'] : null,
             (string) ($b['phase_easi'] ?? ''), max(0, (int) ($b['duree'] ?? 0)),
             (string) ($b['adaptations'] ?? ''),
-            json_encode($b['snapshot'] ?? new stdClass(), JSON_UNESCAPED_UNICODE),
+            json_encode($snap ?: new stdClass(), JSON_UNESCAPED_UNICODE),
         ]);
     }
     return et_seance_get($session, $seanceId);

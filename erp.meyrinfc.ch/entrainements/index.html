@@ -677,6 +677,15 @@ async function vAvancement(v) {
         p.ouvert ? "Ouverte aux coachs" : "Encore " + p.ecart_seuil + " · " + p.en_revue + " en revue"));
   })));
 
+  const iu = await api("ia_usage").catch(() => null);
+  if (iu && iu.resume) {
+    const r = iu.resume;
+    v.append(h("div", { class: "card card-p stat", style: "margin-top:16px;max-width:280px" },
+      h("h4", {}, "Coût IA · " + r.mois),
+      h("div", { class: "v tnum" }, r.total_chf.toFixed(2), h("small", {}, "CHF")),
+      h("div", { class: "s12 mut", style: "margin-top:6px" }, r.appels + " séance(s) enrichie(s)" + (r.bloques ? " · " + r.bloques + " bloquée(s) par plafond" : ""))));
+  }
+
   v.append(h("h2", { style: "font-size:15px;margin:24px 0 10px" }, "Derniers exercices proposés"));
   const dr = await api("exercices", { query: { statut: "en_revue", source: "propose_coach", limit: 8 } }).catch(() => ({ exercices: [] }));
   if (!dr.exercices.length) v.append(h("div", { class: "empty" }, h("p", {}, "Aucune proposition de coach en attente.")));
@@ -744,9 +753,54 @@ async function vAdmin(v) {
         catch (e) { toast(e.message, true); } } }, "Enregistrer")));
   });
   v.append(pc);
+
+  /* -------- Budget IA -------- */
+  const ib = await api("ia_budgets").catch(() => null);
+  if (ib) {
+    v.append(h("h2", { style: "font-size:14px;margin:24px 0 8px" }, "Budget IA"));
+    if (!ib.ia_active) v.append(h("div", { class: "card card-p s13 mut", style: "margin-bottom:10px" },
+      "L'assistant IA est désactivé (pas de clé dans config.local.php). Les séances sont générées en mode déterministe."));
+    const r = ib.resume;
+    v.append(h("div", { class: "card card-p s13", style: "margin-bottom:10px" },
+      h("b", {}, "Ce mois (" + r.mois + ") : " + r.total_chf.toFixed(2) + " CHF"),
+      " · " + r.appels + " séance(s) enrichie(s)" + (r.bloques ? " · " + r.bloques + " bloquée(s)" : "")));
+
+    const bc = h("div", { class: "card", style: "overflow:hidden;margin-bottom:10px" });
+    if (!ib.budgets.length) bc.append(h("div", { class: "s13 mut", style: "padding:12px 14px" }, "Aucun plafond. L'IA est utilisée sans limite mensuelle."));
+    ib.budgets.forEach(b => {
+      const lbl = b.portee === "club" ? "Club" :
+        b.portee === "perimetre" ? "Périmètre : " + ((R.perimetres.find(p => +p.id === +b.portee_ref) || {}).libelle || b.portee_ref) :
+        "Équipe : " + b.portee_ref;
+      const inp = h("input", { type: "number", step: "0.5", value: b.plafond_mensuel_chf,
+        style: "width:90px;height:32px;padding:0 8px;border:1px solid var(--border-strong);border-radius:8px;text-align:right" });
+      bc.append(h("div", { style: "padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
+        h("div", { style: "min-width:180px;font-weight:600" }, lbl,
+          h("div", { class: "s12 mut" }, "consommé : " + b.consomme_mois.toFixed(2) + " CHF")),
+        inp, h("span", { class: "s12 mut" }, "CHF / mois"),
+        h("span", { class: "sp", style: "margin-left:auto" }),
+        h("button", { class: "btn btn-dark btn-sm", onclick: async () => {
+          try { await api("ia_budget_save", { body: { portee: b.portee, portee_ref: b.portee_ref, plafond_mensuel_chf: +inp.value } }); toast("Plafond enregistré."); }
+          catch (e) { toast(e.message, true); } } }, "Enregistrer"),
+        h("button", { class: "btn btn-quiet btn-sm", onclick: async () => {
+          try { await api("ia_budget_supprimer", { body: { id: b.id } }); toast("Plafond supprimé."); paint(); }
+          catch (e) { toast(e.message, true); } } }, "Retirer")));
+    });
+    v.append(bc);
+
+    const npo = h("select", { style: "height:32px;border:1px solid var(--border-strong);border-radius:8px;padding:0 6px" },
+      h("option", { value: "club" }, "Club (global)"),
+      h("optgroup", { label: "Périmètre" }, R.perimetres.map(p => h("option", { value: "perimetre:" + p.id }, p.libelle))));
+    const npl = h("input", { type: "number", step: "0.5", placeholder: "CHF / mois",
+      style: "width:110px;height:32px;padding:0 8px;border:1px solid var(--border-strong);border-radius:8px" });
+    v.append(h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, npo, npl,
+      h("button", { class: "btn btn-primary btn-sm", onclick: async () => {
+        const [portee, ref] = npo.value.split(":");
+        try { await api("ia_budget_save", { body: { portee, portee_ref: ref || "", plafond_mensuel_chf: +npl.value } }); toast("Plafond ajouté."); paint(); }
+        catch (e) { toast(e.message, true); } }, html: ic("plus") + "Ajouter un plafond" })));
+  }
 }
 
-/* ============================================================ STUBS (étape 5 / 7) */
+/* ============================================================ GÉNÉRATEUR / SÉANCES (coach) */
 const ACCENT_L = { TE: "Technique", TA: "Tactique", CO: "Coordination", ME: "Mental" };
 const SURF_GEN = [
   ["quart", "1/4 terrain", "~20 × 25 m", "q4"],
@@ -868,6 +922,18 @@ async function genResult(v) {
     h("div", {}, h("h1", { style: "font-size:20px" }, R.seance.equipe_nom),
       h("div", { class: "sub" }, fdate(R.seance.date) + " · " + R.seance.duree_totale + " min · " + R.seance.nb_joueurs_prevus + " joueurs"))));
 
+  const ia = R.ia || {};
+  if (ia.statut === "ok" && ia.explication) v.append(h("div", { class: "accent-card", style: "margin-bottom:12px;align-items:flex-start" },
+    h("span", { html: ic("spark") }),
+    h("div", { style: "flex:1" },
+      h("div", { style: "font-weight:600;margin-bottom:2px" }, "Cohérence de la séance"),
+      h("p", { class: "s13" }, ia.explication),
+      ia.cout_chf ? h("div", { class: "s12 mut", style: "margin-top:4px" }, "Consignes adaptées par l'IA · coût " + ia.cout_chf.toFixed(3) + " CHF") : null)));
+  else if (ia.statut === "budget") v.append(h("div", { class: "card card-p s13 mut", style: "margin-bottom:12px" },
+    "Séance en mode déterministe : " + (ia.raison || "plafond de budget IA atteint pour ce mois") + " Les consignes sont celles d'origine des exercices."));
+  else if (ia.statut === "echec") v.append(h("div", { class: "card card-p s13 mut", style: "margin-bottom:12px" },
+    "Assistant IA indisponible, séance générée en mode déterministe."));
+
   if (R.avertissements.length) v.append(h("div", { class: "accent-card", style: "margin-bottom:14px;align-items:flex-start" },
     h("span", { html: ic("spark") }),
     h("div", {}, h("div", { style: "font-weight:600;margin-bottom:2px" }, "Ajustements du moteur"),
@@ -894,7 +960,7 @@ async function genResult(v) {
     h("button", { class: "btn btn-ghost", onclick: back }, "Régénérer"),
     h("button", { class: "btn btn-primary", style: "flex:1", html: ic("check") + "Enregistrer la séance", onclick: async () => {
       try {
-        const s = await api("seance_save", { body: { seance: R.seance, blocs: R.blocs } });
+        await api("seance_save", { body: { seance: R.seance, blocs: R.blocs, ia: R.ia || {} } });
         toast("Séance enregistrée."); state.seance = { view: "list" }; paint();
       } catch (e) { toast(e.message, true); }
     } })));
@@ -911,6 +977,8 @@ async function sheetSeance(id) {
     h("h2", {}, s.equipe_nom + " · " + fdate(s.date))));
   const b = h("div", { class: "sheet-b" });
   b.append(h("p", { class: "s13 mut", style: "margin-bottom:12px" }, s.duree_totale + " min · " + s.nb_joueurs_prevus + " joueurs · " + cap(s.surface_disponible) + (s.accent_principal ? " · " + (ACCENT_L[s.accent_principal] || s.accent_principal) : "")));
+  if (s.explication_ia) b.append(h("div", { class: "accent-card", style: "margin-bottom:12px;align-items:flex-start" },
+    h("span", { html: ic("spark") }), h("p", { class: "s13" }, s.explication_ia)));
   s.blocs.forEach((bl, i) => {
     b.append(h("div", { class: "sec" },
       h("div", { style: "display:flex;gap:8px;align-items:center" }, h("span", { class: "badge" }, bl.phase_label),

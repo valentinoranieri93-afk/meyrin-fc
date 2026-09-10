@@ -351,13 +351,14 @@ function et_init_schema(PDO $db): void
  */
 function et_migrations(PDO $db): void
 {
-    // Exemple de forme, à décommenter le jour venu :
-    //
-    // $cols = array_column($db->query('PRAGMA table_info(exercices)')->fetchAll(), 'name');
-    // if (!in_array('nouveau_champ', $cols, true)) {
-    //     $db->exec("ALTER TABLE exercices ADD COLUMN nouveau_champ TEXT DEFAULT ''");
-    // }
-    // et_meta_set($db, 'schema_version', '2');
+    // v2 : explication de cohérence rédigée par l'IA, rattachée à la séance.
+    $cols = array_column($db->query('PRAGMA table_info(seances)')->fetchAll(), 'name');
+    if (!in_array('explication_ia', $cols, true)) {
+        $db->exec("ALTER TABLE seances ADD COLUMN explication_ia TEXT NOT NULL DEFAULT ''");
+    }
+    if ((int) (et_meta_get($db, 'schema_version') ?? 1) < 2) {
+        et_meta_set($db, 'schema_version', '2');
+    }
 }
 
 /* ============================================ SEED DU RÉFÉRENTIEL (LOT 1) */

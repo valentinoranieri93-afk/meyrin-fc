@@ -25,6 +25,7 @@ require_once __DIR__ . '/lib_exercices.php';
 require_once __DIR__ . '/lib_svg.php';
 require_once __DIR__ . '/lib_admin.php';
 require_once __DIR__ . '/lib_moteur.php';
+require_once __DIR__ . '/lib_ia.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -243,11 +244,38 @@ try {
         /* -------------------------------------------------------- séances */
         case 'seance_generer':
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') jbad(405, 'POST requis.');
-            jok(et_seance_generer($session, body()));
+            $in    = body();
+            $draft = et_seance_generer($session, $in);
+            // Enrichissement IA : par défaut si l'IA est active, désactivable par avec_ia:false.
+            if (($in['avec_ia'] ?? true) !== false) {
+                $draft = et_ia_enrichir_seance($session, $draft);
+            }
+            jok($draft);
 
         case 'seance_save':
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') jbad(405, 'POST requis.');
             jok(['seance' => et_seance_save($session, body()), 'message' => 'Séance enregistrée.']);
+
+        /* ------------------------------------------------------- budget IA */
+        case 'ia_budgets':
+            if ($profil !== 'admin') jbad(403, 'Réservé à l\'administrateur du module.');
+            jok(['budgets' => et_ia_budgets_list(), 'ia_active' => et_ia_active(),
+                 'resume' => et_ia_usage_resume()]);
+
+        case 'ia_budget_save':
+            if ($profil !== 'admin') jbad(403, 'Réservé à l\'administrateur du module.');
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') jbad(405, 'POST requis.');
+            jok(['budgets' => et_ia_budget_save(body(), (string) $user['erp_id']), 'message' => 'Plafond enregistré.']);
+
+        case 'ia_budget_supprimer':
+            if ($profil !== 'admin') jbad(403, 'Réservé à l\'administrateur du module.');
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') jbad(405, 'POST requis.');
+            et_ia_budget_supprimer((int) (body()['id'] ?? 0));
+            jok(['budgets' => et_ia_budgets_list(), 'message' => 'Plafond supprimé.']);
+
+        case 'ia_usage':
+            if (!in_array($profil, ['admin', 'directeur_technique'], true)) jbad(403, 'Réservé à la direction technique.');
+            jok(['resume' => et_ia_usage_resume($_GET['mois'] ?? null)]);
 
         case 'seances':
             jok(['seances' => et_seances_list($session, $_GET['equipe_ref_id'] ?? null)]);
